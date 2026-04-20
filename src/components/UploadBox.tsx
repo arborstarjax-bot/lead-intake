@@ -12,7 +12,12 @@ type PendingFile = {
 };
 
 type ApiOk = {
-  results?: { fileName: string; lead_id?: string; intake_status?: string }[];
+  results?: {
+    fileName: string;
+    originalFileName?: string;
+    lead_id?: string;
+    intake_status?: string;
+  }[];
   errors?: { fileName: string; error: string }[];
 };
 
@@ -55,8 +60,11 @@ export default function UploadBox({
       } else {
         const byName = new Map<string, PendingFile>();
         (json.results ?? []).forEach((r) => {
-          byName.set(r.fileName, {
-            name: r.fileName,
+          // Server may have converted HEIC -> JPEG and renamed the file; key
+          // status by the original client-side name so the row still matches.
+          const key = r.originalFileName ?? r.fileName;
+          byName.set(key, {
+            name: key,
             lead_id: r.lead_id,
             state: r.intake_status === "needs_review" ? "needs_review" : "added",
           });

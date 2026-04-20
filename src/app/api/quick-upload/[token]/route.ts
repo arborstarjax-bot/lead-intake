@@ -32,7 +32,7 @@ export async function POST(
         fileName,
         source: "quick_link",
       });
-      results.push({ fileName, ...res });
+      results.push({ fileName, originalFileName: file.name, ...res });
     } catch (e) {
       errors.push({ fileName: file.name, error: (e as Error).message });
     }
