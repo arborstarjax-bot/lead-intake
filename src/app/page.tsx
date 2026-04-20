@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ClipboardList, Link2 } from "lucide-react";
+import { CheckCircle2, ClipboardList } from "lucide-react";
 import UploadBox from "@/components/UploadBox";
 import InstallButton from "@/components/InstallButton";
 
 export default function HomePage() {
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
-  const [uploadToken, setUploadToken] = useState<string | null>(null);
   const [counts, setCounts] = useState<{ active: number; completed: number } | null>(null);
 
   useEffect(() => {
@@ -16,10 +15,6 @@ export default function HomePage() {
       .then((r) => r.json())
       .then((j) => setGoogleConnected(Boolean(j.connected)))
       .catch(() => setGoogleConnected(false));
-    fetch("/api/quick-link")
-      .then((r) => r.json())
-      .then((j) => setUploadToken(j.token ?? null))
-      .catch(() => {});
     Promise.all([
       fetch("/api/leads?view=active").then((r) => r.json()),
       fetch("/api/leads?view=completed").then((r) => r.json()),
@@ -32,11 +27,6 @@ export default function HomePage() {
       )
       .catch(() => setCounts({ active: 0, completed: 0 }));
   }, []);
-
-  const quickUrl =
-    typeof window !== "undefined" && uploadToken
-      ? `${window.location.origin}/u/${uploadToken}`
-      : null;
 
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
@@ -86,35 +76,6 @@ export default function HomePage() {
           <span className="text-sm text-[var(--muted)]">{counts?.completed ?? "—"}</span>
         </Link>
       </nav>
-
-      {quickUrl && (
-        <section className="rounded-xl border border-[var(--border)] bg-white p-4 space-y-2">
-          <div className="flex items-center gap-2 font-medium">
-            <Link2 className="h-4 w-4" /> Boss quick-upload link
-          </div>
-          <p className="text-sm text-[var(--muted)]">
-            Text this to your boss. He opens it on his iPhone, taps to pick
-            photos from his library or share sheet, and they ingest straight
-            into the leads table — no login required.
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={quickUrl}
-              onFocus={(e) => e.currentTarget.select()}
-              className="flex-1 rounded-md border border-[var(--border)] bg-gray-50 px-2 py-1.5 text-sm"
-            />
-            <button
-              onClick={() => {
-                navigator.clipboard?.writeText(quickUrl);
-              }}
-              className="rounded-md bg-[var(--fg)] text-white px-3 py-1.5 text-sm"
-            >
-              Copy
-            </button>
-          </div>
-        </section>
-      )}
     </main>
   );
 }
