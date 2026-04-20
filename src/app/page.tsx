@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, ClipboardList } from "lucide-react";
 import UploadBox from "@/components/UploadBox";
-import InstallButton from "@/components/InstallButton";
 
 export default function HomePage() {
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
@@ -49,9 +48,8 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="space-y-3">
+      <section>
         <UploadBox endpoint="/api/ingest" />
-        <InstallButton />
       </section>
 
       <nav className="grid grid-cols-1 sm:grid-cols-2 gap-3">
