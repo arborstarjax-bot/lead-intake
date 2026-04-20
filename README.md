@@ -34,9 +34,10 @@ npm run dev                  # http://localhost:3000
 ```
 
 Before first run, apply the migration in `supabase/migrations/` to your
-Supabase project (either via `npx supabase db push` or by pasting the SQL
-into the Supabase SQL editor). Then create your admin user in Supabase
-Auth and sign in at `/login`.
+Supabase project — paste the SQL into the Supabase SQL editor, or run
+`npx supabase db push`. No login is required; the app is single-user and
+all mutations go through server routes authorized by the service-role key.
+Treat the deployed URL as a secret — anyone with it can view/edit leads.
 
 ## Environment variables
 

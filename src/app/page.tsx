@@ -5,7 +5,7 @@ import UploadBox from "@/components/UploadBox";
 import InstallButton from "@/components/InstallButton";
 import LeadTable from "@/components/LeadTable";
 import { cn } from "@/lib/utils";
-import { Link2, LogOut } from "lucide-react";
+import { Link2 } from "lucide-react";
 
 export default function HomePage() {
   const [tab, setTab] = useState<"active" | "completed">("active");
@@ -47,15 +47,6 @@ export default function HomePage() {
               Calendar connected
             </span>
           )}
-          <form action="/api/auth/signout" method="post">
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-white px-3 py-1.5"
-              title="Sign out"
-            >
-              <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Sign out</span>
-            </button>
-          </form>
         </div>
       </header>
 

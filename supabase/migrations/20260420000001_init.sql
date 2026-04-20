@@ -1,8 +1,7 @@
 -- Initial schema for lead-intake.
--- One table for leads, one for Google OAuth tokens, and one private storage
--- bucket for screenshots. Authenticated users (i.e. anyone who can sign
--- into the admin app) have full access; anonymous users have no direct
--- access — the quick-upload endpoint uses the service role via the server.
+-- No auth layer: all access goes through Next.js API routes that use the
+-- service-role key. We still enable RLS on every table as a belt-and-suspenders
+-- measure, then grant no direct access — only the server can read/write.
 
 create extension if not exists pgcrypto;
 
@@ -75,18 +74,11 @@ before update on public.leads
 for each row execute function public.set_updated_at();
 
 alter table public.leads enable row level security;
+-- No policies: service role bypasses RLS. Anon / authenticated get nothing.
 
--- Single-tenant admin app: anyone with a valid Supabase session gets full
--- access. Quick-upload (public) uses the service role key from the server,
--- which bypasses RLS by design.
-create policy "leads authed full access"
-  on public.leads for all
-  to authenticated
-  using (true)
-  with check (true);
-
+-- Singleton row holds the single Google OAuth token for the app.
 create table if not exists public.google_oauth_tokens (
-  user_id uuid primary key references auth.users (id) on delete cascade,
+  id text primary key,
   access_token text not null,
   refresh_token text,
   expires_at timestamptz not null,
@@ -96,19 +88,8 @@ create table if not exists public.google_oauth_tokens (
 
 alter table public.google_oauth_tokens enable row level security;
 
-create policy "own tokens"
-  on public.google_oauth_tokens for all
-  to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
-
--- Private storage bucket for screenshots. We never expose it via RLS —
--- the server re-signs URLs on demand.
+-- Private storage bucket for screenshots. Everything goes through signed URLs
+-- minted server-side.
 insert into storage.buckets (id, name, public)
 values ('lead-screenshots', 'lead-screenshots', false)
 on conflict (id) do nothing;
-
-create policy "screenshots authed read"
-  on storage.objects for select
-  to authenticated
-  using (bucket_id = 'lead-screenshots');

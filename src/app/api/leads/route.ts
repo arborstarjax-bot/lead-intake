@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { displayName } from "@/lib/format";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  const supabase = createAdminClient();
   const view = req.nextUrl.searchParams.get("view") ?? "active";
   let query = supabase.from("leads").select("*").order("created_at", { ascending: false });
   if (view === "completed") {
@@ -24,12 +19,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  const supabase = createAdminClient();
   const payload = await req.json().catch(() => ({}));
   const base = {
     status: "New" as const,
