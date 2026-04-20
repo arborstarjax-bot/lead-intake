@@ -37,6 +37,17 @@ Rules:
 - Extract ONLY what is clearly visible or strongly implied. Never invent data.
 - Names: split into first_name and last_name when possible. If only one token is
   present, put it in first_name and leave last_name null.
+- Contact name sources (in priority order):
+    1. Explicit self-introduction in message body ("Hi, this is Jane Doe…").
+    2. Signed names at the end of a message.
+    3. The conversation-partner / contact name shown in the messaging app header
+       — e.g. the name at the top of a Facebook Messenger, iMessage, Instagram DM,
+       or WhatsApp thread is the OTHER person (the lead), not the user. Use it as
+       the lead's name unless the message body clearly introduces a different person.
+    4. Sender name on an email ("From: Jane Doe <jane@x.com>").
+  If the header name is obviously a company / business / page name rather than a
+  person ("Acme Roofing", "Mike's Plumbing"), put it in the "client" meaning and
+  leave first_name/last_name null.
 - Phone: return in any form; downstream code normalizes to E.164.
 - Address: street only (no city/state/zip); put those in their own fields.
 - State: return 2-letter USPS abbreviation (e.g. "FL") when possible.
