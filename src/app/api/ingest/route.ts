@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No files" }, { status: 400 });
   }
 
-  const results: Array<{ fileName: string; lead_id: string; intake_status: string; duplicates: unknown[] }> = [];
+  const results: Array<{ fileName: string; originalFileName: string; lead_id: string; intake_status: string; duplicates: unknown[] }> = [];
   const errors: Array<{ fileName: string; error: string }> = [];
 
   for (const file of files) {
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
         fileName,
         source: "web_upload",
       });
-      results.push({ fileName, ...res });
+      results.push({ fileName, originalFileName: file.name, ...res });
     } catch (e) {
       errors.push({ fileName: file.name, error: (e as Error).message });
     }
