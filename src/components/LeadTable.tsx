@@ -3,10 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Phone,
-  MessageSquare,
   Mail,
   CalendarPlus,
-  CheckCircle2,
   Trash2,
   Image as ImageIcon,
   Undo2,
@@ -188,8 +186,8 @@ export default function LeadTable({
           <table className="min-w-max w-full text-sm">
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
-                <th className="sticky left-0 z-20 bg-gray-50 border-b border-[var(--border)] px-2 py-2 text-left w-[260px]">
-                  Actions
+                <th className="sticky left-0 z-20 bg-gray-50 border-b border-[var(--border)] px-2 py-2 text-left w-[52px]">
+                  <span className="sr-only">Calendar</span>
                 </th>
                 {COLUMNS.map((c) => (
                   <th
@@ -214,7 +212,7 @@ export default function LeadTable({
                     </button>
                   </th>
                 ))}
-                <th className="border-b border-[var(--border)] px-2 py-2"></th>
+                <th className="border-b border-[var(--border)] px-2 py-2 w-[96px]"></th>
               </tr>
             </thead>
             <tbody>
@@ -240,7 +238,6 @@ export default function LeadTable({
                   lead={lead}
                   onPatch={(p) => savePatch(lead.id, p)}
                   onDelete={() => onDelete(lead.id)}
-                  onMarkCompleted={() => onMarkCompleted(lead)}
                   onAddCalendar={() => onAddCalendar(lead)}
                 />
               ))}
@@ -270,116 +267,62 @@ function Row({
   lead,
   onPatch,
   onDelete,
-  onMarkCompleted,
   onAddCalendar,
 }: {
   lead: Lead;
   onPatch: (p: Partial<Lead>) => void;
   onDelete: () => void;
-  onMarkCompleted: () => void;
   onAddCalendar: () => void;
 }) {
   const canCalendar = Boolean(lead.scheduled_day);
-  const canCall = Boolean(lead.phone_number);
-  const canEmail = Boolean(lead.email);
   const needsReview = lead.intake_status === "needs_review" || lead.intake_status === "failed";
 
   return (
     <tr className={cn("odd:bg-white even:bg-gray-50", needsReview && "bg-amber-50")}>
-      <td className="sticky left-0 z-10 bg-inherit border-b border-[var(--border)] px-2 py-1">
-        <div className="flex flex-wrap gap-1">
-          <ActionBtn
-            label="Call"
-            icon={<Phone className="h-4 w-4" />}
-            disabled={!canCall}
-            href={canCall ? `tel:${lead.phone_number}` : undefined}
-          />
-          <ActionBtn
-            label="Text"
-            icon={<MessageSquare className="h-4 w-4" />}
-            disabled={!canCall}
-            href={canCall ? `sms:${lead.phone_number}` : undefined}
-          />
-          <ActionBtn
-            label="Email"
-            icon={<Mail className="h-4 w-4" />}
-            disabled={!canEmail}
-            href={canEmail ? `mailto:${lead.email}` : undefined}
-          />
-          <ActionBtn
-            label="Calendar"
-            icon={<CalendarPlus className="h-4 w-4" />}
-            disabled={!canCalendar}
-            onClick={onAddCalendar}
-          />
-          <ActionBtn
-            label="Done"
-            icon={<CheckCircle2 className="h-4 w-4" />}
-            onClick={onMarkCompleted}
-            disabled={lead.status === "Completed"}
-            intent="success"
-          />
+      <td className="sticky left-0 z-10 bg-inherit border-b border-[var(--border)] px-1 py-1 align-middle">
+        <button
+          onClick={onAddCalendar}
+          disabled={!canCalendar}
+          title={canCalendar ? "Add to Google Calendar" : "Set Scheduled Day first"}
+          className={cn(
+            "inline-flex items-center justify-center h-9 w-9 rounded-md border",
+            canCalendar
+              ? "border-[var(--accent)] text-[var(--accent)] hover:bg-blue-50"
+              : "border-[var(--border)] text-[var(--muted)] opacity-50 cursor-not-allowed"
+          )}
+        >
+          <CalendarPlus className="h-4 w-4" />
+        </button>
+      </td>
+      {COLUMNS.map((c) => (
+        <Cell key={c.key as string} column={c} lead={lead} onPatch={onPatch} />
+      ))}
+      <td className="border-b border-[var(--border)] px-2 py-2 whitespace-nowrap align-middle">
+        <div className="flex items-center gap-1 justify-end">
+          {needsReview && (
+            <span className="text-xs text-amber-700 mr-1">review</span>
+          )}
           {lead.screenshot_path && (
             <a
               href={`/api/leads/${lead.id}/screenshot`}
               target="_blank"
               rel="noreferrer"
               title="View original screenshot"
-              className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-[var(--border)] bg-white hover:bg-gray-100"
+              className="inline-flex items-center justify-center h-8 w-8 rounded-md text-[var(--muted)] hover:bg-gray-100"
             >
               <ImageIcon className="h-4 w-4" />
             </a>
           )}
           <button
             onClick={onDelete}
-            title="Delete"
-            className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-[var(--border)] bg-white hover:bg-red-50 text-[var(--danger)]"
+            title="Delete lead"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-[var(--muted)] hover:bg-red-50 hover:text-[var(--danger)]"
           >
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </td>
-      {COLUMNS.map((c) => (
-        <Cell key={c.key as string} column={c} lead={lead} onPatch={onPatch} />
-      ))}
-      <td className="border-b border-[var(--border)] px-2 py-2 text-xs text-[var(--muted)] whitespace-nowrap">
-        {needsReview ? "review" : ""}
-      </td>
     </tr>
-  );
-}
-
-function ActionBtn({
-  label,
-  icon,
-  href,
-  onClick,
-  disabled,
-  intent,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  href?: string;
-  onClick?: () => void;
-  disabled?: boolean;
-  intent?: "success";
-}) {
-  const classes = cn(
-    "inline-flex items-center justify-center h-8 w-8 rounded-md border border-[var(--border)] bg-white",
-    disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-100",
-    intent === "success" && !disabled && "text-[var(--success)]"
-  );
-  if (href && !disabled) {
-    return (
-      <a href={href} className={classes} title={label}>
-        {icon}
-      </a>
-    );
-  }
-  return (
-    <button disabled={disabled} onClick={onClick} className={classes} title={label}>
-      {icon}
-    </button>
   );
 }
 
@@ -423,6 +366,11 @@ function Cell({
     lowConf && "bg-amber-50 border-amber-300"
   );
 
+  const isPhone = column.key === "phone_number";
+  const isEmail = column.key === "email";
+  const hasPhone = isPhone && Boolean(value.trim());
+  const hasEmail = isEmail && Boolean(value.trim());
+
   return (
     <td
       className={cn(
@@ -454,10 +402,42 @@ function Cell({
           onChange={(e) => scheduleSave(e.target.value)}
           className={cn(cellClass, "resize-y")}
         />
+      ) : isPhone || isEmail ? (
+        <div className="flex items-center gap-1 pl-1">
+          <a
+            href={
+              hasPhone
+                ? `tel:${value}`
+                : hasEmail
+                ? `mailto:${value}`
+                : undefined
+            }
+            aria-disabled={isPhone ? !hasPhone : !hasEmail}
+            onClick={(e) => {
+              if (isPhone ? !hasPhone : !hasEmail) e.preventDefault();
+            }}
+            title={isPhone ? "Call" : "Email"}
+            className={cn(
+              "inline-flex items-center justify-center h-7 w-7 shrink-0 rounded-md border",
+              (isPhone ? hasPhone : hasEmail)
+                ? "border-[var(--accent)] text-[var(--accent)] hover:bg-blue-50"
+                : "border-[var(--border)] text-[var(--muted)] opacity-40 cursor-not-allowed"
+            )}
+          >
+            {isPhone ? <Phone className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+          </a>
+          <input
+            type="text"
+            value={isPhone ? display : value}
+            inputMode={isPhone ? "tel" : "email"}
+            onChange={(e) => scheduleSave(e.target.value)}
+            className={cellClass}
+          />
+        </div>
       ) : (
         <input
           type={column.type ?? "text"}
-          value={column.key === "phone_number" ? value : display}
+          value={display}
           onChange={(e) => scheduleSave(e.target.value)}
           className={cellClass}
         />
