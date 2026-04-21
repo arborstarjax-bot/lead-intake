@@ -4,6 +4,7 @@ import { LoginForm } from "./LoginForm";
 import { SignedInNotice } from "./SignedInNotice";
 import { getSessionMembership } from "@/lib/auth";
 import { createSSRClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/safeRedirect";
 
 export const dynamic = "force-dynamic";
 
@@ -13,11 +14,12 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const sp = await searchParams;
+  const next = safeNext(sp.next);
 
   // If the user is already signed in AND in a workspace, there's nothing
   // to do here — send them into the app (or wherever they were headed).
   const membership = await getSessionMembership();
-  if (membership) redirect(sp.next || "/");
+  if (membership) redirect(next);
 
   // Signed in but orphaned (no workspace membership): show a sign-out +
   // rejoin prompt instead of the login form so they're never trapped.
@@ -37,7 +39,7 @@ export default async function LoginPage({
         {orphanEmail ? (
           <SignedInNotice email={orphanEmail} />
         ) : (
-          <LoginForm next={sp.next} initialError={sp.error} />
+          <LoginForm next={next} initialError={sp.error} />
         )}
         <p className="text-sm text-center text-[var(--muted)]">
           Don&apos;t have an account?{" "}

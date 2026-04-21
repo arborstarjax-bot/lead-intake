@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "./actions";
+import { safeNext } from "@/lib/safeRedirect";
 
 export function LoginForm({
   next,
@@ -28,7 +29,7 @@ export function LoginForm({
             setError(res.error);
             return;
           }
-          router.replace(next || "/");
+          router.replace(safeNext(next));
           router.refresh();
         });
       }}
