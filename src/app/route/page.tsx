@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
   Car,
+  Check,
   Clock,
   Home,
   MapPin,
@@ -20,6 +23,7 @@ import {
   Trash2,
   ChevronRight,
   MessageSquare,
+  ListOrdered,
 } from "lucide-react";
 import RouteMap, { type RouteMapMode, type RouteMapStop } from "@/components/RouteMap";
 import { cn } from "@/lib/utils";
@@ -694,11 +698,108 @@ function StopList({
   onReload: () => void;
   onFlash: (msg: string) => void;
 }) {
+  // Manual reorder: local draft of the stop order. When non-null we're in
+  // reorder mode — each row shows up/down arrows instead of the 3-dot menu
+  // and a Save/Cancel bar appears at the bottom. Saving POSTs the ordered
+  // lead IDs to /api/schedule/reorder which compacts start times back-to-
+  // back from work_start using real drive legs and resyncs calendar.
+  const [draft, setDraft] = useState<Stop[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reordering = draft !== null;
+  const stops = draft ?? data.stops;
+  const dirty =
+    draft !== null &&
+    (draft.length !== data.stops.length ||
+      draft.some((s, i) => s.id !== data.stops[i]?.id));
+
+  function startReorder() {
+    setError(null);
+    setDraft(data.stops.slice());
+  }
+
+  function cancelReorder() {
+    setDraft(null);
+    setError(null);
+  }
+
+  function move(index: number, delta: -1 | 1) {
+    if (!draft) return;
+    const target = index + delta;
+    if (target < 0 || target >= draft.length) return;
+    const next = draft.slice();
+    [next[index], next[target]] = [next[target], next[index]];
+    setDraft(next);
+  }
+
+  async function save() {
+    if (!draft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/schedule/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: data.date,
+          orderedLeadIds: draft.map((s) => s.id),
+        }),
+      });
+      const json = await res.json();
+      if (res.status === 428) {
+        if (confirm("Google Calendar is not connected. Connect now?")) {
+          window.location.href = json.connectUrl;
+        }
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(json.error ?? `Failed (${res.status})`);
+      }
+      const parts: string[] = [];
+      if (json.shifted) parts.push(`${json.shifted} stop${json.shifted === 1 ? "" : "s"} shifted`);
+      if (json.overflowMinutes && json.overflowMinutes > 0) {
+        parts.push(`ends ${json.overflowMinutes} min past work hours`);
+      }
+      onFlash(parts.length ? `Reordered · ${parts.join(" · ")}` : "Order saved");
+      setDraft(null);
+      onReload();
+    } catch (e) {
+      setError((e as Error).message || "Failed to save order");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1 mb-3">
-        <Car className="h-3.5 w-3.5" /> Timeline
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
+          <Car className="h-3.5 w-3.5" /> Timeline
+        </div>
+        {data.stops.length > 1 && !reordering && (
+          <button
+            onClick={startReorder}
+            className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1"
+          >
+            <ListOrdered className="h-3.5 w-3.5" /> Reorder
+          </button>
+        )}
+        {reordering && (
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 inline-flex items-center gap-1">
+            <ListOrdered className="h-3.5 w-3.5" /> Reorder mode
+          </div>
+        )}
       </div>
+
+      {reordering && (
+        <div className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Use the arrows to change visit order. Saving will recompute every start
+          time from your work-start using real drive legs and update Google
+          Calendar.
+        </div>
+      )}
+
       <ol className="space-y-0">
         {data.home && (
           <TimelineRow
@@ -708,9 +809,9 @@ function StopList({
             subtitle={data.home.address}
           />
         )}
-        {data.stops.map((s, i) => (
+        {stops.map((s, i) => (
           <div key={s.id}>
-            {s.driveMinutesFromPrev != null && (
+            {!reordering && s.driveMinutesFromPrev != null && (
               <DriveLeg minutes={s.driveMinutesFromPrev} />
             )}
             <TimelineRow
@@ -719,30 +820,44 @@ function StopList({
               title={s.label}
               subtitle={
                 <>
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatClock(s.startTime)}
-                  </span>
-                  <span className="mx-1.5 text-[var(--border)]">·</span>
+                  {!reordering && (
+                    <>
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatClock(s.startTime)}
+                      </span>
+                      <span className="mx-1.5 text-[var(--border)]">·</span>
+                    </>
+                  )}
                   <span className="truncate">{s.address}</span>
                 </>
               }
               action={
-                <StopMenu
-                  leadId={s.id}
-                  label={s.label}
-                  firstName={s.firstName}
-                  phoneNumber={s.phoneNumber}
-                  startTime={s.startTime}
-                  date={data.date}
-                  onReload={onReload}
-                  onFlash={onFlash}
-                />
+                reordering ? (
+                  <ReorderArrows
+                    disabled={saving}
+                    canUp={i > 0}
+                    canDown={i < stops.length - 1}
+                    onUp={() => move(i, -1)}
+                    onDown={() => move(i, 1)}
+                  />
+                ) : (
+                  <StopMenu
+                    leadId={s.id}
+                    label={s.label}
+                    firstName={s.firstName}
+                    phoneNumber={s.phoneNumber}
+                    startTime={s.startTime}
+                    date={data.date}
+                    onReload={onReload}
+                    onFlash={onFlash}
+                  />
+                )
               }
             />
           </div>
         ))}
-        {data.home && data.returnDriveMinutes != null && data.stops.length > 0 && (
+        {!reordering && data.home && data.returnDriveMinutes != null && data.stops.length > 0 && (
           <>
             <DriveLeg minutes={data.returnDriveMinutes} />
             <TimelineRow
@@ -754,6 +869,76 @@ function StopList({
           </>
         )}
       </ol>
+
+      {reordering && (
+        <div className="mt-3 space-y-2">
+          {error && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={cancelReorder}
+              disabled={saving}
+              className="rounded-full border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)] px-4 h-10 text-sm font-medium disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={saving || !dirty}
+              className="flex-1 rounded-full bg-[var(--accent)] text-white h-10 text-sm font-semibold inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  {dirty ? "Save new order" : "No changes"}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReorderArrows({
+  canUp,
+  canDown,
+  onUp,
+  onDown,
+  disabled,
+}: {
+  canUp: boolean;
+  canDown: boolean;
+  onUp: () => void;
+  onDown: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={onUp}
+        disabled={!canUp || disabled}
+        aria-label="Move up"
+        className="h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] inline-flex items-center justify-center active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <ArrowUp className="h-4 w-4" />
+      </button>
+      <button
+        onClick={onDown}
+        disabled={!canDown || disabled}
+        aria-label="Move down"
+        className="h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] inline-flex items-center justify-center active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <ArrowDown className="h-4 w-4" />
+      </button>
     </div>
   );
 }
