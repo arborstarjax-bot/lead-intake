@@ -71,15 +71,29 @@ const EDITABLE_KEYS = [
   "travel_buffer_minutes",
 ] as const satisfies ReadonlyArray<keyof ClientAppSettings>;
 
+/**
+ * `work_start_time` / `work_end_time` round-trip through Postgres as
+ * `HH:MM:SS` but `<input type="time">` onChange only yields `HH:MM`.
+ * Trim both sides to minutes so changing a time and changing it back
+ * doesn't leave the page stuck in a phantom-dirty state.
+ */
+function timeEq(a: unknown, b: unknown): boolean {
+  return String(a ?? "").slice(0, 5) === String(b ?? "").slice(0, 5);
+}
+
 function diffSettings(next: ClientAppSettings, prev: ClientAppSettings): Patch {
   const patch: Patch = {};
   for (const key of EDITABLE_KEYS) {
     const a = next[key];
     const b = prev[key];
-    const same =
-      Array.isArray(a) && Array.isArray(b)
-        ? JSON.stringify(a) === JSON.stringify(b)
-        : a === b;
+    let same: boolean;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      same = JSON.stringify(a) === JSON.stringify(b);
+    } else if (key === "work_start_time" || key === "work_end_time") {
+      same = timeEq(a, b);
+    } else {
+      same = a === b;
+    }
     if (!same) {
       // Assignment goes through `unknown` so TS doesn't infer each
       // field's individual union type for the merged patch.
@@ -101,12 +115,18 @@ export default function SettingsPage() {
   // successful PUT.
   const savedRef = useRef<ClientAppSettings>(DEFAULT_CLIENT_SETTINGS);
   const [savedTick, setSavedTick] = useState(0);
+  // Once the user touches a field or saves, stop letting ctxSettings
+  // (which we update via apply() after each save, and which starts at
+  // DEFAULT_CLIENT_SETTINGS before the provider fetches) overwrite
+  // local state. Otherwise edits typed during an in-flight save get
+  // silently reset when apply() lands.
+  const touchedRef = useRef(false);
 
-  // Initial load: seed local state + savedRef from the server-side
-  // settings the provider has already fetched. We treat ctxSettings as
-  // authoritative on mount only — once the page is open, edits live in
-  // `s` until the user taps Save.
+  // Seed local state + savedRef from the provider. Only fires before
+  // the user has touched anything, so subsequent provider updates (e.g.
+  // after we call apply()) don't clobber in-flight edits.
   useEffect(() => {
+    if (touchedRef.current) return;
     setS(ctxSettings);
     savedRef.current = ctxSettings;
     setSavedTick((t) => t + 1);
@@ -123,6 +143,7 @@ export default function SettingsPage() {
 
   async function save() {
     if (!dirty || saving) return;
+    touchedRef.current = true;
     setSaving(true);
     try {
       const res = await fetch("/api/settings", {
@@ -135,15 +156,20 @@ export default function SettingsPage() {
         toast({ kind: "error", message: json.error ?? "Save failed" });
         return;
       }
-      // Server-normalized settings become the new baseline. Merge onto
-      // the current local state so any field the server doesn't echo
-      // back stays as the user typed it.
-      const serverPatch = (json?.settings ?? {}) as Partial<ClientAppSettings>;
-      const nextSaved: ClientAppSettings = { ...s, ...serverPatch };
-      savedRef.current = nextSaved;
-      setS(nextSaved);
+      // The server echoes back the full normalized row (`.select("*").single()`).
+      // Use it as the new baseline for dirty computation, but do NOT
+      // overwrite local `s` — the user may have typed more fields while
+      // the fetch was in flight, and those should survive. Any such
+      // edits will naturally show as dirty (they differ from the new
+      // baseline) so the user can tap Save again.
+      const serverSettings = (json?.settings ?? null) as
+        | ClientAppSettings
+        | null;
+      if (serverSettings) {
+        savedRef.current = serverSettings;
+        apply(serverSettings);
+      }
       setSavedTick((t) => t + 1);
-      if (json?.settings) apply(serverPatch);
       toast({ kind: "success", message: "Saved" });
     } catch (e) {
       toast({ kind: "error", message: (e as Error).message });
@@ -161,6 +187,7 @@ export default function SettingsPage() {
     key: K,
     value: ClientAppSettings[K]
   ) {
+    touchedRef.current = true;
     setS((prev) => ({ ...prev, [key]: value }));
   }
 
