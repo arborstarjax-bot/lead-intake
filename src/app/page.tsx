@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ClipboardList, Settings as SettingsIcon } from "lucide-react";
+import { CheckCircle2, ClipboardList, Map as MapIcon, Settings as SettingsIcon } from "lucide-react";
 import UploadBox from "@/components/UploadBox";
 
 export default function HomePage() {
@@ -79,6 +79,16 @@ export default function HomePage() {
             <span className="font-medium">Completed Leads</span>
           </span>
           <span className="text-sm text-[var(--muted)]">{counts?.completed ?? "—"}</span>
+        </Link>
+        <Link
+          href="/route"
+          className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-white p-4 hover:bg-gray-50 active:bg-gray-100 transition sm:col-span-2"
+        >
+          <span className="flex items-center gap-3">
+            <MapIcon className="h-5 w-5 text-[var(--accent)]" />
+            <span className="font-medium">Route Map</span>
+          </span>
+          <span className="text-xs text-[var(--muted)]">Today + 14 days</span>
         </Link>
       </nav>
     </main>
