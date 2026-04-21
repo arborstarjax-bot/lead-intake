@@ -6,6 +6,7 @@ import {
   Phone,
   Mail,
   MessageSquare,
+  Truck,
   CalendarPlus,
   CalendarCheck,
   Trash2,
@@ -29,6 +30,7 @@ import { useAppSettings } from "@/components/SettingsProvider";
 import {
   renderTemplate,
   smsIntroTemplate,
+  smsEnrouteTemplate,
   emailSubjectTemplate,
   emailBodyTemplate,
   type TemplateVars,
@@ -733,6 +735,7 @@ function ContactRow({
     ? buildMailtoHref(trimmed, lead, settings)
     : undefined;
   const smsHref = tel && trimmed ? buildSmsHref(trimmed, lead, settings) : undefined;
+  const enrouteHref = tel && trimmed ? buildEnrouteSmsHref(trimmed, lead, settings) : undefined;
 
   return (
     <div className="flex items-stretch gap-1">
@@ -740,8 +743,13 @@ function ContactRow({
         {icon}
       </ActionIconLink>
       {tel && (
-        <ActionIconLink href={smsHref} title="Send text message">
+        <ActionIconLink href={smsHref} title="Send intro text message">
           <MessageSquare className="h-4 w-4" />
+        </ActionIconLink>
+      )}
+      {tel && (
+        <ActionIconLink href={enrouteHref} title="Send 'on my way' text message">
+          <Truck className="h-4 w-4" />
         </ActionIconLink>
       )}
       <InlineField
@@ -895,6 +903,16 @@ function templateVars(lead: Lead, settings: ClientAppSettings): TemplateVars {
  */
 function buildSmsHref(phone: string, lead: Lead, settings: ClientAppSettings): string {
   const body = renderTemplate(smsIntroTemplate(settings), templateVars(lead, settings));
+  return `sms:${phone}?body=${encodeURIComponent(body)}`;
+}
+
+/**
+ * Build the sms: link for the "on my way" text. Same placeholder set as
+ * the intro template but rendered against the en-route template the
+ * user configured in Settings.
+ */
+function buildEnrouteSmsHref(phone: string, lead: Lead, settings: ClientAppSettings): string {
+  const body = renderTemplate(smsEnrouteTemplate(settings), templateVars(lead, settings));
   return `sms:${phone}?body=${encodeURIComponent(body)}`;
 }
 

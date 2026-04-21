@@ -41,6 +41,10 @@ export const DEFAULT_SMS_CONFIRM =
   "arborist assessment on {day} at {time}. Reply here if anything " +
   "changes — see you then!";
 
+export const DEFAULT_SMS_ENROUTE =
+  "Hi {firstName}, {salesPerson} with {companyName} — I'm on my way " +
+  "to your property for the free estimate. See you shortly!";
+
 export const DEFAULT_EMAIL_SUBJECT =
   "Your free estimate from {companyName}";
 
@@ -74,6 +78,7 @@ export function renderTemplate(tpl: string, vars: TemplateVars): string {
 type TemplateSource = {
   sms_intro_template?: string | null;
   sms_confirm_template?: string | null;
+  sms_enroute_template?: string | null;
   email_subject_template?: string | null;
   email_body_template?: string | null;
 };
@@ -83,6 +88,9 @@ export function smsIntroTemplate(s: TemplateSource): string {
 }
 export function smsConfirmTemplate(s: TemplateSource): string {
   return s.sms_confirm_template?.trim() || DEFAULT_SMS_CONFIRM;
+}
+export function smsEnrouteTemplate(s: TemplateSource): string {
+  return s.sms_enroute_template?.trim() || DEFAULT_SMS_ENROUTE;
 }
 export function emailSubjectTemplate(s: TemplateSource): string {
   return s.email_subject_template?.trim() || DEFAULT_EMAIL_SUBJECT;
