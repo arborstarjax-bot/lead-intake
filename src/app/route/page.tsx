@@ -1401,10 +1401,12 @@ function StopMenu({
     const body = renderTemplate(smsConfirmTemplate(settings), {
       firstName: who,
       // Prefer the lead's own assigned salesperson; fall back to the
-      // first roster entry so `{salesPerson}` doesn't render as the
-      // literal placeholder when nobody is explicitly assigned.
+      // configured default, then the first roster entry as a last
+      // resort so `{salesPerson}` never renders as the literal
+      // placeholder when nobody is explicitly assigned.
       salesPerson:
         salesPerson?.trim() ||
+        settings.default_salesperson?.trim() ||
         settings.salespeople?.[0]?.trim() ||
         "",
       companyName: (settings.company_name ?? "").trim(),
