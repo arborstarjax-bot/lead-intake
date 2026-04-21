@@ -55,6 +55,10 @@ export default function LeadTable({
   const [toast, setToast] = useState<{ leadId: string; prev: LeadStatus } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [schedulingLead, setSchedulingLead] = useState<Lead | null>(null);
+  // Tracks whether the current scheduling modal actually booked something,
+  // so the "Estimate Added to Calendar" toast fires on close instead of
+  // while the modal is still covering the toast area.
+  const bookedOnceRef = useRef(false);
 
   function showFlash(message: string) {
     setFlash(message);
@@ -268,8 +272,17 @@ export default function LeadTable({
       {schedulingLead && (
         <ScheduleModal
           lead={schedulingLead}
-          onClose={() => setSchedulingLead(null)}
-          onBooked={(updated, htmlLink) => {
+          onClose={() => {
+            setSchedulingLead(null);
+            // Fire the confirmation toast when the modal actually goes away.
+            // Firing it in onBooked puts it behind the modal (it stays open
+            // on the SMS confirmation step), so the user never sees it.
+            if (bookedOnceRef.current) {
+              bookedOnceRef.current = false;
+              showFlash("Estimate Added to Calendar");
+            }
+          }}
+          onBooked={(updated) => {
             setLeads((prev) => {
               const counts: LeadCounts = {
                 All: 0,
@@ -286,12 +299,9 @@ export default function LeadTable({
               return next;
             });
             onScheduleChange?.();
-            showFlash("Estimate Added to Calendar");
-            // Intentionally do NOT auto-open the calendar tab — the modal
-            // stays on its success step so the user can send an SMS
-            // confirmation. htmlLink is passed through and rendered as a
-            // link there.
-            void htmlLink;
+            bookedOnceRef.current = true;
+            // Calendar link is rendered inside the modal's success step;
+            // the modal stays open so the user can send the SMS confirmation.
           }}
         />
       )}

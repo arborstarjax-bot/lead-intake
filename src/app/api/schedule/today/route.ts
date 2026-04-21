@@ -4,6 +4,7 @@ import { getSettings, homeAddressString } from "@/lib/settings";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
+import { todayIsoInBusinessTz } from "@/lib/date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,17 +22,12 @@ type TodayRouteResponse =
   | { hasHome: true; date: string; stops: RouteStop[]; totalDriveMinutes: number; returnDriveMinutes: number | null }
   | { hasHome: false; date: string; stops: RouteStop[]; totalDriveMinutes: 0; returnDriveMinutes: null };
 
-/** Local YYYY-MM-DD — avoids UTC drift around midnight. */
-function todayLocalIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
 export async function GET() {
   const supabase = createAdminClient();
-  const iso = todayLocalIso();
+  // Pin to America/New_York so the route always reflects David's business
+  // day. Vercel runs UTC; without this, between ~8 PM and midnight ET we'd
+  // query tomorrow's leads and show an empty route.
+  const iso = todayIsoInBusinessTz();
 
   const [settings, rowsResp] = await Promise.all([
     getSettings(),

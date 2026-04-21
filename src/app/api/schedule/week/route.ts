@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
-import { getSettings } from "@/lib/settings";
-import { suggestSlots } from "@/lib/schedule";
+import { getSettings, homeAddressString } from "@/lib/settings";
+import { suggestSlots, leadAddressString } from "@/lib/schedule";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
+import { isoInBusinessTz, dayOfWeekInBusinessTz } from "@/lib/date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,13 +26,6 @@ type DayPreview =
       slotCount: number;
     }
   | { date: string; isWorkDay: false };
-
-/** YYYY-MM-DD in local time for a Date. */
-function isoLocal(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
 
 export async function POST(req: Request) {
   if (!process.env.GOOGLE_MAPS_API_KEY) {
@@ -63,6 +57,29 @@ export async function POST(req: Request) {
   }
   const lead = leadResp.data as Lead;
 
+  // Up-front checks — otherwise every day in the picker returns zero slots
+  // and the UI shows "No feasible slots" for everything with no explanation
+  // of why. Catch the two common causes here and surface them once at the
+  // top of the modal.
+  if (!homeAddressString(settings)) {
+    return NextResponse.json(
+      {
+        error:
+          "Set your starting address in Settings before using the AI scheduler.",
+      },
+      { status: 400 }
+    );
+  }
+  if (!leadAddressString(lead)) {
+    return NextResponse.json(
+      {
+        error:
+          "This lead has no address yet — add one to rank days by drive time.",
+      },
+      { status: 400 }
+    );
+  }
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const start = today;
@@ -74,8 +91,8 @@ export async function POST(req: Request) {
   const { data: window, error: windowErr } = await supabase
     .from("leads")
     .select("*")
-    .gte("scheduled_day", isoLocal(start))
-    .lte("scheduled_day", isoLocal(end))
+    .gte("scheduled_day", isoInBusinessTz(start))
+    .lte("scheduled_day", isoInBusinessTz(end))
     .not("scheduled_time", "is", null)
     .neq("id", lead.id);
   if (windowErr) {
@@ -108,8 +125,8 @@ export async function POST(req: Request) {
     // duplicate calls for the same origin-dest pair (e.g. home→new lead).
     const results = await Promise.all(
       days.map(async (d): Promise<DayPreview> => {
-        const iso = isoLocal(d);
-        const dow = d.getDay(); // 0=Sunday .. 6=Saturday
+        const iso = isoInBusinessTz(d);
+        const dow = dayOfWeekInBusinessTz(d); // 0=Sunday .. 6=Saturday
         if (!workDays.has(dow)) {
           return { date: iso, isWorkDay: false };
         }
