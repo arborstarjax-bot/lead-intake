@@ -10,9 +10,18 @@
     "typecheck": "tsc --noEmit",
     "db:new": "supabase migration new",
     "db:push": "supabase db push",
-    "db:status": "supabase migration list"
+    "db:status": "supabase migration list",
+    "cap:sync": "cap sync",
+    "cap:ios": "cap open ios",
+    "cap:android": "cap open android"
   },
   "dependencies": {
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/browser": "^7.0.5",
+    "@capacitor/core": "^7.6.2",
+    "@capacitor/haptics": "^7.0.5",
+    "@capacitor/push-notifications": "^7.0.6",
+    "@capacitor/status-bar": "^7.0.6",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
     "clsx": "^2.1.1",
@@ -27,6 +36,9 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.6.2",
+    "@capacitor/cli": "^7.6.2",
+    "@capacitor/ios": "^7.6.2",
     "@tailwindcss/postcss": "^4",
     "@types/google.maps": "^3.64.0",
     "@types/node": "^20",
