@@ -647,7 +647,7 @@ function ContactRow({
   const trimmed = raw.trim();
   const primaryHref =
     tel && trimmed ? `tel:${trimmed}` : email && trimmed ? `mailto:${trimmed}` : undefined;
-  const smsHref = tel && trimmed ? `sms:${trimmed}` : undefined;
+  const smsHref = tel && trimmed ? buildSmsHref(trimmed, lead) : undefined;
 
   return (
     <div className="flex items-stretch gap-1">
@@ -672,6 +672,23 @@ function ContactRow({
       />
     </div>
   );
+}
+
+/**
+ * Build the tel/sms link for a lead. The body is David's standard
+ * first-touch intro; the greeting uses the lead's first name when known
+ * and falls back to "there" so the sentence still reads naturally.
+ *
+ * iOS and Android both honor `sms:<number>?body=<urlencoded>`.
+ */
+function buildSmsHref(phone: string, lead: Lead): string {
+  const firstName = (lead.first_name ?? "").trim() || (lead.client ?? "").trim().split(" ")[0] || "there";
+  const body =
+    `Hi ${firstName}, this is David with Arbor Tech 904. I'm reaching ` +
+    `out regarding your request for a free estimate/arborist assessment. ` +
+    `Feel free to call or text me to schedule a day and time that works ` +
+    `best for you. I look forward to helping you out!`;
+  return `sms:${phone}?body=${encodeURIComponent(body)}`;
 }
 
 function ActionIconLink({
