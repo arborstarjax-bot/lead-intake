@@ -25,9 +25,15 @@ type Props = {
   home: RouteMapHome | null;
   stops: RouteMapStop[];
   mode: RouteMapMode;
-  /** If set, a faint "ghost" pin + dashed line is drawn to preview how a
-   *  prospective slot (not yet booked) would fit into the day. */
+  /** If set, a faint amber "ghost" pin is drawn to preview a prospective
+   *  slot (not yet booked). */
   ghost?: RouteMapStop | null;
+  /** When a slot time is being previewed, the ghost is inserted chronologically
+   *  into the day's stops and an amber directions polyline is drawn through
+   *  the whole reshaped day. The confirmed blue route is hidden during preview
+   *  so the two colors don't overlap. When null, the regular blue route renders
+   *  and the ghost pin shows with no connector. */
+  previewStopTime?: string | null;
 };
 
 function formatClock(t: string): string {
@@ -40,7 +46,14 @@ function formatClock(t: string): string {
   return `${h12}:${min} ${ampm}`;
 }
 
-export default function RouteMap({ home, stops, mode, ghost }: Props) {
+export default function RouteMap({
+  home,
+  stops,
+  mode,
+  ghost,
+  previewStopTime,
+}: Props) {
+  const previewing = Boolean(ghost && previewStopTime);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
@@ -182,17 +195,41 @@ export default function RouteMap({ home, stops, mode, ghost }: Props) {
     }
 
     // Pins mode: show markers only, no connectors between them.
-    // Route mode: draw the actual driving path via DirectionsService.
-    if (mode === "route" && stops.length > 0) {
-      drawDirections({ google, map, home, stops, directionsRef }).catch(() => {
+    // Route mode: draw the actual driving path via DirectionsService. While
+    // previewing a prospective slot, hide the confirmed blue route and draw
+    // the preview route below instead so the two colors don't overlap.
+    if (mode === "route" && !previewing && stops.length > 0) {
+      drawDirections({
+        google,
+        map,
+        home,
+        stops,
+        directionsRef,
+        color: "#2563eb",
+      }).catch(() => {
         // If Directions fails (quota, no route, etc.) silently degrade to
         // pins-only — markers are already on the map.
       });
     }
-    // Ghost preview connector (dashed) renders in both modes when a ghost
-    // pin is being previewed from the scheduler.
-    if (ghost && home) {
-      drawGhostConnector({ google, map, home, ghost, polylinesRef });
+
+    // Preview route: insert the ghost into the day's stops chronologically
+    // by its proposed start time and draw the whole reshaped day in amber
+    // so the user can see how the slot fits before committing.
+    if (previewing && ghost && previewStopTime) {
+      const insertedStops: RouteMapStop[] = [
+        ...stops,
+        { ...ghost, startTime: previewStopTime },
+      ].sort((a, b) => a.startTime.localeCompare(b.startTime));
+      drawDirections({
+        google,
+        map,
+        home,
+        stops: insertedStops,
+        directionsRef,
+        color: "#f59e0b",
+      }).catch(() => {
+        // Same graceful degradation — markers already on map.
+      });
     }
 
     if (anyPoint) {
@@ -203,7 +240,7 @@ export default function RouteMap({ home, stops, mode, ghost }: Props) {
         map.fitBounds(bounds, 64);
       }
     }
-  }, [status, home, stops, mode, ghost]);
+  }, [status, home, stops, mode, ghost, previewStopTime, previewing]);
 
   return (
     <div className="relative w-full h-[60vh] min-h-[320px] rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-2)]">
@@ -232,49 +269,20 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function drawGhostConnector({
-  google,
-  map,
-  home,
-  ghost,
-  polylinesRef,
-}: {
-  google: typeof window.google;
-  map: google.maps.Map;
-  home: RouteMapHome;
-  ghost: RouteMapStop;
-  polylinesRef: React.MutableRefObject<google.maps.Polyline[]>;
-}) {
-  const dashed = new google.maps.Polyline({
-    path: [
-      { lat: home.lat, lng: home.lng },
-      { lat: ghost.lat, lng: ghost.lng },
-    ],
-    map,
-    strokeOpacity: 0,
-    icons: [
-      {
-        icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 },
-        offset: "0",
-        repeat: "10px",
-      },
-    ],
-  });
-  polylinesRef.current.push(dashed);
-}
-
 async function drawDirections({
   google,
   map,
   home,
   stops,
   directionsRef,
+  color,
 }: {
   google: typeof window.google;
   map: google.maps.Map;
   home: RouteMapHome | null;
   stops: RouteMapStop[];
   directionsRef: React.MutableRefObject<google.maps.DirectionsRenderer | null>;
+  color: string;
 }) {
   // Build origin/destination: prefer the home-to-home round trip; if there's
   // no home set, go from stop 1 to stop N with intermediates.
@@ -285,7 +293,7 @@ async function drawDirections({
     map,
     suppressMarkers: true, // keep our numbered markers, don't overlay A/B
     polylineOptions: {
-      strokeColor: "#2563eb",
+      strokeColor: color,
       strokeOpacity: 0.9,
       strokeWeight: 4,
     },

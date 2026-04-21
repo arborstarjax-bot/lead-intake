@@ -168,6 +168,18 @@ function RoutePageInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  // Currently-previewed scheduling slot. Tapping a slot in SchedulePanel
+  // sets this; it drives the amber preview directions overlay on the map
+  // and only commits to Google/DB when the user explicitly confirms.
+  const [previewSlot, setPreviewSlot] = useState<Slot | null>(null);
+
+  // Drop any active preview whenever the context changes (day switched,
+  // schedule closed, different lead). The map's own deps array already
+  // reacts to these, but dropping the selection explicitly keeps
+  // SchedulePanel's UI state in sync.
+  useEffect(() => {
+    setPreviewSlot(null);
+  }, [selectedDay, scheduleLeadId]);
 
   function showFlash(msg: string) {
     setFlash(msg);
@@ -309,6 +321,7 @@ function RoutePageInner() {
         stops={data?.stops ?? []}
         mode={mode}
         ghost={ghostForMap}
+        previewStopTime={previewSlot?.startTime ?? null}
       />
 
       {data && data.unresolved.length > 0 && (
@@ -352,8 +365,11 @@ function RoutePageInner() {
           leadId={scheduleLeadId}
           leadLabel={data.ghost.label}
           selectedDay={selectedDay}
+          previewSlot={previewSlot}
+          onPreview={setPreviewSlot}
           onBooked={(msg) => {
             showFlash(msg);
+            setPreviewSlot(null);
             // After booking we clear the ghost param — the newly booked
             // lead becomes a regular numbered pin on reload.
             router.replace(`/route?day=${selectedDay}`, { scroll: false });
@@ -906,11 +922,15 @@ function SchedulePanel({
   leadId,
   leadLabel,
   selectedDay,
+  previewSlot,
+  onPreview,
   onBooked,
 }: {
   leadId: string;
   leadLabel: string;
   selectedDay: string;
+  previewSlot: Slot | null;
+  onPreview: (slot: Slot | null) => void;
   onBooked: (msg: string) => void;
 }) {
   const [half, setHalf] = useState<Half>("all");
@@ -918,7 +938,7 @@ function SchedulePanel({
   const [slots, setSlots] = useState<Slot[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [booking, setBooking] = useState<string | null>(null);
+  const [booking, setBooking] = useState(false);
 
   const loadSlots = useCallback(async () => {
     setLoading(true);
@@ -949,15 +969,16 @@ function SchedulePanel({
     loadSlots();
   }, [loadSlots]);
 
-  async function book(slot: Slot) {
-    setBooking(slot.startTime);
+  async function book() {
+    if (!previewSlot) return;
+    setBooking(true);
     setError(null);
     try {
       const patchRes = await fetch(`/api/leads/${leadId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scheduled_time: slot.startTime,
+          scheduled_time: previewSlot.startTime,
           scheduled_day: selectedDay,
         }),
       });
@@ -974,11 +995,11 @@ function SchedulePanel({
         return;
       }
       if (!calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
-      onBooked(`Booked ${leadLabel} at ${formatClock(slot.startTime)}`);
+      onBooked(`Booked ${leadLabel} at ${formatClock(previewSlot.startTime)}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setBooking(null);
+      setBooking(false);
     }
   }
 
@@ -1018,34 +1039,70 @@ function SchedulePanel({
             No feasible slots on this day.
           </div>
         ) : (
-          <div className="space-y-2">
-            {slots.map((s) => (
-              <button
-                key={s.startTime}
-                onClick={() => book(s)}
-                disabled={booking !== null}
-                className={cn(
-                  "w-full flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-white hover:bg-[var(--surface-2)] px-3 py-2.5 text-left transition active:scale-[0.99]",
-                  booking && booking !== s.startTime && "opacity-60"
-                )}
-              >
-                <div className="min-w-0">
-                  <div className="font-semibold">{formatClock(s.startTime)}</div>
-                  <div className="text-xs text-[var(--muted)] truncate">
-                    {[s.reasoning.priorLabel, s.reasoning.nextLabel]
-                      .filter(Boolean)
-                      .join(" · ") || "Open slot"}
-                    {" · "}
-                    {s.totalDriveMinutes} min driving
+          <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+            {slots.map((s) => {
+              const selected = previewSlot?.startTime === s.startTime;
+              return (
+                <button
+                  key={s.startTime}
+                  onClick={() => onPreview(selected ? null : s)}
+                  disabled={booking}
+                  className={cn(
+                    "w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99]",
+                    selected
+                      ? "border-amber-400 bg-amber-50 ring-2 ring-amber-200"
+                      : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]"
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold">{formatClock(s.startTime)}</div>
+                    <div className="text-xs text-[var(--muted)] truncate">
+                      {[s.reasoning.priorLabel, s.reasoning.nextLabel]
+                        .filter(Boolean)
+                        .join(" · ") || "Open slot"}
+                      {" · "}
+                      {s.totalDriveMinutes} min driving
+                    </div>
                   </div>
-                </div>
-                {booking === s.startTime ? (
-                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-                )}
-              </button>
-            ))}
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 shrink-0 transition",
+                      selected
+                        ? "text-amber-600 rotate-90"
+                        : "text-[var(--muted)]"
+                    )}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {previewSlot && (
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => onPreview(null)}
+              disabled={booking}
+              className="rounded-full border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)] px-4 h-10 text-sm font-medium disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={book}
+              disabled={booking}
+              className="flex-1 rounded-full bg-[var(--accent)] text-white h-10 text-sm font-semibold inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+            >
+              {booking ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Booking…
+                </>
+              ) : (
+                <>
+                  <CalendarCheck className="h-4 w-4" />
+                  Confirm &amp; book {formatClock(previewSlot.startTime)}
+                </>
+              )}
+            </button>
           </div>
         )}
       </div>
