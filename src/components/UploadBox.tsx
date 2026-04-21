@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { UploadCloud, Loader2, Plus, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { UploadCloud, Loader2, Plus, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale";
 import StandaloneLeadCard from "@/components/StandaloneLeadCard";
@@ -32,6 +33,9 @@ export default function UploadBox({
   const [busy, setBusy] = useState(false);
   const [busyCount, setBusyCount] = useState(0);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [orphans, setOrphans] = useState<
+    { lead_id: string; fileName: string; intake_status?: string }[]
+  >([]);
   const [failures, setFailures] = useState<{ fileName: string; message: string }[]>([]);
   const [topError, setTopError] = useState<string | null>(null);
 
@@ -71,10 +75,52 @@ export default function UploadBox({
             : `Upload failed (${res.status || "network"}).`;
         setTopError(json?.error ?? fallback);
       } else {
-        const newLeads = (json.results ?? [])
-          .map((r) => r.lead)
-          .filter((l): l is Lead => Boolean(l));
-        setLeads((prev) => [...newLeads, ...prev]);
+        const results = json.results ?? [];
+        const withLead: Lead[] = [];
+        const withoutLead: {
+          lead_id: string;
+          fileName: string;
+          intake_status?: string;
+        }[] = [];
+        for (const r of results) {
+          if (r.lead) withLead.push(r.lead);
+          else if (r.lead_id)
+            withoutLead.push({
+              lead_id: r.lead_id,
+              fileName: r.originalFileName ?? r.fileName,
+              intake_status: r.intake_status,
+            });
+        }
+        // Backfill: the server attaches full lead objects via a best-effort
+        // secondary query. If that query failed (transient DB error), every
+        // `r.lead` would be undefined even though the leads were created
+        // successfully. Fetch the full list and match by id so we still
+        // render cards instead of silently dropping the uploads.
+        if (withoutLead.length > 0) {
+          try {
+            const listRes = await fetch("/api/leads?view=all");
+            const listJson = await listRes.json();
+            const byId = new Map<string, Lead>(
+              (Array.isArray(listJson.leads) ? listJson.leads : []).map(
+                (l: Lead) => [l.id, l]
+              )
+            );
+            const recovered: typeof withoutLead = [];
+            for (const orphan of withoutLead) {
+              const match = byId.get(orphan.lead_id);
+              if (match) withLead.push(match);
+              else recovered.push(orphan);
+            }
+            withoutLead.length = 0;
+            withoutLead.push(...recovered);
+          } catch {
+            // Ignore — we'll fall through to the status-row fallback.
+          }
+        }
+        setLeads((prev) => [...withLead, ...prev]);
+        if (withoutLead.length > 0) {
+          setOrphans((prev) => [...withoutLead, ...prev]);
+        }
         setFailures((prev) => [
           ...(json.errors ?? []).map((e) => ({
             fileName: e.fileName,
@@ -96,7 +142,7 @@ export default function UploadBox({
     setLeads((prev) => prev.filter((l) => l.id !== id));
   }
 
-  const hasCards = leads.length > 0;
+  const hasCards = leads.length > 0 || orphans.length > 0;
 
   return (
     <div className="space-y-4">
@@ -195,7 +241,30 @@ export default function UploadBox({
         </ul>
       )}
 
-      {hasCards && (
+      {orphans.length > 0 && (
+        <ul className="space-y-1 text-sm">
+          {orphans.map((o) => (
+            <li
+              key={`orphan-${o.lead_id}`}
+              className="flex items-center gap-2 rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
+              <span className="font-medium truncate">{o.fileName}</span>
+              <span className="ml-auto text-xs shrink-0 text-[var(--muted)]">
+                {o.intake_status === "needs_review" ? "needs review" : "added"}
+              </span>
+              <Link
+                href="/leads"
+                className="text-xs shrink-0 text-[var(--accent)] underline underline-offset-2"
+              >
+                Open
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {leads.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {leads.map((l) => (
             <StandaloneLeadCard
