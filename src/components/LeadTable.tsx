@@ -53,27 +53,35 @@ export default function LeadTable({
     setTimeout(() => setFlash((f) => (f === message ? null : f)), 3_000);
   }
 
-  async function refresh() {
-    setLoading(true);
-    const r = await fetch(`/api/leads?view=all`).then((r) => r.json());
-    const all: Lead[] = r.leads ?? [];
-    setLeads(all);
-    const counts: LeadCounts = {
-      All: all.length,
-      New: 0,
-      "Called / No Response": 0,
-      Scheduled: 0,
-      Completed: 0,
-      Lost: 0,
-    };
-    for (const l of all) counts[l.status] = (counts[l.status] ?? 0) + 1;
-    onCounts?.(counts);
-    setLoading(false);
+  /**
+   * Fetch and update the list. Only shows the skeleton on the very first
+   * load; background polls happen silently so users don't see a flash every
+   * time the 15s poller fires.
+   */
+  async function refresh({ silent = false }: { silent?: boolean } = {}) {
+    if (!silent) setLoading(true);
+    try {
+      const r = await fetch(`/api/leads?view=all`).then((r) => r.json());
+      const all: Lead[] = r.leads ?? [];
+      setLeads(all);
+      const counts: LeadCounts = {
+        All: all.length,
+        New: 0,
+        "Called / No Response": 0,
+        Scheduled: 0,
+        Completed: 0,
+        Lost: 0,
+      };
+      for (const l of all) counts[l.status] = (counts[l.status] ?? 0) + 1;
+      onCounts?.(counts);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 15_000);
+    const t = setInterval(() => refresh({ silent: true }), 15_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -99,9 +107,23 @@ export default function LeadTable({
     const json = await res.json();
     if (res.ok && json.lead) {
       // Update the lead in-place; the `filtered` memo re-tabs it automatically
-      // if its status changed.
-      setLeads((prev) => prev.map((l) => (l.id === id ? json.lead : l)));
-      refresh();
+      // if its status changed. No need to re-fetch the whole list.
+      setLeads((prev) => {
+        const updated: Lead = json.lead;
+        const counts: LeadCounts = {
+          All: 0,
+          New: 0,
+          "Called / No Response": 0,
+          Scheduled: 0,
+          Completed: 0,
+          Lost: 0,
+        };
+        const next = prev.map((l) => (l.id === id ? updated : l));
+        counts.All = next.length;
+        for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
+        onCounts?.(counts);
+        return next;
+      });
     } else {
       alert(json.error ?? "Save failed");
     }
@@ -127,12 +149,12 @@ export default function LeadTable({
     )
       return;
     await fetch(`/api/leads/${id}`, { method: "DELETE" });
-    refresh();
+    refresh({ silent: true });
   }
 
   async function onAddRow() {
     const res = await fetch("/api/leads", { method: "POST" });
-    if (res.ok) refresh();
+    if (res.ok) refresh({ silent: true });
   }
 
   async function onAddCalendar(lead: Lead) {
@@ -154,7 +176,7 @@ export default function LeadTable({
     }
     if (json.htmlLink) window.open(json.htmlLink, "_blank");
     showFlash("Estimate Added to Calendar");
-    refresh();
+    refresh({ silent: true });
   }
 
   return (
