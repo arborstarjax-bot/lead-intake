@@ -921,7 +921,8 @@ function StopList({
             </button>
             <button
               onClick={startReorder}
-              className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1"
+              disabled={optimizing}
+              className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
             >
               <ListOrdered className="h-3.5 w-3.5" /> Reorder
             </button>
