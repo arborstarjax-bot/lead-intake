@@ -59,6 +59,7 @@ export async function POST(req: Request) {
     .select("*")
     .eq("scheduled_day", parsed.date)
     .not("scheduled_time", "is", null)
+    .neq("status", "Completed")
     .order("scheduled_time", { ascending: true });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

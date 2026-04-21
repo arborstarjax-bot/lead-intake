@@ -82,6 +82,7 @@ export async function POST(req: Request) {
     .select("*")
     .eq("scheduled_day", targetDay)
     .not("scheduled_time", "is", null)
+    .neq("status", "Completed")
     .neq("id", lead.id);
   if (sameDayErr) {
     return NextResponse.json({ error: sameDayErr.message }, { status: 500 });

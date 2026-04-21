@@ -100,6 +100,7 @@ export async function POST(req: Request) {
     .gte("scheduled_day", startIso)
     .lte("scheduled_day", endIso)
     .not("scheduled_time", "is", null)
+    .neq("status", "Completed")
     .neq("id", lead.id);
   if (windowErr) {
     return NextResponse.json({ error: windowErr.message }, { status: 500 });
