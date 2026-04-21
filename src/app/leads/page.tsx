@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import LeadTable from "@/components/LeadTable";
+import EnableNotifications from "@/components/EnableNotifications";
 import { cn } from "@/lib/utils";
 
 export default function LeadsPage() {
@@ -40,7 +41,7 @@ function LeadsPageInner() {
         <h1 className="text-lg sm:text-xl font-semibold">
           {view === "active" ? "View / Edit Leads" : "Completed Leads"}
         </h1>
-        <div className="w-16" />
+        <EnableNotifications />
       </header>
 
       <div className="flex gap-2 border-b border-[var(--border)]">
