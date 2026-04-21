@@ -4,8 +4,6 @@ import { findDuplicates, isSaveable } from "@/lib/dedupe";
 import { displayName } from "@/lib/format";
 import type { Lead, LeadIntakeSource } from "@/lib/types";
 
-const SCREENSHOT_BUCKET = "lead-screenshots";
-
 type IngestArgs = {
   file: Blob;
   fileName: string;
@@ -20,48 +18,32 @@ export type IngestResult = {
 
 /**
  * Full ingestion pipeline:
- *  1. Upload the screenshot to Supabase Storage (private bucket).
- *  2. Create a short-lived signed URL and hand it to GPT-4o.
- *  3. Persist the extracted lead row with per-field confidence.
- *  4. Attach the screenshot path and (re-signable) public URL.
- *  5. Flag the lead as `needs_review` if any critical field is low-confidence,
+ *  1. Encode the screenshot as a base64 data URL and hand it to GPT-4o.
+ *     We deliberately do NOT persist the image — the only value it adds
+ *     after extraction is as a manual audit artifact, and storing every
+ *     screenshot forever balloons Supabase Storage usage.
+ *  2. Persist the extracted lead row with per-field confidence.
+ *  3. Flag the lead as `needs_review` if any critical field is low-confidence,
  *     or `ready` otherwise. A lead with neither phone nor email is also
  *     marked `needs_review`, per the validation rule.
  */
 export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> {
   const admin = createAdminClient();
 
-  const ts = Date.now();
-  const safeName = args.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `${new Date().toISOString().slice(0, 10)}/${ts}-${safeName}`;
-
   const arrayBuffer = await args.file.arrayBuffer();
-  const { error: uploadError } = await admin.storage
-    .from(SCREENSHOT_BUCKET)
-    .upload(path, arrayBuffer, {
-      contentType: args.file.type || "image/jpeg",
-      upsert: false,
-    });
-  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
-
-  // Sign URL for the LLM. 10 minutes is plenty; the call is synchronous.
-  const { data: signed, error: signErr } = await admin.storage
-    .from(SCREENSHOT_BUCKET)
-    .createSignedUrl(path, 600);
-  if (signErr || !signed?.signedUrl) {
-    throw new Error(`Sign failed: ${signErr?.message}`);
-  }
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  const mime = args.file.type || "image/jpeg";
+  const dataUrl = `data:${mime};base64,${base64}`;
 
   let extracted;
   try {
-    extracted = await extractLeadFromImage(signed.signedUrl);
+    extracted = await extractLeadFromImage(dataUrl);
   } catch (e) {
     // Persist a failed placeholder so the upload is not silently lost.
     const { data: failed, error: insertErr } = await admin
       .from("leads")
       .insert({
         status: "New",
-        screenshot_path: path,
         intake_source: args.source,
         intake_status: "failed",
         notes: `AI extraction failed: ${(e as Error).message}`,
@@ -125,7 +107,6 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
       scheduled_day: extracted.scheduled_day,
       scheduled_time: extracted.scheduled_time,
       notes: extracted.notes,
-      screenshot_path: path,
       extraction_confidence: extracted.confidence,
       intake_source: args.source,
       intake_status: intakeStatus,
@@ -141,12 +122,17 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   };
 }
 
-/** Re-sign a screenshot URL for a row's `screenshot_path`. */
+/**
+ * Re-sign a screenshot URL for legacy rows that were ingested when we
+ * still persisted the image. New rows have `screenshot_path = null` and
+ * this function short-circuits for them.
+ */
+const LEGACY_SCREENSHOT_BUCKET = "lead-screenshots";
 export async function signScreenshotUrl(path: string | null): Promise<string | null> {
   if (!path) return null;
   const admin = createAdminClient();
   const { data } = await admin.storage
-    .from(SCREENSHOT_BUCKET)
+    .from(LEGACY_SCREENSHOT_BUCKET)
     .createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
 }

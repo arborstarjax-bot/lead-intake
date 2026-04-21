@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { downscaleImage } from "@/lib/downscale";
 
 type PendingFile = {
   name: string;
@@ -44,8 +45,12 @@ export default function UploadBox({
       state: "uploading",
     }));
     setFiles(initial);
+    // Downscale large screenshots before upload so we stay under Vercel's
+    // 4.5 MB request body limit. GPT-4o only needs the visible text, so
+    // shrinking to ~1600px edge is lossless in practice.
+    const prepared = await Promise.all(picked.map((f) => downscaleImage(f)));
     const form = new FormData();
-    picked.forEach((f) => form.append("file", f));
+    prepared.forEach((f, i) => form.append("file", f, picked[i].name));
     try {
       const res = await fetch(endpoint, { method: "POST", body: form });
       // Vercel returns an HTML error page on timeout/crash (504/502). Parsing
@@ -63,6 +68,8 @@ export default function UploadBox({
         const fallback =
           res.status === 504
             ? "Upload timed out — the image took too long to process. Try again or use a smaller/cropped screenshot."
+            : res.status === 413
+            ? "Image is too large. Try taking a new screenshot or cropping before uploading."
             : res.status >= 500
             ? `Server error (${res.status}). Please try again.`
             : `Upload failed (${res.status || "network"}).`;
