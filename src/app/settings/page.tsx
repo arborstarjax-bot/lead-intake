@@ -237,56 +237,43 @@ export default function SettingsPage() {
       {/* SMS templates */}
       <Panel
         title="Text message templates"
-        description="Tap SMS on a lead to open Messages pre-filled with the intro; confirm SMS is offered after Find best time books an appointment."
-        footer={<PlaceholderLegend />}
+        description="Tap SMS on a lead to open Messages pre-filled with the intro; confirm SMS is offered after Find best time books an appointment. Tap a placeholder chip below to drop it into the template at the cursor."
       >
-        <Field label="First-touch SMS (intro)">
-          <textarea
-            className={textareaCls}
-            rows={5}
-            value={s.sms_intro_template ?? ""}
-            placeholder="Leave blank to use the built-in default"
-            onChange={(e) => update("sms_intro_template", e.target.value)}
-            onBlur={flush}
-          />
-        </Field>
-        <Field label="Confirmation SMS (after booking)">
-          <textarea
-            className={textareaCls}
-            rows={4}
-            value={s.sms_confirm_template ?? ""}
-            placeholder="Leave blank to use the built-in default"
-            onChange={(e) => update("sms_confirm_template", e.target.value)}
-            onBlur={flush}
-          />
-        </Field>
+        <TemplateField
+          label="First-touch SMS (intro)"
+          rows={5}
+          value={s.sms_intro_template ?? ""}
+          onChange={(v) => update("sms_intro_template", v)}
+          onCommit={flush}
+        />
+        <TemplateField
+          label="Confirmation SMS (after booking)"
+          rows={4}
+          value={s.sms_confirm_template ?? ""}
+          onChange={(v) => update("sms_confirm_template", v)}
+          onCommit={flush}
+        />
       </Panel>
 
       {/* Email template */}
       <Panel
         title="Email template"
-        description="Tap Email on a lead to compose with these as the subject and body. Uses your default mail app via mailto:."
-        footer={<PlaceholderLegend />}
+        description="Tap Email on a lead to compose with these as the subject and body. Uses your default mail app via mailto:. Tap a placeholder chip to insert it at the cursor."
       >
-        <Field label="Subject">
-          <input
-            className={inputCls}
-            value={s.email_subject_template ?? ""}
-            placeholder="Leave blank to use the built-in default"
-            onChange={(e) => update("email_subject_template", e.target.value)}
-            onBlur={flush}
-          />
-        </Field>
-        <Field label="Body">
-          <textarea
-            className={textareaCls}
-            rows={8}
-            value={s.email_body_template ?? ""}
-            placeholder="Leave blank to use the built-in default"
-            onChange={(e) => update("email_body_template", e.target.value)}
-            onBlur={flush}
-          />
-        </Field>
+        <TemplateField
+          label="Subject"
+          rows={1}
+          value={s.email_subject_template ?? ""}
+          onChange={(v) => update("email_subject_template", v)}
+          onCommit={flush}
+        />
+        <TemplateField
+          label="Body"
+          rows={8}
+          value={s.email_body_template ?? ""}
+          onChange={(v) => update("email_body_template", v)}
+          onCommit={flush}
+        />
       </Panel>
 
       {/* Starting location */}
@@ -397,39 +384,25 @@ export default function SettingsPage() {
       >
         <div className="grid grid-cols-2 gap-3">
           <Field label="Default job length (min)">
-            <input
-              type="number"
+            <NumberField
+              value={s.default_job_minutes}
               min={5}
               max={600}
-              step={5}
-              className={inputCls}
-              value={s.default_job_minutes}
-              onChange={(e) =>
-                update(
-                  "default_job_minutes",
-                  Math.max(5, Math.min(600, Number(e.target.value) || 0))
-                )
-              }
-              onBlur={flush}
-              inputMode="numeric"
+              onCommit={(n) => {
+                update("default_job_minutes", n);
+                flush();
+              }}
             />
           </Field>
           <Field label="Travel buffer (min)">
-            <input
-              type="number"
+            <NumberField
+              value={s.travel_buffer_minutes}
               min={0}
               max={120}
-              step={5}
-              className={inputCls}
-              value={s.travel_buffer_minutes}
-              onChange={(e) =>
-                update(
-                  "travel_buffer_minutes",
-                  Math.max(0, Math.min(120, Number(e.target.value) || 0))
-                )
-              }
-              onBlur={flush}
-              inputMode="numeric"
+              onCommit={(n) => {
+                update("travel_buffer_minutes", n);
+                flush();
+              }}
             />
           </Field>
         </div>
@@ -511,18 +484,157 @@ function SalespeopleEditor({
   );
 }
 
-function PlaceholderLegend() {
+/**
+ * Template editor: a textarea (or single-line input when rows=1) plus a
+ * row of tappable placeholder chips that drop `{firstName}` etc. at the
+ * current cursor position. Avoids forcing the user to type curly braces
+ * on a phone keyboard.
+ */
+function TemplateField({
+  label,
+  value,
+  rows,
+  onChange,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  rows: number;
+  onChange: (next: string) => void;
+  onCommit: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  // Remember the last cursor position even after the textarea blurs so
+  // that tapping a chip still inserts at the right spot on mobile.
+  const caretRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+
+  function rememberCaret() {
+    const el = ref.current;
+    if (!el) return;
+    caretRef.current = {
+      start: el.selectionStart ?? el.value.length,
+      end: el.selectionEnd ?? el.value.length,
+    };
+  }
+
+  function insert(token: string) {
+    const el = ref.current;
+    const { start, end } = caretRef.current;
+    const next = value.slice(0, start) + token + value.slice(end);
+    onChange(next);
+    // Restore focus + caret after React re-renders so the user can keep
+    // typing. We also remember the new caret for the next chip tap.
+    const caret = start + token.length;
+    caretRef.current = { start: caret, end: caret };
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      try {
+        el.setSelectionRange(caret, caret);
+      } catch {
+        // Some input types (e.g. type=email) don't support setSelectionRange.
+      }
+    });
+  }
+
+  const common = {
+    value,
+    placeholder: "Leave blank to use the built-in default",
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+      onChange(e.target.value);
+    },
+    onBlur: () => {
+      rememberCaret();
+      onCommit();
+    },
+    onKeyUp: rememberCaret,
+    onClick: rememberCaret,
+    onSelect: rememberCaret,
+  };
+
   return (
-    <p className="text-xs text-[var(--muted)]">
-      Placeholders:{" "}
-      {TEMPLATE_PLACEHOLDERS.map((p, i) => (
-        <span key={p}>
-          <code className="font-mono">{`{${p}}`}</code>
-          {i < TEMPLATE_PLACEHOLDERS.length - 1 ? ", " : ""}
-        </span>
-      ))}
-      . Missing values render as the literal placeholder so gaps are visible.
-    </p>
+    <label className="block">
+      <div className="text-xs font-medium text-[var(--muted)] mb-1">{label}</div>
+      {rows > 1 ? (
+        <textarea
+          {...common}
+          ref={(el) => {
+            ref.current = el;
+          }}
+          className={textareaCls}
+          rows={rows}
+        />
+      ) : (
+        <input
+          {...common}
+          ref={(el) => {
+            ref.current = el;
+          }}
+          className={inputCls}
+        />
+      )}
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {TEMPLATE_PLACEHOLDERS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => insert(`{${p}}`)}
+            // Prevent the textarea from losing focus (and thus losing its
+            // selection) before we insert on mousedown on desktop.
+            onMouseDown={(e) => e.preventDefault()}
+            className="inline-flex items-center h-7 px-2.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[11px] font-mono text-[var(--fg)] hover:bg-slate-200 active:scale-[0.98]"
+          >
+            {`{${p}}`}
+          </button>
+        ))}
+      </div>
+    </label>
+  );
+}
+
+/**
+ * Number input that lets the user fully clear the value while typing,
+ * then clamps into [min, max] on blur. The old `Math.max(min, …)` inside
+ * onChange prevented deleting the last digit because the clamp would
+ * instantly rewrite "" back to the minimum.
+ */
+function NumberField({
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState<string>(String(value));
+
+  // Keep local draft in sync if the saved value changes out-of-band.
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={min}
+      max={max}
+      step={5}
+      className={inputCls}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const n = Number(draft);
+        const clamped = Number.isFinite(n)
+          ? Math.max(min, Math.min(max, Math.round(n)))
+          : min;
+        setDraft(String(clamped));
+        if (clamped !== value) onCommit(clamped);
+      }}
+    />
   );
 }
 
