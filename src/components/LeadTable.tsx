@@ -41,9 +41,13 @@ export type LeadCounts = Record<LeadFilter, number>;
 export default function LeadTable({
   filter,
   onCounts,
+  onScheduleChange,
 }: {
   filter: LeadFilter;
   onCounts?: (n: LeadCounts) => void;
+  /** Fires when a lead gains/loses a scheduled_time so parents can refresh
+   *  derived views (e.g. today's route). */
+  onScheduleChange?: () => void;
 }) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -281,9 +285,13 @@ export default function LeadTable({
               onCounts?.(counts);
               return next;
             });
-            setSchedulingLead(null);
+            onScheduleChange?.();
             showFlash("Estimate Added to Calendar");
-            if (htmlLink) window.open(htmlLink, "_blank");
+            // Intentionally do NOT auto-open the calendar tab — the modal
+            // stays on its success step so the user can send an SMS
+            // confirmation. htmlLink is passed through and rendered as a
+            // link there.
+            void htmlLink;
           }}
         />
       )}

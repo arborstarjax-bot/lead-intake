@@ -8,6 +8,9 @@ import {
   AlertTriangle,
   Sparkles,
   ChevronLeft,
+  MessageSquare,
+  ExternalLink,
+  Check,
 } from "lucide-react";
 import type { Lead } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -61,6 +64,14 @@ export default function ScheduleModal({
   const [weekLoading, setWeekLoading] = useState(false);
   const [weekDays, setWeekDays] = useState<DayPreview[]>([]);
   const [weekError, setWeekError] = useState<string | null>(null);
+
+  // When set, the modal flips from the day ranking to a success view with
+  // the option to text the customer an appointment confirmation.
+  const [booked, setBooked] = useState<{
+    day: string;
+    time: string;
+    htmlLink?: string;
+  } | null>(null);
 
   const loadWeek = useCallback(async () => {
     setWeekLoading(true);
@@ -166,7 +177,15 @@ export default function ScheduleModal({
         const found = (freshJson.leads as Lead[]).find((l) => l.id === lead.id);
         if (found) updated = found;
       }
+      // Fire the parent update so the leads list and today's route refresh
+      // immediately, then flip the modal to the SMS confirm step instead of
+      // closing. The user closes manually when they're done with the text.
       onBooked(updated, calJson.htmlLink);
+      setBooked({
+        day: selectedDay,
+        time: slot.startTime,
+        htmlLink: calJson.htmlLink,
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -177,9 +196,10 @@ export default function ScheduleModal({
   const leadName = lead.client?.trim() || "this lead";
 
   const headerTitle = useMemo(() => {
+    if (booked) return `${leadName} · Booked`;
     if (view === "week") return `${leadName} · Pick a day`;
     return `${leadName} · ${formatDayLabel(selectedDay ?? "")}`;
-  }, [view, leadName, selectedDay]);
+  }, [booked, view, leadName, selectedDay]);
 
   return (
     <div
@@ -192,7 +212,7 @@ export default function ScheduleModal({
       >
         <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-[var(--border)]">
           <div className="flex items-center gap-2 min-w-0">
-            {view === "day" && (
+            {view === "day" && !booked && (
               <button
                 onClick={() => setView("week")}
                 aria-label="Back to week picker"
@@ -217,7 +237,15 @@ export default function ScheduleModal({
           </button>
         </header>
 
-        {view === "week" ? (
+        {booked ? (
+          <BookedView
+            lead={lead}
+            day={booked.day}
+            time={booked.time}
+            htmlLink={booked.htmlLink}
+            onDone={onClose}
+          />
+        ) : view === "week" ? (
           <WeekView
             days={weekDays}
             loading={weekLoading}
@@ -528,4 +556,109 @@ function formatDayLabel(iso: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatLongDayLabel(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/** Strip everything that isn't a digit or +; the sms: handler is picky. */
+function sanitizePhone(p: string | null | undefined): string | null {
+  if (!p) return null;
+  const cleaned = p.replace(/[^\d+]/g, "");
+  return cleaned.length >= 7 ? cleaned : null;
+}
+
+function firstName(lead: Lead): string {
+  return (
+    lead.first_name?.trim() ||
+    lead.client?.trim().split(/\s+/)[0] ||
+    "there"
+  );
+}
+
+function BookedView({
+  lead,
+  day,
+  time,
+  htmlLink,
+  onDone,
+}: {
+  lead: Lead;
+  day: string;
+  time: string;
+  htmlLink?: string;
+  onDone: () => void;
+}) {
+  const phone = sanitizePhone(lead.phone_number);
+  const dayLabel = formatLongDayLabel(day);
+  const timeLabel = clockFromHHMM(time);
+  const message = `Hi ${firstName(lead)}, David with Arbor Tech 904. Confirming our arborist assessment on ${dayLabel} at ${timeLabel}. Reply here if anything changes — see you then!`;
+  // Matches the format used by the SMS button on the lead card — "?body="
+  // works on both iPhone and Android (see LeadTable.buildSmsHref).
+  const smsHref = phone
+    ? `sms:${phone}?body=${encodeURIComponent(message)}`
+    : null;
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
+      <div className="flex flex-col items-center text-center gap-2">
+        <div className="h-14 w-14 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center">
+          <Check className="h-7 w-7" />
+        </div>
+        <div className="text-lg font-semibold">Booked</div>
+        <div className="text-sm text-[var(--muted)]">
+          {dayLabel} at {timeLabel}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {smsHref ? (
+          <a
+            href={smsHref}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-xl h-12 px-4 text-sm font-semibold bg-[var(--accent)] text-white hover:opacity-95 active:scale-[0.98]"
+          >
+            <MessageSquare className="h-4 w-4" />
+            Text confirmation
+          </a>
+        ) : (
+          <div className="text-xs text-[var(--muted)] text-center">
+            No phone number on this lead — add one to text a confirmation.
+          </div>
+        )}
+
+        {htmlLink && (
+          <a
+            href={htmlLink}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-xl h-11 px-4 text-sm font-medium bg-white border border-[var(--border)] text-[var(--fg)] hover:bg-[var(--surface-2)]"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Open in Google Calendar
+          </a>
+        )}
+
+        <button
+          onClick={onDone}
+          className="w-full inline-flex items-center justify-center h-11 px-4 text-sm font-medium text-[var(--muted)] hover:text-[var(--fg)]"
+        >
+          Done
+        </button>
+      </div>
+
+      {smsHref && (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-xs text-[var(--muted)] leading-relaxed">
+          Preview: {message}
+        </div>
+      )}
+    </div>
+  );
 }
