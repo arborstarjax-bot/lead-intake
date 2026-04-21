@@ -199,30 +199,38 @@ type NameFallback = {
 
 async function extractNameFromImage(
   client: OpenAI,
-  imageUrl: string
+  imageUrl: string,
+  timeoutMs: number
 ): Promise<NameFallback | null> {
+  if (timeoutMs <= 0) return null;
   try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0,
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "name_only", strict: true, schema: NAME_SCHEMA },
-      },
-      messages: [
-        { role: "system", content: NAME_FALLBACK_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Find the lead's name in this screenshot. Check the thread header first.",
-            },
-            { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
-          ],
+    const response = await client.chat.completions.create(
+      {
+        // gpt-4o-mini is materially faster than gpt-4o and reliably reads
+        // the chat-thread header, which is the entire job of this call.
+        model: "gpt-4o-mini",
+        temperature: 0,
+        max_tokens: 120,
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "name_only", strict: true, schema: NAME_SCHEMA },
         },
-      ],
-    });
+        messages: [
+          { role: "system", content: NAME_FALLBACK_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Find the lead's name in this screenshot. Check the thread header first.",
+              },
+              { type: "image_url", image_url: { url: imageUrl, detail: "low" } },
+            ],
+          },
+        ],
+      },
+      { timeout: timeoutMs }
+    );
     const raw = response.choices[0]?.message?.content;
     if (!raw) return null;
     return JSON.parse(raw) as NameFallback;
@@ -232,31 +240,48 @@ async function extractNameFromImage(
   }
 }
 
-export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedLead> {
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Vercel's serverless function ceiling is 60s (see maxDuration in the
+// ingest route). Keep the OpenAI calls well under that so we always get a
+// chance to persist the row and return JSON — otherwise the platform
+// returns an HTML 504 and the client sees a cryptic parse error.
+const PRIMARY_TIMEOUT_MS = 45_000;
+const FALLBACK_BUDGET_MS = 12_000;
+const SOFT_BUDGET_MS = 50_000;
 
-  const response = await client.chat.completions.create({
-    model: "gpt-4o",
-    temperature: 0,
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "extracted_lead",
-        strict: true,
-        schema: SCHEMA,
-      },
-    },
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "Extract the lead from this screenshot." },
-          { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
-        ],
-      },
-    ],
+export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedLead> {
+  const client = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: PRIMARY_TIMEOUT_MS,
+    maxRetries: 0,
   });
+
+  const started = Date.now();
+  const response = await client.chat.completions.create(
+    {
+      model: "gpt-4o",
+      temperature: 0,
+      max_tokens: 900,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "extracted_lead",
+          strict: true,
+          schema: SCHEMA,
+        },
+      },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Extract the lead from this screenshot." },
+            { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
+          ],
+        },
+      ],
+    },
+    { timeout: PRIMARY_TIMEOUT_MS }
+  );
 
   const raw = response.choices[0]?.message?.content;
   if (!raw) throw new Error("OpenAI returned empty extraction");
@@ -267,14 +292,17 @@ export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedL
   // entirely, retry with a prompt focused solely on the chat header.
   // Only escalate when we also see signs of identifiable content (a
   // phone, email, address, or message notes) — no-signal screenshots
-  // shouldn't burn a second call.
+  // shouldn't burn a second call. Budget the fallback so it never
+  // pushes us past Vercel's function timeout.
   const hasAnyContent =
     !!parsed.phone_number ||
     !!parsed.email ||
     !!parsed.address ||
     !!parsed.notes;
   if (!parsed.first_name && hasAnyContent) {
-    const fallback = await extractNameFromImage(client, imageUrl);
+    const remaining = SOFT_BUDGET_MS - (Date.now() - started);
+    const budget = Math.min(FALLBACK_BUDGET_MS, remaining);
+    const fallback = await extractNameFromImage(client, imageUrl, budget);
     if (fallback?.first_name) {
       parsed.first_name = fallback.first_name;
       // Only overwrite last_name (and its confidence) when the fallback
