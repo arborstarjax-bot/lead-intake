@@ -5,7 +5,11 @@ import { getSettings, homeAddressString } from "@/lib/settings";
 import { suggestSlots, leadAddressString } from "@/lib/schedule";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
-import { isoInBusinessTz, dayOfWeekInBusinessTz } from "@/lib/date";
+import {
+  isoInBusinessTz,
+  dayOfWeekInBusinessTz,
+  upcomingBusinessTzDays,
+} from "@/lib/date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,19 +84,21 @@ export async function POST(req: Request) {
     );
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = today;
-  const end = new Date(today);
-  end.setDate(end.getDate() + parsed.horizonDays - 1);
+  // Build the day list in business-tz terms. Using `setHours(0,0,0,0)` on a
+  // UTC server produces midnight UTC, which is yesterday in ET — that would
+  // shift the entire 14-day horizon one day into the past. upcomingBusinessTzDays
+  // anchors at noon UTC for each ET calendar day, which survives DST.
+  const days = upcomingBusinessTzDays(parsed.horizonDays);
+  const startIso = isoInBusinessTz(days[0]);
+  const endIso = isoInBusinessTz(days[days.length - 1]);
 
   // Pull every same-horizon job in ONE query so we don't fan out to Supabase
   // per-day.
   const { data: window, error: windowErr } = await supabase
     .from("leads")
     .select("*")
-    .gte("scheduled_day", isoInBusinessTz(start))
-    .lte("scheduled_day", isoInBusinessTz(end))
+    .gte("scheduled_day", startIso)
+    .lte("scheduled_day", endIso)
     .not("scheduled_time", "is", null)
     .neq("id", lead.id);
   if (windowErr) {
@@ -114,12 +120,6 @@ export async function POST(req: Request) {
 
   try {
     const out: DayPreview[] = [];
-    const days: Date[] = [];
-    for (let i = 0; i < parsed.horizonDays; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      days.push(d);
-    }
 
     // Run all feasible work days in parallel; the memo in drive() prevents
     // duplicate calls for the same origin-dest pair (e.g. home→new lead).
