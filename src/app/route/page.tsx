@@ -969,6 +969,17 @@ function SchedulePanel({
     loadSlots();
   }, [loadSlots]);
 
+  // Drop any preview when the half-day filter changes. Otherwise the
+  // "Confirm & book 2:00 PM" bar would still sit under a list that no
+  // longer includes that slot (e.g. filtered to AM) and the map would
+  // keep drawing the stale amber overlay.
+  useEffect(() => {
+    onPreview(null);
+    // Intentionally only reacting to `half`. onPreview is a stable setter
+    // and including it would clear the preview on every parent re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [half]);
+
   async function book() {
     if (!previewSlot) return;
     setBooking(true);
