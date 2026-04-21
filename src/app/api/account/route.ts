@@ -76,6 +76,21 @@ export async function DELETE() {
     }
   }
 
+  // `workspaces.created_by` is ON DELETE RESTRICT, so any surviving
+  // workspace this user originally created would block deleteUser().
+  // Surviving = we didn't delete it above because other members remain.
+  // Null it out: the workspace stays alive under its remaining admins.
+  const { error: nullCreatedByErr } = await admin
+    .from("workspaces")
+    .update({ created_by: null })
+    .eq("created_by", auth.userId);
+  if (nullCreatedByErr) {
+    return NextResponse.json(
+      { error: nullCreatedByErr.message },
+      { status: 500 }
+    );
+  }
+
   const { error: delUserErr } = await admin.auth.admin.deleteUser(auth.userId);
   if (delUserErr) {
     return NextResponse.json({ error: delUserErr.message }, { status: 500 });
