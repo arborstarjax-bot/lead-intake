@@ -58,11 +58,17 @@ export default function SettingsPage() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingRef = useRef(false);
 
+  // `flush` is self-referential (it retries itself after a save completes
+  // if more edits came in mid-flight), so declare the ref up front.
+  const flushRef = useRef<() => Promise<void>>(async () => {});
   const flush = useCallback(async () => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
     }
+    // If a save is already in flight, leave pending.current alone. The
+    // in-flight save's `finally` will re-invoke flush() so the newer
+    // fields are posted in a follow-up request instead of dropped.
     if (savingRef.current) return;
     const patch = pending.current;
     const keys = Object.keys(patch);
@@ -87,8 +93,20 @@ export default function SettingsPage() {
       toast({ kind: "error", message: (e as Error).message });
     } finally {
       savingRef.current = false;
+      // Anything typed mid-save now gets its own round-trip.
+      if (Object.keys(pending.current).length > 0) {
+        // Break out of this call's stack so React can batch state
+        // updates and the caller can finish its own `finally`.
+        setTimeout(() => flushRef.current(), 0);
+      }
     }
   }, [apply, toast]);
+
+  // Keep the ref pointing at the latest flush so the setTimeout retry
+  // above always sees the current closure.
+  useEffect(() => {
+    flushRef.current = flush;
+  }, [flush]);
 
   // Initial load: seed local state from the server-side settings the
   // provider has already fetched (or is fetching). This file owns the

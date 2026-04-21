@@ -35,6 +35,7 @@ type MapStop = {
    *  action without a second round-trip per lead. */
   firstName: string | null;
   phoneNumber: string | null;
+  salesPerson: string | null;
 };
 
 type GhostStop = {
@@ -116,6 +117,7 @@ export async function GET(req: Request) {
         endMin: startMin + settings.default_job_minutes,
         firstName: l.first_name ?? null,
         phoneNumber: l.phone_number ?? null,
+        salesPerson: l.sales_person ?? null,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -168,6 +170,7 @@ export async function GET(req: Request) {
       driveMinutesFromPrev: null,
       firstName: s.firstName,
       phoneNumber: s.phoneNumber,
+      salesPerson: s.salesPerson,
     });
   }
 

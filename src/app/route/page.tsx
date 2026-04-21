@@ -42,6 +42,7 @@ type Stop = {
   driveMinutesFromPrev: number | null;
   firstName: string | null;
   phoneNumber: string | null;
+  salesPerson: string | null;
 };
 
 type Ghost = {
@@ -1022,6 +1023,7 @@ function StopList({
                     label={s.label}
                     firstName={s.firstName}
                     phoneNumber={s.phoneNumber}
+                    salesPerson={s.salesPerson}
                     startTime={s.startTime}
                     date={data.date}
                     onReload={onReload}
@@ -1204,6 +1206,7 @@ function StopMenu({
   label,
   firstName,
   phoneNumber,
+  salesPerson,
   startTime,
   date,
   onReload,
@@ -1213,6 +1216,7 @@ function StopMenu({
   label: string;
   firstName: string | null;
   phoneNumber: string | null;
+  salesPerson: string | null;
   startTime: string;
   date: string;
   onReload: () => void;
@@ -1267,7 +1271,13 @@ function StopMenu({
     const timeLabel = formatClock(startTime);
     const body = renderTemplate(smsConfirmTemplate(settings), {
       firstName: who,
-      salesPerson: "",
+      // Prefer the lead's own assigned salesperson; fall back to the
+      // first roster entry so `{salesPerson}` doesn't render as the
+      // literal placeholder when nobody is explicitly assigned.
+      salesPerson:
+        salesPerson?.trim() ||
+        settings.salespeople?.[0]?.trim() ||
+        "",
       companyName: (settings.company_name ?? "").trim(),
       companyPhone: (settings.company_phone ?? "").trim(),
       companyEmail: (settings.company_email ?? "").trim(),
@@ -1279,7 +1289,7 @@ function StopMenu({
     // absorbed into the phone-number portion so the prefilled body drops.
     // iOS accepts both, so `?` is safe on iPhone too.
     return `sms:${digits}?body=${encodeURIComponent(body)}`;
-  }, [firstName, phoneNumber, date, startTime, settings]);
+  }, [firstName, phoneNumber, salesPerson, date, startTime, settings]);
 
   return (
     <div className="relative shrink-0" ref={menuRef}>
