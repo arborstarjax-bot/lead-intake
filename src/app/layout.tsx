@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/Toast";
+import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { SettingsProvider } from "@/components/SettingsProvider";
 
 export const metadata: Metadata = {
@@ -38,7 +39,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ToastProvider>
-          <SettingsProvider>{children}</SettingsProvider>
+          <ConfirmProvider>
+            <SettingsProvider>{children}</SettingsProvider>
+          </ConfirmProvider>
         </ToastProvider>
         {/* Register service worker on client. */}
         <script
