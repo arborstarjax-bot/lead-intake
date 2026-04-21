@@ -101,7 +101,12 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   const intakeStatus: Lead["intake_status"] =
     !saveable || lowConf || duplicates.length > 0 ? "needs_review" : "ready";
 
-  const today = new Date().toISOString().slice(0, 10);
+  // en-CA locale yields "YYYY-MM-DD". Vercel runs in UTC, so compute today
+  // in the app's fixed timezone (America/New_York) — otherwise after ~8 PM ET
+  // we'd stamp tomorrow's date on every upload.
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  });
   const { data: inserted, error: insertErr } = await admin
     .from("leads")
     .insert({
