@@ -1,0 +1,98 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createAdminClient } from "@/lib/supabase/server";
+import { getSettings } from "@/lib/settings";
+import { suggestSlots } from "@/lib/schedule";
+import { MapsUnavailableError } from "@/lib/maps";
+import type { Lead } from "@/lib/types";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const bodySchema = z
+  .object({
+    leadId: z.string().uuid(),
+    half: z.enum(["morning", "afternoon", "all"]).default("all"),
+  })
+  .strict();
+
+export async function POST(req: Request) {
+  if (!process.env.GOOGLE_MAPS_API_KEY) {
+    return NextResponse.json(
+      {
+        error:
+          "AI scheduling needs a Google Maps API key. Add GOOGLE_MAPS_API_KEY on Vercel and redeploy.",
+      },
+      { status: 503 }
+    );
+  }
+
+  let parsed;
+  try {
+    parsed = bodySchema.parse(await req.json());
+  } catch (e) {
+    const msg = e instanceof z.ZodError ? e.issues.map((i) => i.message).join("; ") : "invalid body";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+
+  const [leadResp, settings] = await Promise.all([
+    supabase.from("leads").select("*").eq("id", parsed.leadId).maybeSingle(),
+    getSettings(),
+  ]);
+
+  if (leadResp.error || !leadResp.data) {
+    return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+  }
+  const lead = leadResp.data as Lead;
+
+  if (!lead.scheduled_day) {
+    return NextResponse.json(
+      { error: "This lead needs a scheduled day before ranking slots." },
+      { status: 400 }
+    );
+  }
+
+  // Refuse to schedule into the past. Compare as calendar days in the local
+  // timezone; the column is a DATE not a timestamp so string compare is safe
+  // when both sides are YYYY-MM-DD.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  if (lead.scheduled_day < todayIso) {
+    return NextResponse.json(
+      { error: "That day is in the past — pick a future date." },
+      { status: 400 }
+    );
+  }
+
+  // Only count other leads that are pinned to a specific time on the same day.
+  // Completed/Lost are kept so we don't pile jobs on top of history, though in
+  // practice completed jobs from today still reflect actual traffic.
+  const { data: sameDay, error: sameDayErr } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("scheduled_day", lead.scheduled_day)
+    .not("scheduled_time", "is", null)
+    .neq("id", lead.id);
+  if (sameDayErr) {
+    return NextResponse.json({ error: sameDayErr.message }, { status: 500 });
+  }
+
+  try {
+    const { slots, warnings } = await suggestSlots({
+      lead,
+      settings,
+      others: (sameDay ?? []) as Lead[],
+      half: parsed.half,
+    });
+    return NextResponse.json({ slots, warnings });
+  } catch (e) {
+    if (e instanceof MapsUnavailableError) {
+      return NextResponse.json(
+        { error: `Google Maps: ${e.message}`, code: e.code },
+        { status: 502 }
+      );
+    }
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+}

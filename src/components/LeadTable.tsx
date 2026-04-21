@@ -19,11 +19,13 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import type { Lead, LeadStatus } from "@/lib/types";
 import { LEAD_STATUSES, EDITABLE_COLUMNS } from "@/lib/types";
 import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import ScheduleModal from "@/components/ScheduleModal";
 
 type FieldDef = {
   key: keyof Lead;
@@ -48,6 +50,7 @@ export default function LeadTable({
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<{ leadId: string; prev: LeadStatus } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [schedulingLead, setSchedulingLead] = useState<Lead | null>(null);
 
   function showFlash(message: string) {
     setFlash(message);
@@ -228,6 +231,7 @@ export default function LeadTable({
               onDelete={() => onDelete(lead.id)}
               onAddCalendar={() => onAddCalendar(lead)}
               onToggleComplete={() => onMarkCompleted(lead)}
+              onAISchedule={() => setSchedulingLead(lead)}
             />
           ))}
         </div>
@@ -256,6 +260,33 @@ export default function LeadTable({
           </div>
         </div>
       )}
+
+      {schedulingLead && (
+        <ScheduleModal
+          lead={schedulingLead}
+          onClose={() => setSchedulingLead(null)}
+          onBooked={(updated, htmlLink) => {
+            setLeads((prev) => {
+              const counts: LeadCounts = {
+                All: 0,
+                New: 0,
+                "Called / No Response": 0,
+                Scheduled: 0,
+                Completed: 0,
+                Lost: 0,
+              };
+              const next = prev.map((l) => (l.id === updated.id ? updated : l));
+              counts.All = next.length;
+              for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
+              onCounts?.(counts);
+              return next;
+            });
+            setSchedulingLead(null);
+            showFlash("Estimate Added to Calendar");
+            if (htmlLink) window.open(htmlLink, "_blank");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -268,12 +299,14 @@ function LeadCard({
   onDelete,
   onAddCalendar,
   onToggleComplete,
+  onAISchedule,
 }: {
   lead: Lead;
   onPatch: (p: Partial<Lead>) => void;
   onDelete: () => void;
   onAddCalendar: () => void;
   onToggleComplete: () => void;
+  onAISchedule: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -475,7 +508,7 @@ function LeadCard({
             className="field-input"
           />
         </div>
-        <div className="mt-2">
+        <div className="mt-2 flex flex-col sm:flex-row gap-2">
           {scheduledInSync ? (
             <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--success-soft)] text-[var(--success)] px-3 h-11 text-sm font-medium w-full justify-center sm:w-auto">
               <CalendarCheck className="h-4 w-4" />
@@ -496,6 +529,15 @@ function LeadCard({
             >
               <CalendarPlus className="h-4 w-4" />
               {needsResync ? "Update calendar event" : "Add to Calendar"}
+            </button>
+          )}
+          {lead.scheduled_day && !scheduledInSync && (
+            <button
+              onClick={onAISchedule}
+              className="inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto border border-[var(--accent)] text-[var(--accent)] bg-white hover:bg-[var(--accent-soft)] transition active:scale-[0.98]"
+            >
+              <Sparkles className="h-4 w-4" />
+              Find best time
             </button>
           )}
         </div>
