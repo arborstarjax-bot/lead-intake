@@ -24,6 +24,7 @@ type Column = {
 };
 
 const COLUMNS: Column[] = [
+  { key: "status", label: "Status", width: "min-w-[170px]", type: "select" },
   { key: "date", label: "Date", width: "min-w-[120px]", type: "date" },
   { key: "first_name", label: "First Name", width: "min-w-[120px]" },
   { key: "last_name", label: "Last Name", width: "min-w-[120px]" },
@@ -34,7 +35,6 @@ const COLUMNS: Column[] = [
   { key: "city", label: "City", width: "min-w-[120px]" },
   { key: "state", label: "State", width: "min-w-[70px]" },
   { key: "zip", label: "Zip", width: "min-w-[90px]" },
-  { key: "status", label: "Status", width: "min-w-[170px]", type: "select" },
   { key: "sales_person", label: "Sales Person", width: "min-w-[140px]" },
   { key: "scheduled_day", label: "Sched. Day", width: "min-w-[130px]", type: "date" },
   { key: "scheduled_time", label: "Sched. Time", width: "min-w-[110px]", type: "time" },
