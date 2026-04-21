@@ -67,8 +67,11 @@ export default function SettingsPage() {
           home_city: s.home_city?.trim() || null,
           home_state: s.home_state?.trim() || null,
           home_zip: s.home_zip?.trim() || null,
-          work_start_time: s.work_start_time,
-          work_end_time: s.work_end_time,
+          // Postgres `time` returns "HH:MM:SS"; the API's regex only accepts
+          // "HH:MM", so normalize before sending regardless of whether the
+          // user touched the time inputs.
+          work_start_time: s.work_start_time.slice(0, 5),
+          work_end_time: s.work_end_time.slice(0, 5),
           work_days: s.work_days,
           default_job_minutes: s.default_job_minutes,
           travel_buffer_minutes: s.travel_buffer_minutes,
