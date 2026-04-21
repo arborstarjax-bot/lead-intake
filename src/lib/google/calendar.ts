@@ -37,14 +37,15 @@ function buildStartEnd(
   day: string,
   time: string | null
 ): { start: { dateTime: string; timeZone: string }; end: { dateTime: string; timeZone: string } } | null {
-  // `day` should be ISO YYYY-MM-DD. `time` optional "HH:MM".
+  // `day` is ISO YYYY-MM-DD. `time` may come back from Postgres `time` column
+  // as "HH:MM" or "HH:MM:SS"; accept both and fall back to 09:00 if absent.
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
-  const timeStr = time && /^\d{2}:\d{2}$/.test(time) ? time : "09:00";
-  // Build as naive local time; Google will localize using timeZone.
-  const start = `${day}T${timeStr}:00`;
-  const [h, m] = timeStr.split(":").map(Number);
-  const endH = String((h + 1) % 24).padStart(2, "0");
-  const end = `${day}T${endH}:${String(m).padStart(2, "0")}:00`;
+  const m = time?.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  const hh = m ? m[1] : "09";
+  const mm = m ? m[2] : "00";
+  const start = `${day}T${hh}:${mm}:00`;
+  const endH = String((Number(hh) + 1) % 24).padStart(2, "0");
+  const end = `${day}T${endH}:${mm}:00`;
   return {
     start: { dateTime: start, timeZone: "America/New_York" },
     end: { dateTime: end, timeZone: "America/New_York" },
