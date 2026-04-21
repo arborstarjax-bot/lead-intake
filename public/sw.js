@@ -1,9 +1,10 @@
-// Minimal service worker — just enough for installability and offline-aware
-// shell. We intentionally do NOT pre-cache HTML routes because the leads
-// table must always show fresh data; stale SSR HTML would silently hide
-// newly-uploaded leads. Runtime caching is limited to static assets.
+// Minimal service worker — just enough for installability, offline-aware
+// shell, Web Push notifications, and app-icon badges. We intentionally do
+// NOT pre-cache HTML routes because the leads table must always show fresh
+// data; stale SSR HTML would silently hide newly-uploaded leads. Runtime
+// caching is limited to static assets.
 
-const STATIC_CACHE = "lead-intake-static-v2";
+const STATIC_CACHE = "lead-intake-static-v3";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/icon-192.png",
@@ -50,4 +51,55 @@ self.addEventListener("fetch", (event) => {
       )
     );
   }
+});
+
+// --- Web Push ---------------------------------------------------------------
+// On iOS 16.4+ PWAs, a notification MUST be shown for every push event or
+// the browser will eventually revoke the subscription. We also set the app
+// icon badge count when the payload includes one.
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { title: "New lead", body: event.data ? event.data.text() : "" };
+  }
+
+  const title = payload.title || "New lead";
+  const options = {
+    body: payload.body || "",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: payload.tag || "lead-intake",
+    data: { url: payload.url || "/leads" },
+    renotify: true,
+  };
+
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      typeof payload.badgeCount === "number" && "setAppBadge" in self.navigator
+        ? self.navigator.setAppBadge(payload.badgeCount).catch(() => {})
+        : Promise.resolve(),
+    ])
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/leads";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        try {
+          const u = new URL(client.url);
+          if (u.pathname === url || u.pathname.startsWith(url)) {
+            if ("focus" in client) return client.focus();
+          }
+        } catch {}
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
 });
