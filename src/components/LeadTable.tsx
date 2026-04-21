@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Phone,
   Mail,
@@ -25,7 +26,6 @@ import type { Lead, LeadStatus } from "@/lib/types";
 import { LEAD_STATUSES, EDITABLE_COLUMNS } from "@/lib/types";
 import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import ScheduleModal from "@/components/ScheduleModal";
 
 type FieldDef = {
   key: keyof Lead;
@@ -49,16 +49,12 @@ export default function LeadTable({
    *  derived views (e.g. today's route). */
   onScheduleChange?: () => void;
 }) {
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<{ leadId: string; prev: LeadStatus } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
-  const [schedulingLead, setSchedulingLead] = useState<Lead | null>(null);
-  // Tracks whether the current scheduling modal actually booked something,
-  // so the "Estimate Added to Calendar" toast fires on close instead of
-  // while the modal is still covering the toast area.
-  const bookedOnceRef = useRef(false);
 
   function showFlash(message: string) {
     setFlash(message);
@@ -136,6 +132,11 @@ export default function LeadTable({
         onCounts?.(counts);
         return next;
       });
+      // Any edit that touches the day or time of a lead may rearrange the
+      // "Today's Route" card on /leads — notify the parent so it can re-poll.
+      if ("scheduled_time" in patch || "scheduled_day" in patch) {
+        onScheduleChange?.();
+      }
     } else {
       alert(json.error ?? "Save failed");
     }
@@ -239,7 +240,16 @@ export default function LeadTable({
               onDelete={() => onDelete(lead.id)}
               onAddCalendar={() => onAddCalendar(lead)}
               onToggleComplete={() => onMarkCompleted(lead)}
-              onAISchedule={() => setSchedulingLead(lead)}
+              onAISchedule={() => {
+                // Hand off to the /route page which renders a ghost pin for
+                // the lead + a floating ranked-slots panel. Day param hints
+                // which day to pre-rank (the customer's preferred day when
+                // they have one, otherwise today).
+                const day = lead.scheduled_day ?? "";
+                const qs = new URLSearchParams({ scheduleLead: lead.id });
+                if (day) qs.set("day", day);
+                router.push(`/route?${qs.toString()}`);
+              }}
             />
           ))}
         </div>
@@ -269,42 +279,6 @@ export default function LeadTable({
         </div>
       )}
 
-      {schedulingLead && (
-        <ScheduleModal
-          lead={schedulingLead}
-          onClose={() => {
-            setSchedulingLead(null);
-            // Fire the confirmation toast when the modal actually goes away.
-            // Firing it in onBooked puts it behind the modal (it stays open
-            // on the SMS confirmation step), so the user never sees it.
-            if (bookedOnceRef.current) {
-              bookedOnceRef.current = false;
-              showFlash("Estimate Added to Calendar");
-            }
-          }}
-          onBooked={(updated) => {
-            setLeads((prev) => {
-              const counts: LeadCounts = {
-                All: 0,
-                New: 0,
-                "Called / No Response": 0,
-                Scheduled: 0,
-                Completed: 0,
-                Lost: 0,
-              };
-              const next = prev.map((l) => (l.id === updated.id ? updated : l));
-              counts.All = next.length;
-              for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
-              onCounts?.(counts);
-              return next;
-            });
-            onScheduleChange?.();
-            bookedOnceRef.current = true;
-            // Calendar link is rendered inside the modal's success step;
-            // the modal stays open so the user can send the SMS confirmation.
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -1,9 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Car, Clock, Home, MapPin, AlertTriangle } from "lucide-react";
-import RouteMap, { type RouteMapMode } from "@/components/RouteMap";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowLeft,
+  Car,
+  Clock,
+  Home,
+  MapPin,
+  AlertTriangle,
+  X,
+  Sparkles,
+  Loader2,
+  CalendarCheck,
+  CalendarPlus,
+  MoreVertical,
+  RefreshCw,
+  Trash2,
+  ChevronRight,
+  MessageSquare,
+} from "lucide-react";
+import RouteMap, { type RouteMapMode, type RouteMapStop } from "@/components/RouteMap";
 import { cn } from "@/lib/utils";
 
 type Stop = {
@@ -15,6 +33,18 @@ type Stop = {
   startTime: string;
   endTime: string;
   driveMinutesFromPrev: number | null;
+  firstName: string | null;
+  phoneNumber: string | null;
+};
+
+type Ghost = {
+  id: string;
+  label: string;
+  address: string;
+  lat: number;
+  lng: number;
+  desiredDay: string | null;
+  currentTime: string | null;
 };
 
 type RouteResponse = {
@@ -24,7 +54,29 @@ type RouteResponse = {
   unresolved: { id: string; label: string; address: string }[];
   totalDriveMinutes: number | null;
   returnDriveMinutes: number | null;
+  ghost: Ghost | null;
+  ghostError: string | null;
 };
+
+type Half = "all" | "morning" | "afternoon";
+
+type Slot = {
+  startTime: string;
+  endTime: string;
+  driveMinutesBefore: number;
+  driveMinutesAfter: number;
+  totalDriveMinutes: number;
+  reasoning: { priorLabel: string | null; nextLabel: string | null };
+};
+
+type DayPreview =
+  | {
+      date: string;
+      isWorkDay: true;
+      bestTotalDriveMinutes: number | null;
+      slotCount: number;
+    }
+  | { date: string; isWorkDay: false };
 
 /** Pure ET-safe YYYY-MM-DD math. Adds n days to the given iso date. */
 function addDaysIso(iso: string, n: number): string {
@@ -76,48 +128,132 @@ function dayChipLabel(iso: string, todayIso: string): { top: string; bottom: str
 }
 
 export default function RoutePage() {
+  return (
+    <Suspense fallback={<RouteSkeleton />}>
+      <RoutePageInner />
+    </Suspense>
+  );
+}
+
+function RouteSkeleton() {
+  return (
+    <main className="mx-auto max-w-6xl p-4 sm:p-6">
+      <div className="h-6 w-40 rounded bg-gray-100 animate-pulse" />
+      <div className="mt-6 h-64 rounded-2xl bg-gray-100 animate-pulse" />
+    </main>
+  );
+}
+
+function RoutePageInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const scheduleLeadId = params.get("scheduleLead");
+  const dayParam = params.get("day");
+
   const todayIso = useMemo(() => todayEtIso(), []);
   const days = useMemo(
     () => Array.from({ length: 14 }, (_, i) => addDaysIso(todayIso, i)),
     [todayIso]
   );
 
-  const [selectedDay, setSelectedDay] = useState<string>(todayIso);
+  // Day selection. When we arrive with ?scheduleLead, we don't know the
+  // right default until the first /route fetch returns the ghost (and its
+  // desiredDay). `desiredDayApplied` makes sure we only pivot once so the
+  // user can still tap other chips freely afterward.
+  const [selectedDay, setSelectedDay] = useState<string>(dayParam ?? todayIso);
+  const desiredDayApplied = useRef(false);
+
   const [mode, setMode] = useState<RouteMapMode>("route");
   const [data, setData] = useState<RouteResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
 
-  const load = useCallback(async (iso: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/schedule/route?date=${iso}`, {
-        cache: "no-store",
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? `Failed (${res.status})`);
-        setData(null);
-      } else {
+  function showFlash(msg: string) {
+    setFlash(msg);
+    setTimeout(() => setFlash((f) => (f === msg ? null : f)), 3_000);
+  }
+
+  const load = useCallback(
+    async (iso: string, ghostId: string | null) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const qs = new URLSearchParams({ date: iso });
+        if (ghostId) qs.set("ghost", ghostId);
+        const res = await fetch(`/api/schedule/route?${qs.toString()}`, {
+          cache: "no-store",
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json.error ?? `Failed (${res.status})`);
+          setData(null);
+          return null as RouteResponse | null;
+        }
         setData(json as RouteResponse);
+        return json as RouteResponse;
+      } catch (e) {
+        setError((e as Error).message || "Network error");
+        return null;
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      setError((e as Error).message || "Network error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
+  // Fetch whenever the day or the ghost lead changes.
   useEffect(() => {
-    load(selectedDay);
-  }, [selectedDay, load]);
+    let cancelled = false;
+    load(selectedDay, scheduleLeadId).then((resp) => {
+      if (cancelled || !resp) return;
+      // First load after arrival with ?scheduleLead: if the lead had a
+      // scheduled_day of its own AND the caller didn't pin a specific `day`,
+      // pivot the picker to that day so the ranking matches the customer's
+      // preference.
+      if (
+        !desiredDayApplied.current &&
+        scheduleLeadId &&
+        !dayParam &&
+        resp.ghost?.desiredDay &&
+        resp.ghost.desiredDay >= todayIso &&
+        resp.ghost.desiredDay !== selectedDay
+      ) {
+        desiredDayApplied.current = true;
+        setSelectedDay(resp.ghost.desiredDay);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDay, scheduleLeadId, dayParam, load, todayIso]);
+
+  const closeScheduler = useCallback(() => {
+    router.replace("/route", { scroll: false });
+  }, [router]);
+
+  const ghostForMap: RouteMapStop | null = useMemo(() => {
+    if (!data?.ghost) return null;
+    return {
+      id: data.ghost.id,
+      label: data.ghost.label,
+      address: data.ghost.address,
+      lat: data.ghost.lat,
+      lng: data.ghost.lng,
+      // Map doesn't show a time badge on the ghost pin; empty string is fine.
+      startTime: "",
+    };
+  }, [data]);
+
+  const reload = useCallback(() => {
+    load(selectedDay, scheduleLeadId);
+  }, [load, selectedDay, scheduleLeadId]);
 
   const totalDrive = data?.totalDriveMinutes ?? null;
   const stopCount = data?.stops.length ?? 0;
 
   return (
-    <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5">
+    <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5 pb-32">
       <header className="flex items-center justify-between gap-3">
         <Link
           href="/"
@@ -129,11 +265,20 @@ export default function RoutePage() {
         <div className="w-9" />
       </header>
 
+      {scheduleLeadId && (
+        <SchedulingBanner
+          ghost={data?.ghost ?? null}
+          ghostError={data?.ghostError ?? null}
+          onClose={closeScheduler}
+        />
+      )}
+
       <DayPicker
         days={days}
         todayIso={todayIso}
         selected={selectedDay}
         onSelect={setSelectedDay}
+        scheduleLeadId={scheduleLeadId}
       />
 
       <div className="flex items-center justify-between gap-3">
@@ -159,7 +304,12 @@ export default function RoutePage() {
         </div>
       )}
 
-      <RouteMap home={data?.home ?? null} stops={data?.stops ?? []} mode={mode} />
+      <RouteMap
+        home={data?.home ?? null}
+        stops={data?.stops ?? []}
+        mode={mode}
+        ghost={ghostForMap}
+      />
 
       {data && data.unresolved.length > 0 && (
         <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -182,10 +332,83 @@ export default function RoutePage() {
         </div>
       )}
 
+      {data && (
+        <DayActions
+          data={data}
+          onSynced={(msg) => {
+            showFlash(msg);
+            reload();
+          }}
+          onUnbook={() => reload()}
+        />
+      )}
+
       {data && data.stops.length > 0 && (
-        <StopList data={data} />
+        <StopList data={data} onReload={reload} onFlash={showFlash} />
+      )}
+
+      {scheduleLeadId && data?.ghost && (
+        <SchedulePanel
+          leadId={scheduleLeadId}
+          leadLabel={data.ghost.label}
+          selectedDay={selectedDay}
+          onBooked={(msg) => {
+            showFlash(msg);
+            // After booking we clear the ghost param — the newly booked
+            // lead becomes a regular numbered pin on reload.
+            router.replace(`/route?d=${selectedDay}`, { scroll: false });
+            reload();
+          }}
+        />
+      )}
+
+      {flash && (
+        <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center pointer-events-none px-4">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-[var(--accent)] text-white px-4 py-2.5 shadow-lg text-sm">
+            <CalendarCheck className="h-4 w-4" />
+            {flash}
+          </div>
+        </div>
       )}
     </main>
+  );
+}
+
+function SchedulingBanner({
+  ghost,
+  ghostError,
+  onClose,
+}: {
+  ghost: Ghost | null;
+  ghostError: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3">
+      <Sparkles className="h-4 w-4 mt-0.5 text-amber-700 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+          AI Schedule
+        </div>
+        <div className="font-semibold truncate">
+          {ghost?.label ?? "Scheduling lead"}
+        </div>
+        <div className="text-xs text-amber-800/80 truncate">
+          {ghostError
+            ? ghostError
+            : ghost
+              ? ghost.address
+              : "Loading preview…"}
+        </div>
+      </div>
+      <button
+        onClick={onClose}
+        aria-label="Close scheduling"
+        className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-full text-amber-800 hover:bg-amber-100"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
@@ -194,12 +417,54 @@ function DayPicker({
   todayIso,
   selected,
   onSelect,
+  scheduleLeadId,
 }: {
   days: string[];
   todayIso: string;
   selected: string;
   onSelect: (iso: string) => void;
+  scheduleLeadId: string | null;
 }) {
+  // When scheduling, fetch the week preview so each day chip gets a drive-
+  // cost badge (same data the old modal used).
+  const [week, setWeek] = useState<Map<string, DayPreview> | null>(null);
+  useEffect(() => {
+    if (!scheduleLeadId) {
+      setWeek(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/schedule/week", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leadId: scheduleLeadId }),
+        });
+        const json = await res.json();
+        if (cancelled || !res.ok) return;
+        const map = new Map<string, DayPreview>();
+        for (const d of (json.days ?? []) as DayPreview[]) map.set(d.date, d);
+        setWeek(map);
+      } catch {
+        // Silent — chips just render without cost pills.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scheduleLeadId]);
+
+  const bestMinutes = useMemo(() => {
+    if (!week) return null;
+    const costs: number[] = [];
+    for (const d of week.values()) {
+      if (d.isWorkDay && d.bestTotalDriveMinutes != null)
+        costs.push(d.bestTotalDriveMinutes);
+    }
+    return costs.length ? Math.min(...costs) : null;
+  }, [week]);
+
   return (
     <nav
       aria-label="Pick a day"
@@ -209,12 +474,13 @@ function DayPicker({
         {days.map((iso) => {
           const { top, bottom } = dayChipLabel(iso, todayIso);
           const active = iso === selected;
+          const preview = week?.get(iso);
           return (
             <button
               key={iso}
               onClick={() => onSelect(iso)}
               className={cn(
-                "flex flex-col items-center justify-center shrink-0 w-[64px] h-[64px] rounded-xl border transition-colors",
+                "relative flex flex-col items-center justify-center shrink-0 w-[64px] h-[64px] rounded-xl border transition-colors",
                 active
                   ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
                   : "border-[var(--border)] bg-white text-[var(--fg)] hover:bg-gray-50"
@@ -226,11 +492,49 @@ function DayPicker({
               <span className="text-lg font-semibold leading-none mt-0.5">
                 {bottom}
               </span>
+              {preview && <DayChipBadge preview={preview} best={bestMinutes} />}
             </button>
           );
         })}
       </div>
     </nav>
+  );
+}
+
+function DayChipBadge({
+  preview,
+  best,
+}: {
+  preview: DayPreview;
+  best: number | null;
+}) {
+  if (!preview.isWorkDay) {
+    return (
+      <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1 rounded bg-gray-100 text-gray-500">
+        off
+      </span>
+    );
+  }
+  if (preview.slotCount === 0) {
+    return (
+      <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1 rounded bg-red-100 text-red-700">
+        full
+      </span>
+    );
+  }
+  const cost = preview.bestTotalDriveMinutes ?? null;
+  const isBest = best != null && cost != null && cost === best;
+  return (
+    <span
+      className={cn(
+        "absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1 rounded whitespace-nowrap",
+        isBest
+          ? "bg-emerald-600 text-white"
+          : "bg-emerald-50 text-emerald-800"
+      )}
+    >
+      {cost != null ? `+${cost}m` : "ok"}
+    </span>
   );
 }
 
@@ -267,7 +571,113 @@ function ModeToggle({
   );
 }
 
-function StopList({ data }: { data: RouteResponse }) {
+function DayActions({
+  data,
+  onSynced,
+  onUnbook,
+}: {
+  data: RouteResponse;
+  onSynced: (msg: string) => void;
+  onUnbook: () => void;
+}) {
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Suppress onUnbook warning — reserved for future inline actions that
+  // need a reload hook (the current timeline menu handles its own reload
+  // via onReload).
+  void onUnbook;
+
+  const needsSyncCount = useMemo(() => {
+    // We don't get per-lead sync state from /route; fall back to always
+    // offering the button when there are stops. The endpoint itself no-ops
+    // for already-synced events.
+    return data.stops.length;
+  }, [data.stops.length]);
+
+  async function syncDay() {
+    setSyncing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/schedule/sync-day", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: data.date }),
+      });
+      const json = await res.json();
+      if (res.status === 428) {
+        if (confirm("Google Calendar is not connected. Connect now?")) {
+          window.location.href = json.connectUrl;
+        }
+        return;
+      }
+      if (!res.ok) {
+        setError(json.error ?? `Failed (${res.status})`);
+        return;
+      }
+      const s = json.summary as {
+        total: number;
+        created: number;
+        updated: number;
+        already: number;
+        errors: number;
+      };
+      const parts: string[] = [];
+      if (s.created) parts.push(`${s.created} added`);
+      if (s.updated) parts.push(`${s.updated} updated`);
+      if (s.already && !parts.length) parts.push("already in sync");
+      if (s.errors) parts.push(`${s.errors} failed`);
+      onSynced(`Calendar: ${parts.join(", ") || "done"}`);
+    } catch (e) {
+      setError((e as Error).message || "Network error");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  if (needsSyncCount === 0) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-white px-4 py-3">
+      <div className="min-w-0 text-sm">
+        <div className="font-medium">Save day to calendar</div>
+        <div className="text-xs text-[var(--muted)]">
+          Push all {data.stops.length} stop{data.stops.length === 1 ? "" : "s"} to Google Calendar in one tap.
+        </div>
+      </div>
+      <button
+        onClick={syncDay}
+        disabled={syncing}
+        className={cn(
+          "inline-flex items-center gap-2 rounded-lg px-3 h-10 text-sm font-medium bg-[var(--accent)] text-white active:scale-[0.98] transition",
+          syncing && "opacity-70"
+        )}
+      >
+        {syncing ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <CalendarPlus className="h-4 w-4" />
+        )}
+        {syncing ? "Saving…" : "Save day"}
+      </button>
+      {error && (
+        <div className="absolute right-4 mt-14 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StopList({
+  data,
+  onReload,
+  onFlash,
+}: {
+  data: RouteResponse;
+  onReload: () => void;
+  onFlash: (msg: string) => void;
+}) {
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1 mb-3">
@@ -301,6 +711,18 @@ function StopList({ data }: { data: RouteResponse }) {
                   <span className="truncate">{s.address}</span>
                 </>
               }
+              action={
+                <StopMenu
+                  leadId={s.id}
+                  label={s.label}
+                  firstName={s.firstName}
+                  phoneNumber={s.phoneNumber}
+                  startTime={s.startTime}
+                  date={data.date}
+                  onReload={onReload}
+                  onFlash={onFlash}
+                />
+              }
             />
           </div>
         ))}
@@ -325,11 +747,13 @@ function TimelineRow({
   index,
   title,
   subtitle,
+  action,
 }: {
   kind: "home" | "stop";
   index: number | null;
   title: string;
   subtitle: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   return (
     <li className="flex items-start gap-3 py-1.5">
@@ -343,10 +767,11 @@ function TimelineRow({
       >
         {kind === "home" ? <Home className="h-3.5 w-3.5" /> : (index ?? <MapPin className="h-3.5 w-3.5" />)}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="font-medium truncate">{title}</div>
         <div className="text-xs text-[var(--muted)] truncate">{subtitle}</div>
       </div>
+      {action}
     </li>
   );
 }
@@ -357,6 +782,308 @@ function DriveLeg({ minutes }: { minutes: number }) {
       <span className="ml-4 text-[11px] text-[var(--muted)] inline-flex items-center gap-1">
         <Car className="h-3 w-3" /> {minutes} min
       </span>
+    </div>
+  );
+}
+
+function StopMenu({
+  leadId,
+  label,
+  firstName,
+  phoneNumber,
+  startTime,
+  date,
+  onReload,
+  onFlash,
+}: {
+  leadId: string;
+  label: string;
+  firstName: string | null;
+  phoneNumber: string | null;
+  startTime: string;
+  date: string;
+  onReload: () => void;
+  onFlash: (msg: string) => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, [open]);
+
+  async function cancel() {
+    if (!confirm(`Unbook ${label}? This removes it from the calendar and moves it back to Called.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/calendar`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error ?? `Failed (${res.status})`);
+        return;
+      }
+      onFlash(`Unbooked ${label}`);
+      onReload();
+    } finally {
+      setBusy(false);
+      setOpen(false);
+    }
+  }
+
+  function reschedule() {
+    setOpen(false);
+    router.push(`/route?scheduleLead=${leadId}&day=${date}`);
+  }
+
+  const smsHref = useMemo(() => {
+    if (!phoneNumber) return null;
+    const who = firstName?.trim() || "there";
+    const day = formatDateLong(date);
+    const when = `${day} at ${formatClock(startTime)}`;
+    const body = `Hi ${who}, David with Arbor Tech 904. Confirming our arborist assessment on ${when}. Reply here if anything changes — see you then!`;
+    const digits = phoneNumber.replace(/[^\d+]/g, "");
+    return `sms:${digits}&body=${encodeURIComponent(body)}`;
+  }, [firstName, phoneNumber, date, startTime]);
+
+  return (
+    <div className="relative shrink-0" ref={menuRef}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        aria-label="Stop actions"
+        className="inline-flex items-center justify-center h-8 w-8 rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-9 z-10 w-48 rounded-xl border border-[var(--border)] bg-white shadow-lg overflow-hidden">
+          {smsHref && (
+            <a
+              href={smsHref}
+              onClick={() => setOpen(false)}
+              className="w-full text-left px-3 h-10 text-sm flex items-center gap-2 hover:bg-[var(--surface-2)]"
+            >
+              <MessageSquare className="h-4 w-4" /> Text confirmation
+            </a>
+          )}
+          <button
+            onClick={reschedule}
+            disabled={busy}
+            className="w-full text-left px-3 h-10 text-sm flex items-center gap-2 hover:bg-[var(--surface-2)]"
+          >
+            <RefreshCw className="h-4 w-4" /> Reschedule
+          </button>
+          <button
+            onClick={cancel}
+            disabled={busy}
+            className="w-full text-left px-3 h-10 text-sm flex items-center gap-2 text-red-700 hover:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4" /> Cancel booking
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SchedulePanel({
+  leadId,
+  leadLabel,
+  selectedDay,
+  onBooked,
+}: {
+  leadId: string;
+  leadLabel: string;
+  selectedDay: string;
+  onBooked: (msg: string) => void;
+}) {
+  const [half, setHalf] = useState<Half>("all");
+  const [loading, setLoading] = useState(false);
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [booking, setBooking] = useState<string | null>(null);
+
+  const loadSlots = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/schedule/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, half, day: selectedDay }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? `Failed (${res.status})`);
+        setSlots([]);
+        setWarnings([]);
+        return;
+      }
+      setSlots(json.slots ?? []);
+      setWarnings(json.warnings ?? []);
+    } catch (e) {
+      setError((e as Error).message || "Network error");
+    } finally {
+      setLoading(false);
+    }
+  }, [leadId, half, selectedDay]);
+
+  useEffect(() => {
+    loadSlots();
+  }, [loadSlots]);
+
+  async function book(slot: Slot) {
+    setBooking(slot.startTime);
+    setError(null);
+    try {
+      const patchRes = await fetch(`/api/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduled_time: slot.startTime,
+          scheduled_day: selectedDay,
+        }),
+      });
+      const patchJson = await patchRes.json();
+      if (!patchRes.ok) {
+        throw new Error(patchJson.error ?? "Failed to set time");
+      }
+      const calRes = await fetch(`/api/leads/${leadId}/calendar`, { method: "POST" });
+      const calJson = await calRes.json();
+      if (calRes.status === 428) {
+        if (confirm("Google Calendar is not connected. Connect now?")) {
+          window.location.href = calJson.connectUrl;
+        }
+        return;
+      }
+      if (!calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
+      onBooked(`Booked ${leadLabel} at ${formatClock(slot.startTime)}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBooking(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-white shadow-2xl rounded-t-2xl">
+      <div className="mx-auto max-w-6xl px-4 py-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
+              <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" /> Ranked slots
+            </div>
+            <div className="font-semibold truncate">
+              {formatDateLong(selectedDay)}
+            </div>
+          </div>
+          <HalfTabs half={half} setHalf={setHalf} />
+        </div>
+
+        {warnings.length > 0 && !loading && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            {warnings.join(" · ")}
+          </div>
+        )}
+
+        {error && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-6 flex items-center justify-center text-[var(--muted)] text-sm">
+            <Loader2 className="h-4 w-4 animate-spin mr-2" /> Ranking slots…
+          </div>
+        ) : slots.length === 0 ? (
+          <div className="py-6 text-center text-sm text-[var(--muted)]">
+            No feasible slots on this day.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {slots.map((s) => (
+              <button
+                key={s.startTime}
+                onClick={() => book(s)}
+                disabled={booking !== null}
+                className={cn(
+                  "w-full flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-white hover:bg-[var(--surface-2)] px-3 py-2.5 text-left transition active:scale-[0.99]",
+                  booking && booking !== s.startTime && "opacity-60"
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="font-semibold">{formatClock(s.startTime)}</div>
+                  <div className="text-xs text-[var(--muted)] truncate">
+                    {[s.reasoning.priorLabel, s.reasoning.nextLabel]
+                      .filter(Boolean)
+                      .join(" · ") || "Open slot"}
+                    {" · "}
+                    {s.totalDriveMinutes} min driving
+                  </div>
+                </div>
+                {booking === s.startTime ? (
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HalfTabs({
+  half,
+  setHalf,
+}: {
+  half: Half;
+  setHalf: (h: Half) => void;
+}) {
+  const tabs: { id: Half; label: string }[] = [
+    { id: "morning", label: "AM" },
+    { id: "afternoon", label: "PM" },
+    { id: "all", label: "All" },
+  ];
+  return (
+    <div
+      role="tablist"
+      aria-label="Half of day"
+      className="inline-flex rounded-full border border-[var(--border)] bg-white p-0.5 text-xs shrink-0"
+    >
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          role="tab"
+          aria-selected={half === t.id}
+          onClick={() => setHalf(t.id)}
+          className={cn(
+            "px-3 h-8 rounded-full font-medium",
+            half === t.id
+              ? "bg-[var(--accent)] text-white"
+              : "text-[var(--muted)] hover:text-[var(--fg)]"
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 }

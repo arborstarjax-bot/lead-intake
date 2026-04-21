@@ -4,6 +4,7 @@ import { getAccessToken } from "@/lib/google/oauth";
 import {
   createCalendarEvent,
   updateCalendarEvent,
+  deleteCalendarEvent,
   canSchedule,
 } from "@/lib/google/calendar";
 
@@ -80,4 +81,61 @@ export async function POST(
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
+}
+
+/**
+ * DELETE /api/leads/[id]/calendar
+ *
+ * Cancel / unbook a scheduled lead from the route page. Removes the Google
+ * Calendar event (if any), clears the scheduled_time + calendar sync fields,
+ * and rolls the status back to "Called / No Response" so the lead shows up
+ * in the Called tab ready to be rescheduled. Leaves `scheduled_day` alone
+ * so the customer's stated preference isn't lost; the user can clear it
+ * from the card if they want to.
+ */
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const supabase = createAdminClient();
+  const { data: lead } = await supabase.from("leads").select("*").eq("id", id).single();
+  if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Best-effort delete on Google. A 404/410 (already gone) or a missing
+  // token shouldn't block the local unbook — the user still wants the lead
+  // off the route map.
+  if (lead.calendar_event_id) {
+    const token = await getAccessToken();
+    if (token) {
+      try {
+        await deleteCalendarEvent(token, lead.calendar_event_id);
+      } catch {
+        // swallow — local unbook proceeds regardless.
+      }
+    }
+  }
+
+  const nextStatus =
+    lead.status === "Completed" || lead.status === "Lost"
+      ? lead.status
+      : "Called / No Response";
+
+  const { data: updated, error } = await supabase
+    .from("leads")
+    .update({
+      scheduled_time: null,
+      calendar_event_id: null,
+      calendar_scheduled_day: null,
+      calendar_scheduled_time: null,
+      status: nextStatus,
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ lead: updated });
 }
