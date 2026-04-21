@@ -268,8 +268,24 @@ function RoutePageInner() {
   const totalDrive = data?.totalDriveMinutes ?? null;
   const stopCount = data?.stops.length ?? 0;
 
+  // The floating SchedulePanel is `position: fixed` at the bottom, so we
+  // reserve matching space under the page content (plus a 24px gap) so the
+  // Timeline isn't hidden underneath it. The panel reports its own height
+  // via ResizeObserver below — this works on phone and desktop without
+  // hard-coded breakpoints.
+  const [panelHeight, setPanelHeight] = useState(0);
+  // Reset reserved space when the panel unmounts (e.g. after closing the
+  // scheduler or finishing a booking). Otherwise we'd leave a big empty
+  // gap under the timeline.
+  useEffect(() => {
+    if (!scheduleLeadId) setPanelHeight(0);
+  }, [scheduleLeadId]);
+
   return (
-    <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5 pb-32">
+    <main
+      className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5"
+      style={{ paddingBottom: panelHeight ? panelHeight + 24 : 128 }}
+    >
       <header className="flex items-center justify-between gap-3">
         <Link
           href="/"
@@ -371,6 +387,7 @@ function RoutePageInner() {
           selectedDay={selectedDay}
           previewSlot={previewSlot}
           onPreview={setPreviewSlot}
+          onHeightChange={setPanelHeight}
           onBooked={(msg) => {
             showFlash(msg);
             setPreviewSlot(null);
@@ -1109,6 +1126,7 @@ function SchedulePanel({
   selectedDay,
   previewSlot,
   onPreview,
+  onHeightChange,
   onBooked,
 }: {
   leadId: string;
@@ -1116,8 +1134,24 @@ function SchedulePanel({
   selectedDay: string;
   previewSlot: Slot | null;
   onPreview: (slot: Slot | null) => void;
+  onHeightChange: (h: number) => void;
   onBooked: (msg: string) => void;
 }) {
+  // Report the panel's rendered height to the parent so it can reserve
+  // matching bottom padding and keep the Timeline visible above the fixed
+  // panel. The height grows when slots load, when the Confirm bar appears,
+  // or when the viewport gets narrower — ResizeObserver catches all three.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height ?? 0;
+      onHeightChange(Math.ceil(h));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHeightChange]);
   const [half, setHalf] = useState<Half>("all");
   const [loading, setLoading] = useState(false);
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -1200,7 +1234,10 @@ function SchedulePanel({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-white shadow-2xl rounded-t-2xl">
+    <div
+      ref={panelRef}
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-white shadow-2xl rounded-t-2xl"
+    >
       <div className="mx-auto max-w-6xl px-4 py-3 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
