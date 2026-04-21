@@ -99,12 +99,20 @@ export async function POST(req: Request) {
   const leadsById = new Map(allLeads.map((l) => [l.id, l]));
 
   // Validate completeness: the ordered list must exactly cover the day.
+  // Duplicates are rejected separately — otherwise `[A, A]` on a day of
+  // `[A, B]` would pass the length + membership checks and silently drop B.
   const orderedIds = parsed.orderedLeadIds;
   if (orderedIds.length !== allLeads.length) {
     return NextResponse.json(
       {
         error: `Order is stale: expected ${allLeads.length} stops, got ${orderedIds.length}. Reload and try again.`,
       },
+      { status: 409 }
+    );
+  }
+  if (new Set(orderedIds).size !== orderedIds.length) {
+    return NextResponse.json(
+      { error: "Order contains duplicate leads. Reload and try again." },
       { status: 409 }
     );
   }
