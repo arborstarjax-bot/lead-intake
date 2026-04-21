@@ -2,6 +2,7 @@
 
 import { Bell, BellOff, BellRing } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/Toast";
 
 type Status = "unsupported" | "denied" | "prompt" | "subscribing" | "subscribed";
 
@@ -16,6 +17,7 @@ function urlBase64ToUint8Array(base64: string): ArrayBuffer {
 }
 
 export default function EnableNotifications() {
+  const { toast } = useToast();
   const [status, setStatus] = useState<Status>("prompt");
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
@@ -63,10 +65,11 @@ export default function EnableNotifications() {
       setStatus("subscribed");
     } catch (e) {
       console.error(e);
-      alert(
-        `Couldn't enable notifications: ${(e as Error).message}. ` +
-          `On iPhone, notifications only work after you Add to Home Screen.`
-      );
+      toast({
+        kind: "error",
+        message: `Couldn't enable notifications. On iPhone, Add to Home Screen first.`,
+        duration: 6000,
+      });
       setStatus("prompt");
     }
   }

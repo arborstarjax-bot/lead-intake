@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Phone,
@@ -10,7 +10,6 @@ import {
   CalendarCheck,
   Trash2,
   Image as ImageIcon,
-  Undo2,
   Plus,
   Search,
   MoreVertical,
@@ -19,13 +18,13 @@ import {
   User,
   Clock,
   AlertTriangle,
-  CheckCircle2,
   Sparkles,
 } from "lucide-react";
 import type { Lead, LeadStatus } from "@/lib/types";
 import { LEAD_STATUSES, EDITABLE_COLUMNS } from "@/lib/types";
 import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/Toast";
 
 type FieldDef = {
   key: keyof Lead;
@@ -50,16 +49,15 @@ export default function LeadTable({
   onScheduleChange?: () => void;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [toast, setToast] = useState<{ leadId: string; prev: LeadStatus } | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
-
-  function showFlash(message: string) {
-    setFlash(message);
-    setTimeout(() => setFlash((f) => (f === message ? null : f)), 3_000);
-  }
+  // Leads the user just deleted. Held for the undo window so we can re-insert
+  // them in place if they tap Undo before the background DELETE fires.
+  const pendingDeletes = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
 
   /**
    * Fetch and update the list. Only shows the skeleton on the very first
@@ -70,7 +68,12 @@ export default function LeadTable({
     if (!silent) setLoading(true);
     try {
       const r = await fetch(`/api/leads?view=all`).then((r) => r.json());
-      const all: Lead[] = r.leads ?? [];
+      // Hide any leads the user just optimistically deleted; the server
+      // won't drop them until the 5s undo timer fires, and we don't want a
+      // mid-window background poll to resurrect them.
+      const all: Lead[] = (r.leads ?? []).filter(
+        (l: Lead) => !pendingDeletes.current.has(l.id)
+      );
       setLeads(all);
       const counts: LeadCounts = {
         All: all.length,
@@ -106,7 +109,7 @@ export default function LeadTable({
     );
   }, [leads, search, filter]);
 
-  async function savePatch(id: string, patch: Partial<Lead>) {
+  async function savePatch(id: string, patch: Partial<Lead>): Promise<boolean> {
     const res = await fetch(`/api/leads/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -137,32 +140,66 @@ export default function LeadTable({
       if ("scheduled_time" in patch || "scheduled_day" in patch) {
         onScheduleChange?.();
       }
-    } else {
-      alert(json.error ?? "Save failed");
+      return true;
     }
+    toast({ kind: "error", message: json.error ?? "Save failed" });
+    return false;
   }
 
   async function onMarkCompleted(lead: Lead) {
     const prev = lead.status;
-    setToast({ leadId: lead.id, prev });
-    await savePatch(lead.id, { status: "Completed" });
-    setTimeout(() => setToast((t) => (t?.leadId === lead.id ? null : t)), 6_000);
+    const ok = await savePatch(lead.id, { status: "Completed" });
+    // savePatch surfaces its own error toast on failure; don't stack a
+    // contradictory "Marked Completed" success on top of it.
+    if (!ok) return;
+    toast({
+      kind: "success",
+      message: "Marked Completed",
+      action: {
+        label: "Undo",
+        onClick: () => {
+          savePatch(lead.id, {
+            status: prev === "Completed" ? "New" : prev,
+          });
+        },
+      },
+      duration: 6000,
+    });
   }
 
-  async function onUndoComplete(leadId: string, prev: LeadStatus) {
-    await savePatch(leadId, { status: prev === "Completed" ? "New" : prev });
-    setToast(null);
-  }
-
-  async function onDelete(id: string) {
-    if (
-      !confirm(
-        "Delete this lead permanently? Use Completed instead if you want to keep history."
-      )
-    )
-      return;
-    await fetch(`/api/leads/${id}`, { method: "DELETE" });
-    refresh({ silent: true });
+  function onDelete(id: string) {
+    const lead = leads.find((l) => l.id === id);
+    if (!lead) return;
+    // Optimistically remove from the list; only hit the API if the user
+    // doesn't tap Undo within the toast window. This makes delete feel
+    // like Gmail archive instead of a modal confirm dialog.
+    setLeads((prev) => prev.filter((l) => l.id !== id));
+    const timer = setTimeout(async () => {
+      pendingDeletes.current.delete(id);
+      const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        // Restore in place and surface the error so nothing disappears silently.
+        setLeads((prev) => (prev.some((l) => l.id === id) ? prev : [lead, ...prev]));
+        toast({ kind: "error", message: "Couldn't delete. Restored." });
+      }
+    }, 5000);
+    pendingDeletes.current.set(id, timer);
+    toast({
+      kind: "success",
+      message: "Lead deleted",
+      duration: 5000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const t = pendingDeletes.current.get(id);
+          if (t) {
+            clearTimeout(t);
+            pendingDeletes.current.delete(id);
+          }
+          setLeads((prev) => (prev.some((l) => l.id === id) ? prev : [lead, ...prev]));
+        },
+      },
+    });
   }
 
   async function onAddRow() {
@@ -172,23 +209,34 @@ export default function LeadTable({
 
   async function onAddCalendar(lead: Lead) {
     if (!lead.scheduled_day) {
-      alert("Scheduled Day is required before adding to calendar.");
+      toast({
+        kind: "error",
+        message: "Pick a Scheduled Day before adding to calendar.",
+      });
       return;
     }
     const res = await fetch(`/api/leads/${lead.id}/calendar`, { method: "POST" });
     const json = await res.json();
     if (res.status === 428) {
-      if (confirm("Google Calendar is not connected. Connect now?")) {
-        window.location.href = json.connectUrl;
-      }
+      toast({
+        kind: "info",
+        message: "Google Calendar isn't connected.",
+        duration: 6000,
+        action: {
+          label: "Connect",
+          onClick: () => {
+            window.location.href = json.connectUrl;
+          },
+        },
+      });
       return;
     }
     if (!res.ok) {
-      alert(json.error ?? "Calendar failed");
+      toast({ kind: "error", message: json.error ?? "Calendar failed" });
       return;
     }
     if (json.htmlLink) window.open(json.htmlLink, "_blank");
-    showFlash("Estimate Added to Calendar");
+    toast({ kind: "success", message: "Estimate added to Calendar" });
     refresh({ silent: true });
   }
 
@@ -252,30 +300,6 @@ export default function LeadTable({
               }}
             />
           ))}
-        </div>
-      )}
-
-      {toast && (
-        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center pointer-events-none px-4">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[var(--fg)] text-white px-4 py-2.5 shadow-lg text-sm">
-            <CheckCircle2 className="h-4 w-4 text-[var(--accent-soft)]" />
-            Marked Completed.
-            <button
-              onClick={() => onUndoComplete(toast.leadId, toast.prev)}
-              className="inline-flex items-center gap-1 underline"
-            >
-              <Undo2 className="h-4 w-4" /> Undo
-            </button>
-          </div>
-        </div>
-      )}
-
-      {flash && (
-        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center pointer-events-none px-4">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-[var(--accent)] text-white px-4 py-2.5 shadow-lg text-sm">
-            <CalendarCheck className="h-4 w-4" />
-            {flash}
-          </div>
         </div>
       )}
 
@@ -780,20 +804,55 @@ function InlineField({
 }) {
   const [local, setLocal] = useState<string>(value);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // `pending` holds the most recent unsaved value so `flush()` can fire
+  // the patch synchronously without depending on `local`'s closure.
+  const pending = useRef<string | null>(null);
+  const onPatchRef = useRef(onPatch);
+  onPatchRef.current = onPatch;
 
   useEffect(() => {
     setLocal(value);
   }, [value]);
 
+  const flush = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    const next = pending.current;
+    if (next === null) return;
+    pending.current = null;
+    const patch: Partial<Lead> = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (patch as any)[field] = next === "" ? null : next;
+    onPatchRef.current(patch);
+  }, [field]);
+
+  // Fire any pending save when the tab hides, the page unloads, or the
+  // input blurs. Without this, a quick edit + tap-home swallows the patch
+  // because the 500 ms debounce timer never resolves in the background.
+  useEffect(() => {
+    function onHide() {
+      if (document.visibilityState === "hidden") flush();
+    }
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [flush]);
+
+  // Final safety net: flush on unmount too.
+  useEffect(() => {
+    return () => flush();
+  }, [flush]);
+
   function scheduleSave(next: string) {
     setLocal(next);
+    pending.current = next;
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      const patch: Partial<Lead> = {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (patch as any)[field] = next === "" ? null : next;
-      onPatch(patch);
-    }, 500);
+    timer.current = setTimeout(flush, 500);
   }
 
   const conf = lead.extraction_confidence?.[field as string];
@@ -807,6 +866,7 @@ function InlineField({
         value={display}
         placeholder={placeholder}
         onChange={(e) => scheduleSave(e.target.value)}
+        onBlur={flush}
         rows={3}
         className={cn(className, lowConf && "invalid-soft")}
       />
@@ -820,6 +880,7 @@ function InlineField({
       placeholder={placeholder}
       inputMode={inputMode}
       onChange={(e) => scheduleSave(e.target.value)}
+      onBlur={flush}
       className={cn(className, lowConf && "invalid-soft")}
       title={lowConf ? `Low confidence (${Math.round((conf ?? 0) * 100)}%)` : undefined}
     />

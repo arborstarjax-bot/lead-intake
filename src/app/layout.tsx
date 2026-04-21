@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ToastProvider } from "@/components/Toast";
 
 export const metadata: Metadata = {
   title: "Lead Intake",
@@ -35,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        {children}
+        <ToastProvider>{children}</ToastProvider>
         {/* Register service worker on client. */}
         <script
           dangerouslySetInnerHTML={{

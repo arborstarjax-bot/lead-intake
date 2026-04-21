@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { Lead } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/Toast";
 
 type Half = "all" | "morning" | "afternoon";
 
@@ -44,6 +45,7 @@ export default function ScheduleModal({
   onClose: () => void;
   onBooked: (updatedLead: Lead, htmlLink?: string) => void;
 }) {
+  const { toast } = useToast();
   // Path A vs Path B is determined by whether the lead already has a day.
   // Once in the modal, the user can also jump back from Path A's day view
   // to the week picker to override the customer's requested day.
@@ -160,9 +162,17 @@ export default function ScheduleModal({
       const calRes = await fetch(`/api/leads/${lead.id}/calendar`, { method: "POST" });
       const calJson = await calRes.json();
       if (calRes.status === 428) {
-        if (confirm("Google Calendar is not connected. Connect now?")) {
-          window.location.href = calJson.connectUrl;
-        }
+        toast({
+          kind: "info",
+          message: "Google Calendar isn't connected.",
+          duration: 6000,
+          action: {
+            label: "Connect",
+            onClick: () => {
+              window.location.href = calJson.connectUrl;
+            },
+          },
+        });
         return;
       }
       if (!calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
