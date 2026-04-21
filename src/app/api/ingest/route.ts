@@ -3,6 +3,7 @@ import { ingestScreenshot } from "@/lib/ingest";
 import { maybeConvertHeic } from "@/lib/convert-heic";
 import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
+import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,7 +15,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No files" }, { status: 400 });
   }
 
-  const results: Array<{ fileName: string; originalFileName: string; lead_id: string; intake_status: string; duplicates: unknown[] }> = [];
+  const results: Array<{
+    fileName: string;
+    originalFileName: string;
+    lead_id: string;
+    intake_status: string;
+    duplicates: unknown[];
+    lead?: Lead;
+  }> = [];
   const errors: Array<{ fileName: string; error: string }> = [];
 
   for (const file of files) {
@@ -32,19 +40,31 @@ export async function POST(req: NextRequest) {
   }
 
   if (results.length > 0) {
+    const admin = createAdminClient();
+    // Attach the full lead record to each successful result so the client
+    // can render the same LeadCard used on /leads without a round-trip.
     try {
-      const admin = createAdminClient();
-      const { data: leads } = await admin
+      const { data: createdLeads } = await admin
         .from("leads")
-        .select("client, phone_number, created_at")
+        .select("*")
         .in(
           "id",
           results.map((r) => r.lead_id)
-        )
-        .order("created_at", { ascending: false })
-        .limit(1);
-      const latestLead = leads?.[0]
-        ? { client: leads[0].client, phone_number: leads[0].phone_number }
+        );
+      if (createdLeads) {
+        const byId = new Map((createdLeads as Lead[]).map((l) => [l.id, l]));
+        for (const r of results) {
+          const lead = byId.get(r.lead_id);
+          if (lead) r.lead = lead;
+        }
+      }
+    } catch {
+      // Non-fatal: client still has lead_id and can refetch if needed.
+    }
+    try {
+      const latest = results[results.length - 1]?.lead;
+      const latestLead = latest
+        ? { client: latest.client, phone_number: latest.phone_number }
         : null;
       await sendNewLeadPush({ latestLead });
     } catch {
