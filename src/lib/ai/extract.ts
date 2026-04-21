@@ -150,6 +150,88 @@ const SCHEMA = {
  * a structured lead record. The caller is responsible for uploading the
  * screenshot to storage first and generating a signed URL for it.
  */
+const NAME_FALLBACK_PROMPT = `You are looking at a screenshot that was already parsed once and
+the lead's name came back empty. The name is almost always present — it
+just wasn't spotted. Focus exclusively on finding the person's name.
+
+Prioritize these regions in order:
+  1. The very top of the screen — the chat/thread header of Facebook
+     Messenger, Instagram DMs, iMessage, SMS, WhatsApp. The large text
+     centered at the top of a conversation is the other person's name.
+  2. Profile card overlays ("tap for info" panels) showing first + last.
+  3. Incoming message bubbles with a name label above them.
+  4. Signed names at the end of a message ("- Jane", "Thanks, Jane Doe").
+  5. Email "From" display names.
+  6. Call log / voicemail "from" labels.
+
+If the top-bar name looks like a business/page ("Acme Roofing",
+"Mike's Plumbing"), leave first_name/last_name null — do not invent.
+Otherwise, use the header name; a messaging-app thread header IS the
+lead's name. Split a two-token name into first + last; a single token
+goes in first_name with last_name null.
+
+Return JSON matching the schema. Do not explain.`;
+
+const NAME_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    first_name: { type: ["string", "null"] },
+    last_name: { type: ["string", "null"] },
+    confidence: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        first_name: { type: "number" },
+        last_name: { type: "number" },
+      },
+      required: ["first_name", "last_name"],
+    },
+  },
+  required: ["first_name", "last_name", "confidence"],
+} as const;
+
+type NameFallback = {
+  first_name: string | null;
+  last_name: string | null;
+  confidence: { first_name: number; last_name: number };
+};
+
+async function extractNameFromImage(
+  client: OpenAI,
+  imageUrl: string
+): Promise<NameFallback | null> {
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "name_only", strict: true, schema: NAME_SCHEMA },
+      },
+      messages: [
+        { role: "system", content: NAME_FALLBACK_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Find the lead's name in this screenshot. Check the thread header first.",
+            },
+            { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
+          ],
+        },
+      ],
+    });
+    const raw = response.choices[0]?.message?.content;
+    if (!raw) return null;
+    return JSON.parse(raw) as NameFallback;
+  } catch {
+    // Fallback is best-effort: never fail the ingestion over it.
+    return null;
+  }
+}
+
 export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedLead> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -180,6 +262,29 @@ export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedL
   if (!raw) throw new Error("OpenAI returned empty extraction");
 
   const parsed = JSON.parse(raw) as ExtractedLead;
+
+  // Vision is non-deterministic. If the first pass missed the name
+  // entirely, retry with a prompt focused solely on the chat header.
+  // Only escalate when we also see signs of identifiable content (a
+  // phone, email, address, or message notes) — no-signal screenshots
+  // shouldn't burn a second call.
+  const hasAnyContent =
+    !!parsed.phone_number ||
+    !!parsed.email ||
+    !!parsed.address ||
+    !!parsed.notes;
+  if (!parsed.first_name && hasAnyContent) {
+    const fallback = await extractNameFromImage(client, imageUrl);
+    if (fallback?.first_name) {
+      parsed.first_name = fallback.first_name;
+      parsed.last_name = fallback.last_name ?? parsed.last_name;
+      parsed.confidence = {
+        ...parsed.confidence,
+        first_name: fallback.confidence?.first_name ?? 0.7,
+        last_name: fallback.confidence?.last_name ?? 0,
+      };
+    }
+  }
 
   // Post-normalize: format normalization increases downstream value without
   // distorting the model's original confidence numbers.

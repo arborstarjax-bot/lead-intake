@@ -10,12 +10,12 @@ import NotificationAcknowledge from "@/components/NotificationAcknowledge";
 import { cn } from "@/lib/utils";
 
 const TABS: { id: LeadFilter; label: string }[] = [
-  { id: "All", label: "All" },
   { id: "New", label: "New" },
   { id: "Called / No Response", label: "Called" },
   { id: "Scheduled", label: "Scheduled" },
   { id: "Completed", label: "Completed" },
   { id: "Lost", label: "Lost" },
+  { id: "All", label: "All" },
 ];
 
 const EMPTY_COUNTS: LeadCounts = {
@@ -37,7 +37,7 @@ export default function LeadsPage() {
 
 function filterFromParam(p: string | null): LeadFilter {
   const match = TABS.find((t) => paramFor(t.id) === p);
-  return match ? match.id : "All";
+  return match ? match.id : "New";
 }
 
 function paramFor(id: LeadFilter): string {
@@ -67,7 +67,7 @@ function LeadsPageInner() {
   function switchFilter(next: LeadFilter) {
     setFilter(next);
     const q = paramFor(next);
-    router.replace(q === "all" ? "/leads" : `/leads?status=${q}`, { scroll: false });
+    router.replace(q === "new" ? "/leads" : `/leads?status=${q}`, { scroll: false });
   }
 
   return (
