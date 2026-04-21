@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import LeadTable from "@/components/LeadTable";
 import EnableNotifications from "@/components/EnableNotifications";
+import NotificationAcknowledge from "@/components/NotificationAcknowledge";
 import { cn } from "@/lib/utils";
 
 export default function LeadsPage() {
@@ -31,6 +32,7 @@ function LeadsPageInner() {
 
   return (
     <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5">
+      <NotificationAcknowledge />
       <header className="flex items-center justify-between gap-3">
         <Link
           href="/"
