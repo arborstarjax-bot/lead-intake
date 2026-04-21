@@ -4,10 +4,16 @@ import { maybeConvertHeic } from "@/lib/convert-heic";
 import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireMembership } from "@/lib/auth";
+import { checkRateLimit, rateLimitKey } from "@/lib/rateLimit";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+// Per-user ingest cap: each screenshot triggers a GPT-4o vision call, which is
+// the most expensive operation in the app. 60 uploads/hour is ~2× a busy day's
+// real usage and still caps a runaway client loop at a bounded cost.
+const INGEST_LIMIT_PER_HOUR = 60;
 
 export async function POST(req: NextRequest) {
   const auth = await requireMembership();
@@ -17,6 +23,30 @@ export async function POST(req: NextRequest) {
   const files = form.getAll("file").filter((f): f is File => f instanceof File);
   if (files.length === 0) {
     return NextResponse.json({ error: "No files" }, { status: 400 });
+  }
+
+  // Count each uploaded file as a separate hit: a batch of 10 screenshots
+  // burns 10 OpenAI calls even though it's one request.
+  const limit = checkRateLimit({
+    key: rateLimitKey(["ingest", auth.workspaceId, auth.userId]),
+    limit: INGEST_LIMIT_PER_HOUR,
+    windowMs: 60 * 60 * 1000,
+    cost: files.length,
+  });
+  if (!limit.ok) {
+    return NextResponse.json(
+      {
+        error: `Upload limit reached (${INGEST_LIMIT_PER_HOUR}/hour). Try again in ${limit.retryAfterSeconds}s.`,
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(limit.retryAfterSeconds),
+          "X-RateLimit-Limit": String(limit.limit),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
   }
 
   const results: Array<{
