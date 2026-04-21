@@ -36,6 +36,7 @@ export async function GET() {
       .select("*")
       .eq("scheduled_day", iso)
       .not("scheduled_time", "is", null)
+      .neq("status", "Completed")
       .order("scheduled_time", { ascending: true }),
   ]);
 

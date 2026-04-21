@@ -74,7 +74,8 @@ export async function POST(req: Request) {
       .from("leads")
       .select("*")
       .eq("scheduled_day", parsed.date)
-      .not("scheduled_time", "is", null),
+      .not("scheduled_time", "is", null)
+      .neq("status", "Completed"),
   ]);
   if (rowsResp.error) {
     return NextResponse.json({ error: rowsResp.error.message }, { status: 500 });
