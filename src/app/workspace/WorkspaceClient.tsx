@@ -285,6 +285,10 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
       </section>
 
       <div className="text-center text-xs text-[var(--muted)] space-x-3">
+        <Link href="/billing" className="hover:underline">
+          Billing
+        </Link>
+        <span aria-hidden>·</span>
         <Link href="/privacy" className="hover:underline">
           Privacy
         </Link>
