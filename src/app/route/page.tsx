@@ -274,12 +274,15 @@ function RoutePageInner() {
   // via ResizeObserver below — this works on phone and desktop without
   // hard-coded breakpoints.
   const [panelHeight, setPanelHeight] = useState(0);
-  // Reset reserved space when the panel unmounts (e.g. after closing the
-  // scheduler or finishing a booking). Otherwise we'd leave a big empty
-  // gap under the timeline.
+  // Reset reserved space whenever the panel unmounts. The panel renders on
+  // `scheduleLeadId && data?.ghost`, so both conditions have to be tracked —
+  // if a reload error clears `data` while scheduling is active, the panel
+  // disappears even though `scheduleLeadId` is still set, and the page would
+  // otherwise keep an empty 300–500 px gap reserved for a panel that isn't
+  // there.
   useEffect(() => {
-    if (!scheduleLeadId) setPanelHeight(0);
-  }, [scheduleLeadId]);
+    if (!scheduleLeadId || !data?.ghost) setPanelHeight(0);
+  }, [scheduleLeadId, data?.ghost]);
 
   return (
     <main
