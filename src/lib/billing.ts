@@ -89,11 +89,14 @@ export async function getBillingState(
     ? Math.ceil((trialEndsAt.getTime() - now) / (1000 * 60 * 60 * 24))
     : null;
 
+  // Strictly positive: once the trial has actually expired, the expired
+  // copy in CurrentPlanCard handles messaging — we don't want the
+  // "ends in 0 days" banner rendering alongside "Expired".
   const trialEndingSoon =
     row.plan === "trial" &&
     trialDaysRemaining !== null &&
     trialDaysRemaining <= 3 &&
-    trialDaysRemaining >= 0;
+    trialDaysRemaining > 0;
 
   // Paid-features gate:
   //   - trial that hasn't expired yet → allowed
