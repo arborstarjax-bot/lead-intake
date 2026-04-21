@@ -67,7 +67,15 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
       if (e.key === "Escape") {
         e.preventDefault();
         settle(false);
-      } else if (e.key === "Enter") {
+      } else if (
+        e.key === "Enter" &&
+        (document.activeElement === confirmBtnRef.current ||
+          document.activeElement === document.body)
+      ) {
+        // Only act on Enter when focus is on the confirm button (the
+        // default after mount) or has escaped to <body>. If the user
+        // Tab'd onto Cancel, let its native Enter handling run so they
+        // can actually cancel.
         e.preventDefault();
         settle(true);
       }
