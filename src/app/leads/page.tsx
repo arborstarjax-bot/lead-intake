@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import LeadTable, { type LeadFilter, type LeadCounts } from "@/components/LeadTable";
 import EnableNotifications from "@/components/EnableNotifications";
 import NotificationAcknowledge from "@/components/NotificationAcknowledge";
+import TodayRoute from "@/components/TodayRoute";
 import { cn } from "@/lib/utils";
 
 const TABS: { id: LeadFilter; label: string }[] = [
@@ -63,6 +64,7 @@ function LeadsPageInner() {
   const initial = filterFromParam(params.get("status"));
   const [filter, setFilter] = useState<LeadFilter>(initial);
   const [counts, setCounts] = useState<LeadCounts>(EMPTY_COUNTS);
+  const [routeRefreshKey, setRouteRefreshKey] = useState(0);
 
   function switchFilter(next: LeadFilter) {
     setFilter(next);
@@ -102,7 +104,13 @@ function LeadsPageInner() {
         </div>
       </nav>
 
-      <LeadTable filter={filter} onCounts={setCounts} />
+      <TodayRoute refreshKey={routeRefreshKey} />
+
+      <LeadTable
+        filter={filter}
+        onCounts={setCounts}
+        onScheduleChange={() => setRouteRefreshKey((k) => k + 1)}
+      />
     </main>
   );
 }
