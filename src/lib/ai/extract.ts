@@ -277,12 +277,19 @@ export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedL
     const fallback = await extractNameFromImage(client, imageUrl);
     if (fallback?.first_name) {
       parsed.first_name = fallback.first_name;
-      parsed.last_name = fallback.last_name ?? parsed.last_name;
-      parsed.confidence = {
+      // Only overwrite last_name (and its confidence) when the fallback
+      // actually produced one. Otherwise keep whatever the first pass
+      // already had — zeroing the confidence would mask a valid but
+      // uncertain original value in the review-flag logic.
+      const nextConfidence: Record<string, number> = {
         ...parsed.confidence,
         first_name: fallback.confidence?.first_name ?? 0.7,
-        last_name: fallback.confidence?.last_name ?? 0,
       };
+      if (fallback.last_name != null) {
+        parsed.last_name = fallback.last_name;
+        nextConfidence.last_name = fallback.confidence?.last_name ?? 0;
+      }
+      parsed.confidence = nextConfidence;
     }
   }
 
