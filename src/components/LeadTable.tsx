@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Phone,
   Mail,
+  MessageSquare,
   CalendarPlus,
   CalendarCheck,
   Trash2,
@@ -644,26 +645,20 @@ function ContactRow({
 }) {
   const raw = (lead[field] ?? "") as string;
   const trimmed = raw.trim();
-  const href = tel && trimmed ? `tel:${trimmed}` : email && trimmed ? `mailto:${trimmed}` : undefined;
+  const primaryHref =
+    tel && trimmed ? `tel:${trimmed}` : email && trimmed ? `mailto:${trimmed}` : undefined;
+  const smsHref = tel && trimmed ? `sms:${trimmed}` : undefined;
 
   return (
     <div className="flex items-stretch gap-1">
-      <a
-        href={href}
-        aria-disabled={!href}
-        onClick={(e) => {
-          if (!href) e.preventDefault();
-        }}
-        title={tel ? "Call" : "Email"}
-        className={cn(
-          "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition",
-          href
-            ? "border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-soft)]"
-            : "border-[var(--border)] text-[var(--subtle)] opacity-50 cursor-not-allowed"
-        )}
-      >
+      <ActionIconLink href={primaryHref} title={tel ? "Call" : "Email"}>
         {icon}
-      </a>
+      </ActionIconLink>
+      {tel && (
+        <ActionIconLink href={smsHref} title="Send text message">
+          <MessageSquare className="h-4 w-4" />
+        </ActionIconLink>
+      )}
       <InlineField
         value={raw}
         placeholder={tel ? "Phone number" : "Email address"}
@@ -676,6 +671,36 @@ function ContactRow({
         formatAs={tel ? "phone" : undefined}
       />
     </div>
+  );
+}
+
+function ActionIconLink({
+  href,
+  title,
+  children,
+}: {
+  href: string | undefined;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      aria-disabled={!href}
+      aria-label={title}
+      title={title}
+      onClick={(e) => {
+        if (!href) e.preventDefault();
+      }}
+      className={cn(
+        "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition",
+        href
+          ? "border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+          : "border-[var(--border)] text-[var(--subtle)] opacity-50 cursor-not-allowed"
+      )}
+    >
+      {children}
+    </a>
   );
 }
 
