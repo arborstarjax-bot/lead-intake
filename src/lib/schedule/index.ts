@@ -1,8 +1,13 @@
 import "server-only";
 import type { AppSettings } from "@/lib/settings";
 import { homeAddressString } from "@/lib/settings";
-import { getDriveMatrix } from "@/lib/maps";
+import { createDriveMemo } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
+
+/** Drive-time callback used internally by suggestSlots. Stable signature so
+ * the week endpoint can share a single memo across many day calls and avoid
+ * re-charging Google for pairs we've already priced. */
+export type DriveFn = ReturnType<typeof createDriveMemo>;
 
 export type SuggestHalf = "morning" | "afternoon" | "all";
 
@@ -81,6 +86,8 @@ export type SuggestInputs = {
   half: SuggestHalf;
   /** Optional override for "now" (testing only). Epoch seconds. */
   nowEpochSeconds?: number;
+  /** Optional shared memo so the week endpoint can reuse prices across days. */
+  drive?: DriveFn;
 };
 
 export type SuggestResult = {
@@ -102,6 +109,7 @@ export type SuggestResult = {
  */
 export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
   const { lead, settings, others, half } = inp;
+  const drive = inp.drive ?? createDriveMemo();
   const warnings: string[] = [];
 
   const home = homeAddressString(settings);
@@ -139,23 +147,15 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
   }
   existing.sort((a, b) => a.startMin - b.startMin);
 
-  // Batch one matrix call: origins = [home, ex_1..ex_K], destinations = [new lead].
-  const originsToNew = [home, ...existing.map((e) => e.address)];
-  const toNewMatrix = await getDriveMatrix(originsToNew, [destAddr]);
-  const driveToNewSec = {
-    fromHome: toNewMatrix[0].drive_seconds,
-    fromExisting: existing.map((_, i) => toNewMatrix[i + 1].drive_seconds),
-  };
-
-  // Batch second call only if there are any existing stops.
-  let driveFromNewSec: number[] = [];
-  if (existing.length > 0) {
-    const fromNewMatrix = await getDriveMatrix(
-      [destAddr],
-      existing.map((e) => e.address)
-    );
-    driveFromNewSec = fromNewMatrix.map((r) => r.drive_seconds);
-  }
+  // Prefetch drive times we'll need. If a shared memo was passed in (week
+  // endpoint) these calls fan into the cache instead of hitting Google again.
+  const [fromHome, toExisting, fromExisting] = await Promise.all([
+    drive(home, destAddr).then((r) => r.drive_seconds),
+    Promise.all(existing.map((e) => drive(e.address, destAddr).then((r) => r.drive_seconds))),
+    Promise.all(existing.map((e) => drive(destAddr, e.address).then((r) => r.drive_seconds))),
+  ]);
+  const driveToNewSec = { fromHome, fromExisting: toExisting };
+  const driveFromNewSec = fromExisting;
 
   const step = 30;
   const candidates: SlotSuggestion[] = [];

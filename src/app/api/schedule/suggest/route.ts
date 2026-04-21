@@ -13,6 +13,11 @@ const bodySchema = z
   .object({
     leadId: z.string().uuid(),
     half: z.enum(["morning", "afternoon", "all"]).default("all"),
+    /** Optional YYYY-MM-DD override; used by the flexible-day flow. */
+    day: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "day must be YYYY-MM-DD")
+      .optional(),
   })
   .strict();
 
@@ -47,7 +52,10 @@ export async function POST(req: Request) {
   }
   const lead = leadResp.data as Lead;
 
-  if (!lead.scheduled_day) {
+  // Caller can override the lead's own scheduled_day (flexible-day flow) by
+  // passing `day` in the body. Fall back to whatever is on the lead itself.
+  const targetDay = parsed.day ?? lead.scheduled_day;
+  if (!targetDay) {
     return NextResponse.json(
       { error: "This lead needs a scheduled day before ranking slots." },
       { status: 400 }
@@ -58,7 +66,7 @@ export async function POST(req: Request) {
   // timezone; the column is a DATE not a timestamp so string compare is safe
   // when both sides are YYYY-MM-DD.
   const todayIso = new Date().toISOString().slice(0, 10);
-  if (lead.scheduled_day < todayIso) {
+  if (targetDay < todayIso) {
     return NextResponse.json(
       { error: "That day is in the past — pick a future date." },
       { status: 400 }
@@ -71,7 +79,7 @@ export async function POST(req: Request) {
   const { data: sameDay, error: sameDayErr } = await supabase
     .from("leads")
     .select("*")
-    .eq("scheduled_day", lead.scheduled_day)
+    .eq("scheduled_day", targetDay)
     .not("scheduled_time", "is", null)
     .neq("id", lead.id);
   if (sameDayErr) {

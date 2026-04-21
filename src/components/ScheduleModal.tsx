@@ -1,7 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { X, Loader2, CalendarCheck, AlertTriangle, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  X,
+  Loader2,
+  CalendarCheck,
+  AlertTriangle,
+  Sparkles,
+  ChevronLeft,
+} from "lucide-react";
 import type { Lead } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +23,15 @@ type Slot = {
   reasoning: { priorLabel: string | null; nextLabel: string | null };
 };
 
+type DayPreview =
+  | {
+      date: string;
+      isWorkDay: true;
+      bestTotalDriveMinutes: number | null;
+      slotCount: number;
+    }
+  | { date: string; isWorkDay: false };
+
 export default function ScheduleModal({
   lead,
   onClose,
@@ -25,6 +41,16 @@ export default function ScheduleModal({
   onClose: () => void;
   onBooked: (updatedLead: Lead, htmlLink?: string) => void;
 }) {
+  // Path A vs Path B is determined by whether the lead already has a day.
+  // Once in the modal, the user can also jump back from Path A's day view
+  // to the week picker to override the customer's requested day.
+  const [selectedDay, setSelectedDay] = useState<string | null>(
+    lead.scheduled_day ?? null
+  );
+  const [view, setView] = useState<"week" | "day">(
+    lead.scheduled_day ? "day" : "week"
+  );
+
   const [half, setHalf] = useState<Half>("all");
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState<string | null>(null);
@@ -32,14 +58,42 @@ export default function ScheduleModal({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const [weekLoading, setWeekLoading] = useState(false);
+  const [weekDays, setWeekDays] = useState<DayPreview[]>([]);
+  const [weekError, setWeekError] = useState<string | null>(null);
+
+  const loadWeek = useCallback(async () => {
+    setWeekLoading(true);
+    setWeekError(null);
+    try {
+      const res = await fetch("/api/schedule/week", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: lead.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setWeekError(json.error ?? `Failed (${res.status})`);
+        setWeekDays([]);
+      } else {
+        setWeekDays(json.days ?? []);
+      }
+    } catch (e) {
+      setWeekError((e as Error).message || "Network error");
+    } finally {
+      setWeekLoading(false);
+    }
+  }, [lead.id]);
+
+  const loadSlots = useCallback(async () => {
+    if (!selectedDay) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/schedule/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId: lead.id, half }),
+        body: JSON.stringify({ leadId: lead.id, half, day: selectedDay }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -55,11 +109,15 @@ export default function ScheduleModal({
     } finally {
       setLoading(false);
     }
-  }, [lead.id, half]);
+  }, [lead.id, half, selectedDay]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (view === "week") loadWeek();
+  }, [view, loadWeek]);
+
+  useEffect(() => {
+    if (view === "day") loadSlots();
+  }, [view, loadSlots]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -70,13 +128,20 @@ export default function ScheduleModal({
   }, [onClose]);
 
   async function book(slot: Slot) {
+    if (!selectedDay) return;
     setBooking(slot.startTime);
     setError(null);
     try {
+      // Path B may need to set scheduled_day too; always include it so the
+      // lead record is authoritative before we call the calendar endpoint.
+      const patchBody: Record<string, string> = {
+        scheduled_time: slot.startTime,
+        scheduled_day: selectedDay,
+      };
       const patchRes = await fetch(`/api/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduled_time: slot.startTime }),
+        body: JSON.stringify(patchBody),
       });
       const patchJson = await patchRes.json();
       if (!patchRes.ok) throw new Error(patchJson.error ?? "Failed to set time");
@@ -84,7 +149,6 @@ export default function ScheduleModal({
       const calRes = await fetch(`/api/leads/${lead.id}/calendar`, { method: "POST" });
       const calJson = await calRes.json();
       if (calRes.status === 428) {
-        // Google Calendar not connected — offer to connect.
         if (confirm("Google Calendar is not connected. Connect now?")) {
           window.location.href = calJson.connectUrl;
         }
@@ -110,9 +174,12 @@ export default function ScheduleModal({
     }
   }
 
-  const day = lead.scheduled_day ?? "";
-  const dayLabel = formatDayLabel(day);
   const leadName = lead.client?.trim() || "this lead";
+
+  const headerTitle = useMemo(() => {
+    if (view === "week") return `${leadName} · Pick a day`;
+    return `${leadName} · ${formatDayLabel(selectedDay ?? "")}`;
+  }, [view, leadName, selectedDay]);
 
   return (
     <div
@@ -124,12 +191,21 @@ export default function ScheduleModal({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-[var(--border)]">
-          <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
-              <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" /> AI Schedule
-            </div>
-            <div className="font-semibold truncate">
-              {leadName} · {dayLabel}
+          <div className="flex items-center gap-2 min-w-0">
+            {view === "day" && (
+              <button
+                onClick={() => setView("week")}
+                aria-label="Back to week picker"
+                className="inline-flex items-center justify-center h-9 w-9 -ml-1 rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
+                <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" /> AI Schedule
+              </div>
+              <div className="font-semibold truncate">{headerTitle}</div>
             </div>
           </div>
           <button
@@ -141,69 +217,244 @@ export default function ScheduleModal({
           </button>
         </header>
 
-        <div className="px-4 py-3 border-b border-[var(--border)]">
-          <div className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1 w-full">
-            {(["morning", "afternoon", "all"] as Half[]).map((h) => (
-              <button
-                key={h}
-                onClick={() => setHalf(h)}
-                className={cn(
-                  "flex-1 h-9 rounded-lg text-sm font-medium capitalize transition-colors",
-                  half === h
-                    ? "bg-white shadow text-[var(--fg)]"
-                    : "text-[var(--muted)] hover:text-[var(--fg)]"
-                )}
-              >
-                {h === "all" ? "All day" : h}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-          {loading ? (
-            <div className="py-10 flex items-center justify-center text-[var(--muted)]">
-              <Loader2 className="h-5 w-5 animate-spin mr-2" /> Ranking slots…
-            </div>
-          ) : error ? (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2.5 text-sm">
-              <AlertTriangle className="h-4 w-4 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          ) : slots.length === 0 ? (
-            <div className="py-8 text-center text-sm text-[var(--muted)]">
-              {warnings[0] ?? "No feasible slots."}
-            </div>
-          ) : (
-            slots.map((s, i) => (
-              <SlotRow
-                key={`${s.startTime}-${i}`}
-                slot={s}
-                rank={i}
-                busy={booking === s.startTime}
-                disabled={Boolean(booking)}
-                onBook={() => book(s)}
-              />
-            ))
-          )}
-          {!loading && warnings.length > 0 && slots.length > 0 && (
-            <div className="text-[11px] text-[var(--muted)] px-1">{warnings[0]}</div>
-          )}
-        </div>
+        {view === "week" ? (
+          <WeekView
+            days={weekDays}
+            loading={weekLoading}
+            error={weekError}
+            onPick={(d) => {
+              setSelectedDay(d);
+              setView("day");
+            }}
+          />
+        ) : (
+          <DayView
+            half={half}
+            setHalf={setHalf}
+            loading={loading}
+            error={error}
+            slots={slots}
+            warnings={warnings}
+            booking={booking}
+            onBook={book}
+          />
+        )}
       </div>
     </div>
   );
 }
 
+function WeekView({
+  days,
+  loading,
+  error,
+  onPick,
+}: {
+  days: DayPreview[];
+  loading: boolean;
+  error: string | null;
+  onPick: (date: string) => void;
+}) {
+  const bestMinutes = useMemo(() => {
+    const costs = days
+      .filter((d): d is Extract<DayPreview, { isWorkDay: true }> => d.isWorkDay)
+      .map((d) => d.bestTotalDriveMinutes)
+      .filter((c): c is number => c != null);
+    return costs.length ? Math.min(...costs) : null;
+  }, [days]);
+
+  if (loading) {
+    return (
+      <div className="py-12 flex items-center justify-center text-[var(--muted)]">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Pricing each day…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="px-4 py-4">
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2.5 text-sm">
+          <AlertTriangle className="h-4 w-4 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4">
+      <div className="text-xs text-[var(--muted)] mb-2">
+        Days ranked by drive time cost. Greener = less driving.
+      </div>
+      <div className="grid grid-cols-1 gap-2">
+        {days.map((d) => (
+          <DayRow
+            key={d.date}
+            day={d}
+            bestOverall={bestMinutes}
+            onPick={() => d.isWorkDay && onPick(d.date)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DayRow({
+  day,
+  bestOverall,
+  onPick,
+}: {
+  day: DayPreview;
+  bestOverall: number | null;
+  onPick: () => void;
+}) {
+  const label = formatDayLabel(day.date);
+
+  if (!day.isWorkDay) {
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 flex items-center justify-between opacity-60">
+        <div>
+          <div className="font-medium">{label}</div>
+          <div className="text-xs text-[var(--muted)]">Day off</div>
+        </div>
+      </div>
+    );
+  }
+
+  const cost = day.bestTotalDriveMinutes;
+  const noFit = cost == null;
+  const isBest = cost != null && cost === bestOverall;
+
+  return (
+    <button
+      onClick={onPick}
+      disabled={noFit}
+      className={cn(
+        "w-full text-left rounded-xl border px-3 py-2.5 flex items-center justify-between transition active:scale-[0.99]",
+        noFit
+          ? "border-[var(--border)] bg-[var(--surface-2)] opacity-60 cursor-not-allowed"
+          : isBest
+          ? "border-[var(--accent)] bg-[var(--accent-soft)] hover:bg-[var(--accent-soft)]"
+          : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]"
+      )}
+    >
+      <div>
+        <div className="font-medium">{label}</div>
+        <div className="text-xs text-[var(--muted)] mt-0.5">
+          {noFit
+            ? "No feasible slots"
+            : day.slotCount === 1
+            ? "1 slot available"
+            : `${day.slotCount} slots available`}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {cost != null && (
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+              isBest
+                ? "bg-[var(--accent)] text-white"
+                : "bg-[var(--surface-2)] text-[var(--fg)]"
+            )}
+          >
+            +{cost} min
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function DayView({
+  half,
+  setHalf,
+  loading,
+  error,
+  slots,
+  warnings,
+  booking,
+  onBook,
+}: {
+  half: Half;
+  setHalf: (h: Half) => void;
+  loading: boolean;
+  error: string | null;
+  slots: Slot[];
+  warnings: string[];
+  booking: string | null;
+  onBook: (s: Slot) => void;
+}) {
+  // Rank order is preserved by lowest totalDriveMinutes; highlight the best.
+  const bestCost = slots.length
+    ? Math.min(...slots.map((s) => s.totalDriveMinutes))
+    : null;
+
+  return (
+    <>
+      <div className="px-4 py-3 border-b border-[var(--border)]">
+        <div className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1 w-full">
+          {(["morning", "afternoon", "all"] as Half[]).map((h) => (
+            <button
+              key={h}
+              onClick={() => setHalf(h)}
+              className={cn(
+                "flex-1 h-9 rounded-lg text-sm font-medium capitalize transition-colors",
+                half === h
+                  ? "bg-white shadow text-[var(--fg)]"
+                  : "text-[var(--muted)] hover:text-[var(--fg)]"
+              )}
+            >
+              {h === "all" ? "All day" : h}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+        {loading ? (
+          <div className="py-10 flex items-center justify-center text-[var(--muted)]">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Ranking slots…
+          </div>
+        ) : error ? (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2.5 text-sm">
+            <AlertTriangle className="h-4 w-4 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        ) : slots.length === 0 ? (
+          <div className="py-8 text-center text-sm text-[var(--muted)]">
+            {warnings[0] ?? "No feasible slots."}
+          </div>
+        ) : (
+          slots.map((s) => (
+            <SlotRow
+              key={s.startTime}
+              slot={s}
+              isBest={s.totalDriveMinutes === bestCost}
+              busy={booking === s.startTime}
+              disabled={Boolean(booking)}
+              onBook={() => onBook(s)}
+            />
+          ))
+        )}
+        {!loading && warnings.length > 0 && slots.length > 0 && (
+          <div className="text-[11px] text-[var(--muted)] px-1">{warnings[0]}</div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function SlotRow({
   slot,
-  rank,
+  isBest,
   busy,
   disabled,
   onBook,
 }: {
   slot: Slot;
-  rank: number;
+  isBest: boolean;
   busy: boolean;
   disabled: boolean;
   onBook: () => void;
@@ -223,7 +474,9 @@ function SlotRow({
     <div
       className={cn(
         "rounded-xl border p-3 flex items-center gap-3",
-        rank === 0 ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)] bg-white"
+        isBest
+          ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+          : "border-[var(--border)] bg-white"
       )}
     >
       <div className="flex-1 min-w-0">
@@ -237,13 +490,17 @@ function SlotRow({
         disabled={disabled}
         className={cn(
           "inline-flex items-center gap-1.5 h-10 px-3 rounded-lg text-sm font-semibold whitespace-nowrap transition active:scale-[0.98]",
-          rank === 0
+          isBest
             ? "bg-[var(--accent)] text-white hover:opacity-95"
             : "bg-white border border-[var(--border)] text-[var(--fg)] hover:bg-[var(--surface-2)]",
           disabled && "opacity-60 cursor-not-allowed"
         )}
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <CalendarCheck className="h-4 w-4" />
+        )}
         {busy ? "Booking…" : "Book"}
       </button>
     </div>
