@@ -66,6 +66,19 @@ export default function RouteMap({
   // One-shot: load Google Maps and instantiate the map inside the container.
   useEffect(() => {
     let cancelled = false;
+    // Google Maps auth failures (bad key, referrer mismatch, billing off) don't
+    // reject the loader promise — they fire `window.gm_authFailure`, which the
+    // loader hooks and rebroadcasts as a DOM event. Surface it as a visible
+    // error so it doesn't look like a silent blank map on iPhone.
+    const onAuthFailure = () => {
+      if (cancelled) return;
+      setStatus("error");
+      setErrorMessage(
+        window.__googleMapsAuthError ?? "Google rejected the Maps API key."
+      );
+    };
+    window.addEventListener("googleMapsAuthFailure", onAuthFailure);
+    if (window.__googleMapsAuthError) onAuthFailure();
     loadGoogleMaps()
       .then((google) => {
         if (cancelled || !containerRef.current) return;
@@ -91,6 +104,7 @@ export default function RouteMap({
       });
     return () => {
       cancelled = true;
+      window.removeEventListener("googleMapsAuthFailure", onAuthFailure);
     };
   }, []);
 

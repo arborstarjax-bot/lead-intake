@@ -20,7 +20,31 @@ type GoogleMapsNamespace = typeof google;
 declare global {
   interface Window {
     __googleMapsLoader?: Promise<GoogleMapsNamespace>;
+    // Google invokes this as `window.gm_authFailure` when the API key is
+    // rejected (bad key, referrer restriction fails, billing off, etc).
+    // Setting it is the ONLY way to observe those failures — Google does
+    // not propagate them through a Promise rejection.
+    gm_authFailure?: () => void;
+    __googleMapsAuthError?: string | null;
   }
+}
+
+/**
+ * Hook Google's auth-failure callback. Without this, a rejected key fails
+ * silently (white map container, no console error useful to end-users).
+ * We record the failure on `window.__googleMapsAuthError` so the UI can
+ * surface it alongside our own loader errors.
+ */
+function installAuthFailureHook(): void {
+  if (typeof window === "undefined") return;
+  if (window.gm_authFailure) return;
+  window.gm_authFailure = () => {
+    window.__googleMapsAuthError =
+      "Google rejected the Maps API key. Most often on iPhone this means the key's HTTP-referrer restriction doesn't match this origin, or billing/Maps JS API isn't enabled on the Google Cloud project.";
+    // Broadcast so any mounted RouteMap can flip into an error state
+    // without requiring a reload.
+    window.dispatchEvent(new Event("googleMapsAuthFailure"));
+  };
 }
 
 /**
@@ -86,6 +110,7 @@ export function loadGoogleMaps(): Promise<GoogleMapsNamespace> {
   }
 
   window.__googleMapsLoader = (async () => {
+    installAuthFailureHook();
     installInlineBootstrap(key);
     // Hydrate the library classes onto `google.maps` so callers can use
     // `new google.maps.Map(...)`, `new google.maps.Marker(...)`, and
