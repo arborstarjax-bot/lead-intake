@@ -5,6 +5,7 @@ import { getSettings } from "@/lib/settings";
 import { suggestSlots } from "@/lib/schedule";
 import { MapsUnavailableError } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
+import { todayIsoInBusinessTz } from "@/lib/date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,10 +63,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // Refuse to schedule into the past. Compare as calendar days in the local
-  // timezone; the column is a DATE not a timestamp so string compare is safe
-  // when both sides are YYYY-MM-DD.
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // Refuse to schedule into the past. Compare as calendar days in the
+  // business timezone — using UTC would block booking between ~8 PM and
+  // midnight ET because the server clock is already "tomorrow".
+  const todayIso = todayIsoInBusinessTz();
   if (targetDay < todayIso) {
     return NextResponse.json(
       { error: "That day is in the past — pick a future date." },
