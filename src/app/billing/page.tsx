@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
+import { ArrowLeft, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { getSessionMembership } from "@/lib/auth";
 import {
   getBillingState,
@@ -9,14 +9,22 @@ import {
   PRICING,
   type BillingState,
 } from "@/lib/billing";
+import { PlanCompareCard } from "./PlanCompareCard";
 
 export const dynamic = "force-dynamic";
 
-export default async function BillingPage() {
+type Props = {
+  searchParams: Promise<{ status?: string }>;
+};
+
+export default async function BillingPage({ searchParams }: Props) {
   const auth = await getSessionMembership();
   if (!auth) redirect("/login?next=/billing");
 
-  const billing = await getBillingState(auth.workspaceId);
+  const [billing, params] = await Promise.all([
+    getBillingState(auth.workspaceId),
+    searchParams,
+  ]);
   const isAdmin = auth.role === "admin";
 
   return (
@@ -31,6 +39,9 @@ export default async function BillingPage() {
         <h1 className="text-lg sm:text-xl font-semibold">Billing</h1>
         <span className="text-xs text-[var(--muted)]">{auth.email}</span>
       </header>
+
+      {params.status === "success" && <CheckoutSuccessBanner />}
+      {params.status === "canceled" && <CheckoutCanceledBanner />}
 
       {billing.trialEndingSoon && (
         <TrialEndingBanner billing={billing} isAdmin={isAdmin} />
@@ -48,6 +59,29 @@ export default async function BillingPage() {
 
       {isAdmin && <PlanCompareCard billing={billing} />}
     </main>
+  );
+}
+
+function CheckoutSuccessBanner() {
+  return (
+    <div className="rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-hover)] p-4 flex items-start gap-3">
+      <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0" />
+      <div className="text-sm">
+        <div className="font-semibold">You&apos;re all set</div>
+        <div className="mt-1 opacity-90">
+          Your plan will refresh in a moment. If it doesn&apos;t update, reload
+          this page — Stripe notifies us via webhook.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CheckoutCanceledBanner() {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--muted)] p-4 text-sm">
+      Checkout canceled. Your plan hasn&apos;t changed.
+    </div>
   );
 }
 
@@ -196,121 +230,6 @@ function LapsedBanner({ billing }: { billing: BillingState }) {
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function PlanCompareCard({ billing }: { billing: BillingState }) {
-  const currentPlan = billing.plan;
-  return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5 space-y-4">
-      <div>
-        <div className="text-xs uppercase tracking-wide text-[var(--muted)]">
-          Plans
-        </div>
-        <h2 className="text-base font-semibold mt-0.5">Compare tiers</h2>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <PlanTile
-          name="Starter"
-          price="$29.99/mo"
-          seatAddon="$9.99 per additional user"
-          features={[
-            "30 uploads / day (shared across workspace)",
-            "1 seat included",
-            "Unlimited members (add seats as needed)",
-            "Calendar + SMS automation",
-          ]}
-          current={currentPlan === "starter"}
-          isTrial={currentPlan === "trial"}
-        />
-        <PlanTile
-          name="Pro"
-          price="$59.99/mo"
-          seatAddon="$9.99 per additional user"
-          features={[
-            "Unlimited uploads",
-            "1 seat included",
-            "Unlimited members (add seats as needed)",
-            "Everything in Starter",
-          ]}
-          highlight
-          current={currentPlan === "pro"}
-          isTrial={currentPlan === "trial"}
-        />
-      </div>
-
-      <p className="text-xs text-[var(--muted)]">
-        Both tiers include a 14-day free trial. Upgrade at any time — we only
-        charge once the trial ends.
-      </p>
-    </section>
-  );
-}
-
-function PlanTile({
-  name,
-  price,
-  seatAddon,
-  features,
-  highlight,
-  current,
-  isTrial,
-}: {
-  name: string;
-  price: string;
-  seatAddon: string;
-  features: string[];
-  highlight?: boolean;
-  current: boolean;
-  isTrial: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-lg border p-4 space-y-3 ${
-        highlight
-          ? "border-[var(--accent)] ring-1 ring-[var(--accent)]/20 bg-[var(--accent-soft)]/40"
-          : "border-[var(--border)]"
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold">{name}</span>
-            {highlight && (
-              <Sparkles className="h-4 w-4 text-[var(--accent)]" />
-            )}
-          </div>
-          <div className="text-lg font-semibold mt-0.5">{price}</div>
-          <div className="text-xs text-[var(--muted)]">{seatAddon}</div>
-        </div>
-        {current && (
-          <span className="text-xs font-medium px-2 py-1 rounded-full bg-[var(--accent)] text-[var(--accent-fg)]">
-            Current
-          </span>
-        )}
-      </div>
-      <ul className="space-y-1.5 text-sm">
-        {features.map((f) => (
-          <li key={f} className="flex items-start gap-2">
-            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-[var(--accent)]" />
-            <span>{f}</span>
-          </li>
-        ))}
-      </ul>
-      <button
-        type="button"
-        disabled
-        className="w-full px-3 py-2 rounded-md bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-medium opacity-50 cursor-not-allowed"
-        title="Coming soon"
-      >
-        {current
-          ? "Current plan"
-          : isTrial
-            ? `Start ${name}`
-            : `Switch to ${name}`}
-      </button>
     </div>
   );
 }
