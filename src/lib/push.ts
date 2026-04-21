@@ -6,6 +6,7 @@ type PushRow = {
   endpoint: string;
   p256dh: string;
   auth: string;
+  last_acknowledged_at: string;
 };
 
 let configured = false;
@@ -20,37 +21,62 @@ function configure() {
   return true;
 }
 
-export type PushPayload = {
-  title: string;
-  body: string;
+export type NewLeadPushInput = {
+  /** Most recent lead summary (shown in the body if only one is unseen). */
+  latestLead: { client: string | null; phone_number: string | null } | null;
+  /** Deep-link target for the notification tap. */
   url?: string;
-  badgeCount?: number;
-  tag?: string;
 };
 
 /**
- * Fan out a Web Push notification to every stored subscription.
- * Dead subscriptions (410/404) are removed so the table stays clean.
+ * Fan out a "new lead" push to every stored subscription. Each subscription
+ * gets its own payload because the badge count / title depend on how many
+ * leads arrived since that device last opened the app. Dead subscriptions
+ * (410/404) are pruned so the table stays clean.
+ *
  * Silently no-ops if VAPID keys are not configured — push is optional.
  */
-export async function sendPushToAll(payload: PushPayload): Promise<void> {
+export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
   if (!configure()) return;
   const admin = createAdminClient();
   const { data: subs } = await admin
     .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth");
+    .select("id, endpoint, p256dh, auth, last_acknowledged_at");
   if (!subs || subs.length === 0) return;
 
-  const body = JSON.stringify(payload);
   await Promise.all(
     (subs as PushRow[]).map(async (s) => {
+      // How many leads has this device not yet seen (including the one
+      // that just triggered this push).
+      const { count } = await admin
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .gt("created_at", s.last_acknowledged_at);
+      const unseen = count ?? 1;
+
+      const title = unseen === 1 ? "New lead" : `${unseen} new leads`;
+      const body =
+        unseen === 1 && input.latestLead
+          ? [input.latestLead.client, input.latestLead.phone_number]
+              .filter(Boolean)
+              .join(" · ") || "Tap to review."
+          : "Tap to review.";
+
+      const payload = JSON.stringify({
+        title,
+        body,
+        url: input.url ?? "/leads",
+        badgeCount: unseen,
+        tag: "new-lead",
+      });
+
       try {
         await webpush.sendNotification(
           {
             endpoint: s.endpoint,
             keys: { p256dh: s.p256dh, auth: s.auth },
           },
-          body
+          payload
         );
         await admin
           .from("push_subscriptions")
@@ -71,12 +97,14 @@ export async function sendPushToAll(payload: PushPayload): Promise<void> {
   );
 }
 
-/** Count of unread-ish leads for iOS app-icon badge. */
-export async function currentBadgeCount(): Promise<number> {
+/**
+ * Mark a subscription as "caught up as of now" so its future badge counts
+ * restart from zero.
+ */
+export async function acknowledgeSubscription(endpoint: string): Promise<void> {
   const admin = createAdminClient();
-  const { count } = await admin
-    .from("leads")
-    .select("id", { count: "exact", head: true })
-    .neq("status", "Completed");
-  return count ?? 0;
+  await admin
+    .from("push_subscriptions")
+    .update({ last_acknowledged_at: new Date().toISOString() })
+    .eq("endpoint", endpoint);
 }

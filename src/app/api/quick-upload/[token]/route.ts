@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ingestScreenshot } from "@/lib/ingest";
 import { maybeConvertHeic } from "@/lib/convert-heic";
 import { safeCompare } from "@/lib/utils";
-import { sendPushToAll, currentBadgeCount } from "@/lib/push";
+import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -45,15 +45,14 @@ export async function POST(
       const admin = createAdminClient();
       const { data: leads } = await admin
         .from("leads")
-        .select("client, phone_number")
-        .in("id", results.map((r) => r.lead_id));
-      const badgeCount = await currentBadgeCount();
-      const pluralized = results.length === 1 ? "New lead (boss link)" : `${results.length} new leads (boss link)`;
-      const first = leads?.[0];
-      const body = first
-        ? [first.client, first.phone_number].filter(Boolean).join(" · ") || "Open to review."
-        : "Open to review.";
-      await sendPushToAll({ title: pluralized, body, url: "/leads", badgeCount, tag: "new-lead" });
+        .select("client, phone_number, created_at")
+        .in("id", results.map((r) => r.lead_id))
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const latestLead = leads?.[0]
+        ? { client: leads[0].client, phone_number: leads[0].phone_number }
+        : null;
+      await sendNewLeadPush({ latestLead });
     } catch {}
   }
 
