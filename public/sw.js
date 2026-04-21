@@ -4,7 +4,7 @@
 // data; stale SSR HTML would silently hide newly-uploaded leads. Runtime
 // caching is limited to static assets.
 
-const STATIC_CACHE = "lead-intake-static-v3";
+const STATIC_CACHE = "leadflow-static-v4";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/icon-192.png",
@@ -71,7 +71,7 @@ self.addEventListener("push", (event) => {
     body: payload.body || "",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    tag: payload.tag || "lead-intake",
+    tag: payload.tag || "leadflow",
     data: { url: payload.url || "/leads" },
     renotify: true,
   };

@@ -4,7 +4,7 @@ import { ToastProvider } from "@/components/Toast";
 import { SettingsProvider } from "@/components/SettingsProvider";
 
 export const metadata: Metadata = {
-  title: "Lead Intake",
+  title: "LeadFlow",
   description: "Upload screenshots, extract leads, call/text/email, schedule.",
   // iOS Safari in standalone (PWA) mode defaults to a strict referrer policy
   // that sends no Referer header on cross-origin requests. That causes the
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Lead Intake",
+    title: "LeadFlow",
   },
   icons: {
     apple: "/apple-touch-icon.png",
