@@ -79,6 +79,10 @@ type DayPreview =
       date: string;
       isWorkDay: true;
       bestTotalDriveMinutes: number | null;
+      /** Minutes of ranking discount because the day has same-area stops. */
+      clusterBonusMinutes: number;
+      /** What the UI actually sorts by: best - clusterBonus (min 0). */
+      effectiveBestMinutes: number | null;
       slotCount: number;
     }
   | { date: string; isWorkDay: false };
@@ -496,12 +500,16 @@ function DayPicker({
     };
   }, [scheduleLeadId]);
 
+  // Best day is ranked on effectiveBestMinutes, which factors in clustering
+  // bonuses. A day with 22 min driving + a same-zip stop already booked can
+  // beat a day with 20 min driving and nothing booked nearby, because
+  // stacking the route in the same area saves driving across the whole week.
   const bestMinutes = useMemo(() => {
     if (!week) return null;
     const costs: number[] = [];
     for (const d of week.values()) {
-      if (d.isWorkDay && d.bestTotalDriveMinutes != null)
-        costs.push(d.bestTotalDriveMinutes);
+      if (d.isWorkDay && d.effectiveBestMinutes != null)
+        costs.push(d.effectiveBestMinutes);
     }
     return costs.length ? Math.min(...costs) : null;
   }, [week]);
@@ -564,17 +572,29 @@ function DayChipBadge({
     );
   }
   const cost = preview.bestTotalDriveMinutes ?? null;
-  const isBest = best != null && cost != null && cost === best;
+  const effective = preview.effectiveBestMinutes ?? null;
+  const isBest = best != null && effective != null && effective === best;
+  const clustered = preview.clusterBonusMinutes > 0;
   return (
     <span
       className={cn(
-        "absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1 rounded whitespace-nowrap",
+        "absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[9px] px-1 rounded whitespace-nowrap inline-flex items-center gap-0.5",
         isBest
           ? "bg-emerald-600 text-white"
           : "bg-emerald-50 text-emerald-800"
       )}
+      title={
+        clustered
+          ? `${preview.clusterBonusMinutes}m cluster bonus — already working this area`
+          : undefined
+      }
     >
       {cost != null ? `+${cost}m` : "ok"}
+      {clustered && (
+        <span aria-hidden className="text-[8px] leading-none">
+          •
+        </span>
+      )}
     </span>
   );
 }
