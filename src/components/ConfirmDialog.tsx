@@ -44,7 +44,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const confirm = useCallback<ConfirmAPI>(
     (opts) =>
       new Promise<boolean>((resolve) => {
-        setPending({ opts, resolve });
+        setPending((prev) => {
+          // If a dialog is already pending and a second call comes in
+          // (e.g. two concurrent API responses both need a confirm),
+          // auto-cancel the first so its caller's `finally` still runs
+          // and the UI doesn't freeze in a busy/disabled state.
+          prev?.resolve(false);
+          return { opts, resolve };
+        });
       }),
     []
   );
