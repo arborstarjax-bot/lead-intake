@@ -83,7 +83,7 @@ export default function RoutePage() {
   );
 
   const [selectedDay, setSelectedDay] = useState<string>(todayIso);
-  const [mode, setMode] = useState<RouteMapMode>("pins");
+  const [mode, setMode] = useState<RouteMapMode>("route");
   const [data, setData] = useState<RouteResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
