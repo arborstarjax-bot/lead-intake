@@ -181,16 +181,18 @@ export default function RouteMap({ home, stops, mode, ghost }: Props) {
       anyPoint = true;
     }
 
-    // Draw connectors: either straight polylines (fast + free) or the
-    // actual driving route via DirectionsService.
-    if (mode === "pins") {
-      drawStraightPolylines({ google, map, home, stops, ghost, polylinesRef });
-    } else if (mode === "route" && stops.length > 0) {
+    // Pins mode: show markers only, no connectors between them.
+    // Route mode: draw the actual driving path via DirectionsService.
+    if (mode === "route" && stops.length > 0) {
       drawDirections({ google, map, home, stops, directionsRef }).catch(() => {
-        // Fall back to straight lines if Directions fails (quota, no route
-        // between points, etc.). The map shouldn't go blank.
-        drawStraightPolylines({ google, map, home, stops, ghost, polylinesRef });
+        // If Directions fails (quota, no route, etc.) silently degrade to
+        // pins-only — markers are already on the map.
       });
+    }
+    // Ghost preview connector (dashed) renders in both modes when a ghost
+    // pin is being previewed from the scheduler.
+    if (ghost && home) {
+      drawGhostConnector({ google, map, home, ghost, polylinesRef });
     }
 
     if (anyPoint) {
@@ -230,56 +232,35 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function drawStraightPolylines({
+function drawGhostConnector({
   google,
   map,
   home,
-  stops,
   ghost,
   polylinesRef,
 }: {
   google: typeof window.google;
   map: google.maps.Map;
-  home: RouteMapHome | null;
-  stops: RouteMapStop[];
-  ghost: RouteMapStop | null | undefined;
+  home: RouteMapHome;
+  ghost: RouteMapStop;
   polylinesRef: React.MutableRefObject<google.maps.Polyline[]>;
 }) {
-  const path: google.maps.LatLngLiteral[] = [];
-  if (home) path.push({ lat: home.lat, lng: home.lng });
-  for (const s of stops) path.push({ lat: s.lat, lng: s.lng });
-  if (home && stops.length > 0) path.push({ lat: home.lat, lng: home.lng });
-
-  if (path.length >= 2) {
-    const line = new google.maps.Polyline({
-      path,
-      map,
-      strokeColor: "#2563eb",
-      strokeOpacity: 0.8,
-      strokeWeight: 3,
-    });
-    polylinesRef.current.push(line);
-  }
-
-  // Ghost connector: dashed line from home to the ghost slot.
-  if (ghost && home) {
-    const dashed = new google.maps.Polyline({
-      path: [
-        { lat: home.lat, lng: home.lng },
-        { lat: ghost.lat, lng: ghost.lng },
-      ],
-      map,
-      strokeOpacity: 0,
-      icons: [
-        {
-          icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 },
-          offset: "0",
-          repeat: "10px",
-        },
-      ],
-    });
-    polylinesRef.current.push(dashed);
-  }
+  const dashed = new google.maps.Polyline({
+    path: [
+      { lat: home.lat, lng: home.lng },
+      { lat: ghost.lat, lng: ghost.lng },
+    ],
+    map,
+    strokeOpacity: 0,
+    icons: [
+      {
+        icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 },
+        offset: "0",
+        repeat: "10px",
+      },
+    ],
+  });
+  polylinesRef.current.push(dashed);
 }
 
 async function drawDirections({
