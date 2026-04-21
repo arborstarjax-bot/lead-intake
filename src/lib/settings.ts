@@ -25,6 +25,7 @@ export type AppSettings = {
   default_salesperson: string | null;
   sms_intro_template: string | null;
   sms_confirm_template: string | null;
+  sms_enroute_template: string | null;
   email_subject_template: string | null;
   email_body_template: string | null;
 
@@ -51,6 +52,7 @@ export type AppSettingsPatch = Partial<
     | "default_salesperson"
     | "sms_intro_template"
     | "sms_confirm_template"
+    | "sms_enroute_template"
     | "email_subject_template"
     | "email_body_template"
   >
@@ -76,6 +78,7 @@ export function defaultSettings(workspaceId: string): AppSettings {
     default_salesperson: null,
     sms_intro_template: null,
     sms_confirm_template: null,
+    sms_enroute_template: null,
     email_subject_template: null,
     email_body_template: null,
     created_at: now,

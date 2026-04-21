@@ -59,6 +59,7 @@ const EDITABLE_KEYS = [
   "default_salesperson",
   "sms_intro_template",
   "sms_confirm_template",
+  "sms_enroute_template",
   "email_subject_template",
   "email_body_template",
   "home_address",
@@ -341,6 +342,12 @@ export default function SettingsPage() {
           rows={4}
           value={s.sms_confirm_template ?? ""}
           onChange={(v) => update("sms_confirm_template", v)}
+        />
+        <TemplateField
+          label="En route SMS (I'm on my way)"
+          rows={4}
+          value={s.sms_enroute_template ?? ""}
+          onChange={(v) => update("sms_enroute_template", v)}
         />
       </Panel>
 

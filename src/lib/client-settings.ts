@@ -26,6 +26,7 @@ export type ClientAppSettings = {
   default_salesperson: string | null;
   sms_intro_template: string | null;
   sms_confirm_template: string | null;
+  sms_enroute_template: string | null;
   email_subject_template: string | null;
   email_body_template: string | null;
 
@@ -51,6 +52,7 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
   default_salesperson: null,
   sms_intro_template: null,
   sms_confirm_template: null,
+  sms_enroute_template: null,
   email_subject_template: null,
   email_body_template: null,
   created_at: "",

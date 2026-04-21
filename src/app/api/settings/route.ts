@@ -33,6 +33,7 @@ const bodySchema = z
     default_salesperson: z.string().trim().max(80).nullable().optional(),
     sms_intro_template: z.string().nullable().optional(),
     sms_confirm_template: z.string().nullable().optional(),
+    sms_enroute_template: z.string().nullable().optional(),
     email_subject_template: z.string().nullable().optional(),
     email_body_template: z.string().nullable().optional(),
   })
