@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Loader2, RotateCcw, Shield, UserMinus, UserCog } from "lucide-react";
+import { Copy, Link as LinkIcon, Loader2, RotateCcw, Shield, UserMinus, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { logout } from "@/app/login/actions";
@@ -37,6 +37,18 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
       toast({ kind: "success", message: "Join code copied" });
     } catch {
       toast({ kind: "error", message: "Copy failed — select the code manually" });
+    }
+  }
+
+  async function copyInviteLink() {
+    // Build the invite URL on the client so self-hosting / custom
+    // domains "just work" without an env var.
+    const url = `${window.location.origin}/signup?code=${joinCode}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ kind: "success", message: "Invite link copied" });
+    } catch {
+      toast({ kind: "error", message: "Copy failed — long-press to copy manually" });
     }
   }
 
@@ -114,8 +126,15 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
 
         <div className="rounded-xl bg-[var(--surface-2)] p-3 space-y-2">
           <div className="text-xs font-medium text-[var(--muted)]">
-            Join code — share with teammates to add them
+            Invite a teammate — share the link or the code
           </div>
+          <button
+            type="button"
+            onClick={copyInviteLink}
+            className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] text-white h-11 text-sm font-semibold"
+          >
+            <LinkIcon className="h-4 w-4" /> Copy invite link
+          </button>
           <div className="flex items-center gap-2">
             <code className="flex-1 font-mono text-xl tracking-widest bg-white border border-[var(--border)] rounded-lg px-3 h-11 flex items-center">
               {joinCode}
@@ -125,7 +144,7 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
               onClick={copyCode}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm font-medium"
             >
-              <Copy className="h-4 w-4" /> Copy
+              <Copy className="h-4 w-4" /> Code
             </button>
           </div>
           {isAdmin && (

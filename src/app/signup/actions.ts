@@ -40,9 +40,6 @@ export async function signup(form: FormData): Promise<SignupResult> {
       .maybeSingle();
     if (!ws) return { error: "No workspace found for that join code" };
     targetWorkspaceId = ws.id;
-  } else {
-    const wsName = String(form.get("workspace_name") ?? "").trim();
-    if (!wsName) return { error: "Workspace name is required" };
   }
 
   // Create the auth user via the server-session client so the session
@@ -61,8 +58,15 @@ export async function signup(form: FormData): Promise<SignupResult> {
 
   try {
     if (mode === "create") {
-      const wsName = String(form.get("workspace_name") ?? "").trim();
       const joinCode = await generateJoinCode();
+      // Derive a workspace name from the admin's email (e.g.
+      // "arborstarjax's Workspace") so the /workspace page has a
+      // readable label without asking for input on signup. The admin
+      // can rename it later from /workspace.
+      const emailPrefix = email.split("@")[0] ?? "";
+      const wsName = emailPrefix
+        ? `${emailPrefix}'s Workspace`
+        : `Workspace ${joinCode}`;
       const { data: ws, error: wsErr } = await admin
         .from("workspaces")
         .insert({ name: wsName, join_code: joinCode, created_by: userId })

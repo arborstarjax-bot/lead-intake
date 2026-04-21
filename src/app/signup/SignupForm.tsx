@@ -6,39 +6,44 @@ import { signup } from "./actions";
 
 type Mode = "create" | "join";
 
-export function SignupForm() {
+export function SignupForm({ invitedCode }: { invitedCode: string | null }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("create");
+  // An invite link locks the flow to "join" mode — no toggle, no
+  // create-workspace path — so the invitee only has to type email +
+  // password.
+  const [mode, setMode] = useState<Mode>(invitedCode ? "join" : "create");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-1 rounded-full bg-[var(--surface-2)] p-1 text-sm font-medium">
-        <button
-          type="button"
-          onClick={() => setMode("create")}
-          className={`h-9 rounded-full transition-colors ${
-            mode === "create"
-              ? "bg-white text-[var(--fg)] shadow-sm"
-              : "text-[var(--muted)]"
-          }`}
-        >
-          Create workspace
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("join")}
-          className={`h-9 rounded-full transition-colors ${
-            mode === "join"
-              ? "bg-white text-[var(--fg)] shadow-sm"
-              : "text-[var(--muted)]"
-          }`}
-        >
-          Join with code
-        </button>
-      </div>
+      {!invitedCode && (
+        <div className="grid grid-cols-2 gap-1 rounded-full bg-[var(--surface-2)] p-1 text-sm font-medium">
+          <button
+            type="button"
+            onClick={() => setMode("create")}
+            className={`h-9 rounded-full transition-colors ${
+              mode === "create"
+                ? "bg-white text-[var(--fg)] shadow-sm"
+                : "text-[var(--muted)]"
+            }`}
+          >
+            New workspace
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("join")}
+            className={`h-9 rounded-full transition-colors ${
+              mode === "join"
+                ? "bg-white text-[var(--fg)] shadow-sm"
+                : "text-[var(--muted)]"
+            }`}
+          >
+            Join with code
+          </button>
+        </div>
+      )}
 
       <form
         className="space-y-3"
@@ -88,21 +93,7 @@ export function SignupForm() {
             className="w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm"
           />
         </label>
-        {mode === "create" ? (
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-              Workspace name
-            </span>
-            <input
-              name="workspace_name"
-              type="text"
-              required
-              maxLength={80}
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm"
-              placeholder="e.g. Arbor Tech 904"
-            />
-          </label>
-        ) : (
+        {mode === "join" && (
           <label className="block space-y-1">
             <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
               Join code
@@ -113,9 +104,13 @@ export function SignupForm() {
               required
               maxLength={8}
               minLength={8}
+              defaultValue={invitedCode ?? ""}
+              readOnly={Boolean(invitedCode)}
               autoCapitalize="characters"
               autoCorrect="off"
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm font-mono uppercase tracking-widest"
+              className={`w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm font-mono uppercase tracking-widest ${
+                invitedCode ? "bg-[var(--surface-2)] text-[var(--muted)]" : ""
+              }`}
               placeholder="8 characters"
             />
           </label>
