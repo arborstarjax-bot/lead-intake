@@ -45,6 +45,8 @@ export type Lead = {
   screenshot_path: string | null;
   extraction_confidence: Record<string, number> | null;
   calendar_event_id: string | null;
+  calendar_scheduled_day: string | null;
+  calendar_scheduled_time: string | null;
   intake_source: LeadIntakeSource;
   intake_status: LeadIntakeStatus;
 };

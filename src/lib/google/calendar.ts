@@ -113,3 +113,50 @@ export async function deleteCalendarEvent(
     }
   );
 }
+
+/**
+ * Update an existing Google Calendar event in place with the lead's current
+ * scheduled day/time and fresh metadata. Used when a lead that was already
+ * pushed to the calendar has its Scheduled Day or Time changed — we PATCH
+ * the existing event instead of creating a duplicate.
+ */
+export async function updateCalendarEvent(
+  accessToken: string,
+  eventId: string,
+  lead: Lead
+): Promise<GoogleEvent> {
+  if (!canSchedule(lead)) {
+    throw new Error("Lead has no valid scheduled_day (YYYY-MM-DD).");
+  }
+  const times = buildStartEnd(lead.scheduled_day!, lead.scheduled_time);
+  if (!times) throw new Error("Invalid scheduled_day.");
+
+  const body = {
+    summary: calendarEventTitle({
+      first_name: lead.first_name,
+      last_name: lead.last_name,
+      zip: lead.zip,
+      phone_number: lead.phone_number,
+      email: lead.email,
+    }),
+    description: buildDescription(lead),
+    location: buildLocation(lead),
+    ...times,
+  };
+
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Google Calendar update failed: ${res.status} ${await res.text()}`);
+  }
+  return (await res.json()) as GoogleEvent;
+}
