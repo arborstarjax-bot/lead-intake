@@ -15,11 +15,15 @@
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
 
-  /* Accents */
-  --accent: #059669;
-  --accent-hover: #047857;
+  /* Brand (LeadFlow greens, sampled from logo) */
+  --accent: #166534;
+  --accent-hover: #14532d;
   --accent-fg: #ffffff;
-  --accent-soft: #d1fae5;
+  --accent-soft: #dcfce7;
+  /* Bright leaf green used for highlights / success chips / primary CTA
+     flourishes. Pairs with --accent as the deeper ring color. */
+  --brand-bright: #43B02A;
+  --brand-bright-hover: #358C21;
   --link: #0ea5e9;
 
   /* Semantics */
@@ -27,18 +31,18 @@
   --danger-soft: #fee2e2;
   --warning: #b45309;
   --warning-soft: #fef3c7;
-  --success: #047857;
-  --success-soft: #d1fae5;
+  --success: #166534;
+  --success-soft: #dcfce7;
 
   /* Status palette (sequential, for lead lifecycle) */
   --status-new-fg: #1e3a8a;
   --status-new-bg: #dbeafe;
   --status-called-fg: #92400e;
   --status-called-bg: #fef3c7;
-  --status-scheduled-fg: #3730a3;
-  --status-scheduled-bg: #e0e7ff;
-  --status-completed-fg: #065f46;
-  --status-completed-bg: #d1fae5;
+  --status-scheduled-fg: #14532d;
+  --status-scheduled-bg: #dcfce7;
+  --status-completed-fg: #14532d;
+  --status-completed-bg: #bbf7d0;
 }
 
 html,
@@ -86,7 +90,7 @@ textarea {
 .field-input:focus {
   background: #fff;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.15);
 }
 .field-input.invalid-soft {
   background: var(--warning-soft);
