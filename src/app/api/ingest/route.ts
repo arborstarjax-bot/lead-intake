@@ -10,10 +10,12 @@ import type { Lead } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Per-user ingest cap: each screenshot triggers a GPT-4o vision call, which is
-// the most expensive operation in the app. 60 uploads/hour is ~2× a busy day's
-// real usage and still caps a runaway client loop at a bounded cost.
-const INGEST_LIMIT_PER_HOUR = 60;
+// Per-workspace ingest cap on the Starter tier. Each screenshot triggers a
+// GPT-4o vision call, which is the most expensive operation in the app. 30
+// uploads/day matches the Starter plan's per-workspace allotment; Pro-tier
+// workspaces will bypass this cap once billing is wired (see TODO below).
+const INGEST_LIMIT_PER_DAY = 30;
+const INGEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   const auth = await requireMembership();
@@ -26,17 +28,23 @@ export async function POST(req: NextRequest) {
   }
 
   // Count each uploaded file as a separate hit: a batch of 10 screenshots
-  // burns 10 OpenAI calls even though it's one request.
+  // burns 10 OpenAI calls even though it's one request. Keyed by workspace
+  // (not user) because the Starter plan sells a workspace-level quota — a
+  // five-person team still shares the same 30/day bucket.
+  //
+  // TODO(billing): once plans exist on the workspace row, skip this whole
+  // block when plan === 'pro' (unlimited tier).
   const limit = checkRateLimit({
-    key: rateLimitKey(["ingest", auth.workspaceId, auth.userId]),
-    limit: INGEST_LIMIT_PER_HOUR,
-    windowMs: 60 * 60 * 1000,
+    key: rateLimitKey(["ingest", auth.workspaceId]),
+    limit: INGEST_LIMIT_PER_DAY,
+    windowMs: INGEST_WINDOW_MS,
     cost: files.length,
   });
   if (!limit.ok) {
+    const hours = Math.ceil((limit.retryAfterSeconds ?? 0) / 3600);
     return NextResponse.json(
       {
-        error: `Upload limit reached (${INGEST_LIMIT_PER_HOUR}/hour). Try again in ${limit.retryAfterSeconds}s.`,
+        error: `Daily upload limit reached (${INGEST_LIMIT_PER_DAY}/day on Starter). Try again in ~${hours}h or upgrade to Pro for unlimited uploads.`,
       },
       {
         status: 429,
