@@ -5,6 +5,7 @@ import {
   Phone,
   Mail,
   CalendarPlus,
+  CalendarCheck,
   Trash2,
   Image as ImageIcon,
   Undo2,
@@ -275,22 +276,49 @@ function Row({
   const canCalendar = Boolean(lead.scheduled_day);
   const needsReview = lead.intake_status === "needs_review" || lead.intake_status === "failed";
 
+  // "Lead Scheduled": a Google event already exists AND the lead's scheduled
+  // day/time still match what was synced. Changing either field puts the
+  // row back in a "needs resync" state so the button re-enables.
+  const scheduledInSync =
+    Boolean(lead.calendar_event_id) &&
+    lead.calendar_scheduled_day === lead.scheduled_day &&
+    (lead.calendar_scheduled_time ?? null) === (lead.scheduled_time ?? null);
+  const needsResync = Boolean(lead.calendar_event_id) && !scheduledInSync;
+
   return (
     <tr className={cn("odd:bg-white even:bg-gray-50", needsReview && "bg-amber-50")}>
       <td className="sticky left-0 z-10 bg-inherit border-b border-[var(--border)] px-1 py-1 align-middle">
-        <button
-          onClick={onAddCalendar}
-          disabled={!canCalendar}
-          title={canCalendar ? "Add to Google Calendar" : "Set Scheduled Day first"}
-          className={cn(
-            "inline-flex items-center justify-center h-9 w-9 rounded-md border",
-            canCalendar
-              ? "border-[var(--accent)] text-[var(--accent)] hover:bg-blue-50"
-              : "border-[var(--border)] text-[var(--muted)] opacity-50 cursor-not-allowed"
-          )}
-        >
-          <CalendarPlus className="h-4 w-4" />
-        </button>
+        {scheduledInSync ? (
+          <span
+            title="Calendar event created. Change Scheduled Day/Time to resync."
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 h-9 text-xs font-medium text-emerald-700 whitespace-nowrap"
+          >
+            <CalendarCheck className="h-4 w-4" />
+            Lead Scheduled
+          </span>
+        ) : (
+          <button
+            onClick={onAddCalendar}
+            disabled={!canCalendar}
+            title={
+              needsResync
+                ? "Scheduled time changed — click to update calendar event"
+                : canCalendar
+                ? "Add to Google Calendar"
+                : "Set Scheduled Day first"
+            }
+            className={cn(
+              "inline-flex items-center justify-center h-9 w-9 rounded-md border",
+              needsResync
+                ? "border-amber-500 text-amber-700 hover:bg-amber-50"
+                : canCalendar
+                ? "border-[var(--accent)] text-[var(--accent)] hover:bg-blue-50"
+                : "border-[var(--border)] text-[var(--muted)] opacity-50 cursor-not-allowed"
+            )}
+          >
+            <CalendarPlus className="h-4 w-4" />
+          </button>
+        )}
       </td>
       {COLUMNS.map((c) => (
         <Cell key={c.key as string} column={c} lead={lead} onPatch={onPatch} />
