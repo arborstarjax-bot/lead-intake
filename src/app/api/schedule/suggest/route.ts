@@ -74,9 +74,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // Only count other leads that are pinned to a specific time on the same day.
-  // Completed/Lost are kept so we don't pile jobs on top of history, though in
-  // practice completed jobs from today still reflect actual traffic.
+  // Only count other leads that are pinned to a specific time on the same day
+  // and still on the calendar. Completed jobs are excluded intentionally — once
+  // a job is done it's off Google Calendar and no longer occupies the slot, so
+  // new work can be scheduled in its place without an artificial overlap.
   const { data: sameDay, error: sameDayErr } = await supabase
     .from("leads")
     .select("*")
