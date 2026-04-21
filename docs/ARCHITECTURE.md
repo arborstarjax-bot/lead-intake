@@ -1,4 +1,4 @@
-# Lead Intake — Architecture & MVP Plan
+# LeadFlow — Architecture & MVP Plan
 
 ## 1. Recommended architecture
 

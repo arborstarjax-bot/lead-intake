@@ -1,4 +1,4 @@
-# Lead Intake
+# LeadFlow
 
 Mobile-optimized, installable PWA for turning iPhone screenshots of estimate
 requests into an editable, spreadsheet-style leads table.

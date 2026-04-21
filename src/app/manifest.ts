@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Lead Intake",
-    short_name: "Leads",
+    name: "LeadFlow",
+    short_name: "LeadFlow",
     description: "Screenshot → AI-extracted lead → editable table.",
     start_url: "/",
     scope: "/",
