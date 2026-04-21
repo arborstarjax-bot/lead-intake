@@ -35,19 +35,30 @@ Angi, Google Lead Forms, voicemail transcriptions, handwritten notes, emails, et
 
 Rules:
 - Extract ONLY what is clearly visible or strongly implied. Never invent data.
-- Names: split into first_name and last_name when possible. If only one token is
-  present, put it in first_name and leave last_name null.
-- Contact name sources (in priority order):
+- Names: you MUST look everywhere in the image for the lead's name. Do not give
+  up if the message body omits it. Always scan ALL of these locations, in this
+  priority order, and use the first one that yields a person name:
     1. Explicit self-introduction in message body ("Hi, this is Jane Doe…").
-    2. Signed names at the end of a message.
-    3. The conversation-partner / contact name shown in the messaging app header
-       — e.g. the name at the top of a Facebook Messenger, iMessage, Instagram DM,
-       or WhatsApp thread is the OTHER person (the lead), not the user. Use it as
-       the lead's name unless the message body clearly introduces a different person.
-    4. Sender name on an email ("From: Jane Doe <jane@x.com>").
-  If the header name is obviously a company / business / page name rather than a
-  person ("Acme Roofing", "Mike's Plumbing"), put it in the "client" meaning and
-  leave first_name/last_name null.
+    2. Signed name at the end of a message ("- Jane", "Thanks, Jane Doe").
+    3. The contact/thread header of a messaging app. This is almost always the
+       lead's name when the screenshot is a conversation. Look for:
+         - Facebook/Instagram/Messenger: the name in the top bar above messages,
+           or under the profile avatar on a profile card.
+         - iMessage / SMS / WhatsApp / Signal: the name at the very top of the
+           thread (not a phone number — if only a number is shown, leave name
+           null).
+         - Any chat UI: a name next to or directly above each incoming bubble.
+    4. Call log / voicemail screens: the caller's name shown above the number.
+    5. Email headers: "From: Jane Doe <jane@x.com>" — extract the display name.
+    6. Contact cards ("tap for info" panels) that reveal first + last name.
+    7. Handwritten notes: any name written near the contact info.
+  Split into first_name and last_name. If only one token is present, put it in
+  first_name and leave last_name null. If a middle initial is shown, keep it
+  with first_name ("Jane M."). If the thread header is obviously a business /
+  page name ("Acme Roofing", "Mike's Plumbing"), leave first_name/last_name
+  null rather than using the business name. Never invent a name, but DO use
+  the header name when it's a plausible person name — that is what the lead
+  is called.
 - Phone: return in any form; downstream code normalizes to E.164.
 - Address: street only (no city/state/zip); put those in their own fields.
 - State: return 2-letter USPS abbreviation (e.g. "FL") when possible.

@@ -101,10 +101,11 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   const intakeStatus: Lead["intake_status"] =
     !saveable || lowConf || duplicates.length > 0 ? "needs_review" : "ready";
 
+  const today = new Date().toISOString().slice(0, 10);
   const { data: inserted, error: insertErr } = await admin
     .from("leads")
     .insert({
-      date: extracted.date,
+      date: extracted.date ?? today,
       first_name: extracted.first_name,
       last_name: extracted.last_name,
       client: displayName(extracted.first_name, extracted.last_name) || null,
