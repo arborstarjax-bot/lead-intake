@@ -63,15 +63,15 @@ textarea {
   font-size: 16px;
 }
 
-/* Inline editors used inside the lead card. Transparent until focused,
-   then reveal a subtle surface + accent ring so users always know what
-   has focus without cluttering the idle state. */
+/* Inline editors used inside the lead card. Every field shows a clear
+   border at rest so it's obvious what can be edited; hover bumps the
+   border, focus promotes to the accent color. */
 .field-input {
   width: 100%;
-  background: transparent;
+  background: #ffffff;
   padding: 0.625rem 0.75rem;
   outline: none;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   color: var(--fg);
   min-height: 44px;
@@ -81,7 +81,7 @@ textarea {
   color: var(--subtle);
 }
 .field-input:hover {
-  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .field-input:focus {
   background: #fff;
