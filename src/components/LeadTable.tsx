@@ -26,9 +26,7 @@ type Column = {
 const COLUMNS: Column[] = [
   { key: "status", label: "Status", width: "min-w-[170px]", type: "select" },
   { key: "date", label: "Date", width: "min-w-[120px]", type: "date" },
-  { key: "first_name", label: "First Name", width: "min-w-[120px]" },
-  { key: "last_name", label: "Last Name", width: "min-w-[120px]" },
-  { key: "client", label: "Client", width: "min-w-[160px]" },
+  { key: "client", label: "Client Name", width: "min-w-[180px]" },
   { key: "phone_number", label: "Phone", width: "min-w-[150px]" },
   { key: "email", label: "Email", width: "min-w-[200px]" },
   { key: "address", label: "Address", width: "min-w-[180px]" },
