@@ -91,7 +91,9 @@ function CurrentPlanCard({
         <div>
           <dt className="text-[var(--muted)]">Uploads / day</dt>
           <dd className="font-medium">
-            {billing.unlimitedUploads
+            {/* Display the plan's nominal capability, not the access
+                gate — a past_due Pro workspace is still a Pro plan. */}
+            {billing.plan === "pro"
               ? "Unlimited"
               : `${PRICING.starter.uploadsPerDay} / workspace`}
           </dd>
@@ -116,8 +118,9 @@ function CurrentPlanCard({
               {billing.seatCount > 1 && (
                 <span className="text-[var(--muted)] font-normal">
                   {" "}
-                  (${(PRICING[billing.plan as "starter" | "pro"].base).toFixed(2)} +{" "}
-                  {billing.seatCount - 1} × $9.99)
+                  (${PRICING[billing.plan as "starter" | "pro"].base.toFixed(2)} +{" "}
+                  {billing.seatCount - 1} × $
+                  {PRICING[billing.plan as "starter" | "pro"].perSeat.toFixed(2)})
                 </span>
               )}
             </dd>
