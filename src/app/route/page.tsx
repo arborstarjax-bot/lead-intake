@@ -356,7 +356,7 @@ function RoutePageInner() {
             showFlash(msg);
             // After booking we clear the ghost param — the newly booked
             // lead becomes a regular numbered pin on reload.
-            router.replace(`/route?d=${selectedDay}`, { scroll: false });
+            router.replace(`/route?day=${selectedDay}`, { scroll: false });
             reload();
           }}
         />
@@ -638,7 +638,7 @@ function DayActions({
   if (needsSyncCount === 0) return null;
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-white px-4 py-3">
+    <div className="relative flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-white px-4 py-3">
       <div className="min-w-0 text-sm">
         <div className="font-medium">Save day to calendar</div>
         <div className="text-xs text-[var(--muted)]">
@@ -853,7 +853,10 @@ function StopMenu({
     const when = `${day} at ${formatClock(startTime)}`;
     const body = `Hi ${who}, David with Arbor Tech 904. Confirming our arborist assessment on ${when}. Reply here if anything changes — see you then!`;
     const digits = phoneNumber.replace(/[^\d+]/g, "");
-    return `sms:${digits}&body=${encodeURIComponent(body)}`;
+    // `?` (RFC 5724) is the only separator Android accepts — `&` gets
+    // absorbed into the phone-number portion so the prefilled body drops.
+    // iOS accepts both, so `?` is safe on iPhone too.
+    return `sms:${digits}?body=${encodeURIComponent(body)}`;
   }, [firstName, phoneNumber, date, startTime]);
 
   return (
