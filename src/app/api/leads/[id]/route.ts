@@ -45,6 +45,27 @@ export async function PATCH(
     }
   }
 
+  // Client Name is now the only name column in the UI. When it changes,
+  // split it back into first_name / last_name so calendar event titles and
+  // duplicate detection stay in sync with what the user typed.
+  if ("client" in patch && !("first_name" in patch) && !("last_name" in patch)) {
+    const raw = (patch.client as string | null) ?? "";
+    const trimmed = raw.trim().replace(/\s+/g, " ");
+    if (!trimmed) {
+      patch.first_name = null;
+      patch.last_name = null;
+    } else {
+      const idx = trimmed.indexOf(" ");
+      if (idx === -1) {
+        patch.first_name = trimmed;
+        patch.last_name = null;
+      } else {
+        patch.first_name = trimmed.slice(0, idx);
+        patch.last_name = trimmed.slice(idx + 1);
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from("leads")
     .update(patch)
