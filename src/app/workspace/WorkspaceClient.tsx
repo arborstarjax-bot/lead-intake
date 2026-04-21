@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Copy, Loader2, RotateCcw, Shield, UserMinus, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { logout } from "@/app/login/actions";
 
 type Member = {
@@ -24,6 +25,7 @@ type Props = {
 export function WorkspaceClient({ workspace, role, members: initialMembers }: Props) {
   const router = useRouter();
   const { toast } = useToast();
+  const confirmDialog = useConfirm();
   const [pending, startTransition] = useTransition();
   const [joinCode, setJoinCode] = useState(workspace.joinCode);
   const [members, setMembers] = useState<Member[]>(initialMembers);
@@ -42,7 +44,13 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
 
   async function rotateCode() {
     if (!isAdmin) return;
-    if (!confirm("Rotate the join code? The current code will stop working.")) return;
+    const ok = await confirmDialog({
+      title: "Rotate the join code?",
+      message: "The current code will stop working. Anyone with the old link won’t be able to join.",
+      confirmLabel: "Rotate",
+      destructive: true,
+    });
+    if (!ok) return;
     const res = await fetch("/api/workspace", { method: "POST" });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -76,7 +84,13 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
   }
 
   async function remove(userId: string, label: string) {
-    if (!confirm(`Remove ${label} from the workspace?`)) return;
+    const ok = await confirmDialog({
+      title: `Remove ${label}?`,
+      message: "They’ll lose access to this workspace immediately. They can rejoin with the current invite link.",
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
     setBusyId(userId);
     try {
       const res = await fetch(`/api/workspace/members/${userId}`, {

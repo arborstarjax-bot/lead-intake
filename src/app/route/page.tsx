@@ -33,6 +33,29 @@ import RouteMap, { type RouteMapMode, type RouteMapStop } from "@/components/Rou
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { useToast } from "@/components/Toast";
+
+/**
+ * Shared handler for 428 responses from calendar-touching endpoints.
+ * Pops our in-app confirm and, on yes, sends the user through the
+ * Google OAuth redirect. Returns `true` if we handled a 428 (caller
+ * should return early) — `false` otherwise.
+ */
+async function handleCalendarDisconnected(
+  res: Response,
+  json: { connectUrl?: string } | null,
+  confirmDialog: ReturnType<typeof useConfirm>
+): Promise<boolean> {
+  if (res.status !== 428) return false;
+  const ok = await confirmDialog({
+    title: "Connect Google Calendar?",
+    message: "Your calendar isn’t linked yet. Sign in with Google to keep bookings in sync.",
+    confirmLabel: "Connect",
+  });
+  if (ok && json?.connectUrl) window.location.href = json.connectUrl;
+  return true;
+}
 
 type Stop = {
   id: string;
@@ -653,6 +676,7 @@ function DayActions({
 }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirmDialog = useConfirm();
 
   // Suppress onUnbook warning — reserved for future inline actions that
   // need a reload hook (the current timeline menu handles its own reload
@@ -676,12 +700,7 @@ function DayActions({
         body: JSON.stringify({ date: data.date }),
       });
       const json = await res.json();
-      if (res.status === 428) {
-        if (confirm("Google Calendar is not connected. Connect now?")) {
-          window.location.href = json.connectUrl;
-        }
-        return;
-      }
+      if (await handleCalendarDisconnected(res, json, confirmDialog)) return;
       if (!res.ok) {
         setError(json.error ?? `Failed (${res.status})`);
         return;
@@ -770,6 +789,7 @@ function StopList({
     optimalDriveMinutes: number;
     savingsMinutes: number;
   } | null>(null);
+  const confirmDialog = useConfirm();
 
   const reordering = draft !== null;
   const previewingOptimize = optimizePreview !== null;
@@ -839,12 +859,7 @@ function StopList({
         }),
       });
       const json = await res.json();
-      if (res.status === 428) {
-        if (confirm("Google Calendar is not connected. Connect now?")) {
-          window.location.href = json.connectUrl;
-        }
-        return;
-      }
+      if (await handleCalendarDisconnected(res, json, confirmDialog)) return;
       if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`);
       const savings = optimizePreview.savingsMinutes;
       onFlash(
@@ -884,12 +899,7 @@ function StopList({
         }),
       });
       const json = await res.json();
-      if (res.status === 428) {
-        if (confirm("Google Calendar is not connected. Connect now?")) {
-          window.location.href = json.connectUrl;
-        }
-        return;
-      }
+      if (await handleCalendarDisconnected(res, json, confirmDialog)) return;
       if (!res.ok) {
         throw new Error(json.error ?? `Failed (${res.status})`);
       }
@@ -1355,6 +1365,8 @@ function StopMenu({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const confirmDialog = useConfirm();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!open) return;
@@ -1368,15 +1380,19 @@ function StopMenu({
   }, [open]);
 
   async function cancel() {
-    if (!confirm(`Unbook ${label}? This removes it from the calendar and moves it back to Called.`)) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: `Unbook ${label}?`,
+      message: "This removes it from the calendar and moves it back to Called.",
+      confirmLabel: "Unbook",
+      destructive: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/leads/${leadId}/calendar`, { method: "DELETE" });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        alert(j.error ?? `Failed (${res.status})`);
+        toast({ kind: "error", message: j.error ?? `Failed (${res.status})` });
         return;
       }
       onFlash(`Unbooked ${label}`);
@@ -1503,6 +1519,7 @@ function SchedulePanel({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
+  const confirmDialog = useConfirm();
 
   const loadSlots = useCallback(async () => {
     setLoading(true);
@@ -1563,12 +1580,7 @@ function SchedulePanel({
       }
       const calRes = await fetch(`/api/leads/${leadId}/calendar`, { method: "POST" });
       const calJson = await calRes.json();
-      if (calRes.status === 428) {
-        if (confirm("Google Calendar is not connected. Connect now?")) {
-          window.location.href = calJson.connectUrl;
-        }
-        return;
-      }
+      if (await handleCalendarDisconnected(calRes, calJson, confirmDialog)) return;
       if (!calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
       onBooked(`Booked ${leadLabel} at ${formatClock(previewSlot.startTime)}`);
     } catch (e) {
