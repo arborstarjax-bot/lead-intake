@@ -33,31 +33,38 @@ export type RateLimitResult =
   | { ok: false; remaining: 0; limit: number; retryAfterSeconds: number; resetAt: number };
 
 /**
- * Records a hit against `key` and returns whether the caller may
- * proceed. Sliding window: a request is allowed only if fewer than
- * `limit` hits occurred within the preceding `windowMs` milliseconds.
+ * Records `cost` hits against `key` and returns whether the caller may
+ * proceed. Sliding window: the request is allowed only if the count of
+ * hits in the preceding `windowMs` milliseconds PLUS `cost` stays at or
+ * below `limit`. When rejected, no hits are recorded.
+ *
+ * `cost` lets a single request consume multiple slots — e.g. a batch
+ * upload of N files where each file is itself expensive.
  */
 export function checkRateLimit({
   key,
   limit,
   windowMs,
+  cost = 1,
 }: {
   key: string;
   limit: number;
   windowMs: number;
+  cost?: number;
 }): RateLimitResult {
   const now = Date.now();
   sweep(now);
   const cutoff = now - windowMs;
+  const effectiveCost = Math.max(1, Math.floor(cost));
 
   const existing = BUCKETS.get(key);
   const retained = existing
     ? existing.timestamps.filter((t) => t > cutoff)
     : [];
 
-  if (retained.length >= limit) {
+  if (retained.length + effectiveCost > limit) {
     // Earliest retained timestamp is when the window will next have capacity.
-    const earliest = retained[0];
+    const earliest = retained[0] ?? now;
     const resetAt = earliest + windowMs;
     const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - now) / 1000));
     BUCKETS.set(key, { timestamps: retained });
@@ -70,7 +77,7 @@ export function checkRateLimit({
     };
   }
 
-  retained.push(now);
+  for (let i = 0; i < effectiveCost; i += 1) retained.push(now);
   BUCKETS.set(key, { timestamps: retained });
   return {
     ok: true,

@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     key: rateLimitKey(["ingest", auth.workspaceId, auth.userId]),
     limit: INGEST_LIMIT_PER_HOUR,
     windowMs: 60 * 60 * 1000,
+    cost: files.length,
   });
   if (!limit.ok) {
     return NextResponse.json(
