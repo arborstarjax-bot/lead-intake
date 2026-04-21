@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
+import { requireMembership } from "@/lib/auth";
 import { suggestSlots, leadAddressString } from "@/lib/schedule";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
@@ -101,10 +102,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const supabase = createAdminClient();
   const [leadResp, settings] = await Promise.all([
-    supabase.from("leads").select("*").eq("id", parsed.leadId).maybeSingle(),
-    getSettings(),
+    supabase
+      .from("leads")
+      .select("*")
+      .eq("id", parsed.leadId)
+      .eq("workspace_id", auth.workspaceId)
+      .maybeSingle(),
+    getSettings(auth.workspaceId),
   ]);
   if (leadResp.error || !leadResp.data) {
     return NextResponse.json({ error: "Lead not found" }, { status: 404 });
@@ -147,6 +156,7 @@ export async function POST(req: Request) {
   const { data: window, error: windowErr } = await supabase
     .from("leads")
     .select("*")
+    .eq("workspace_id", auth.workspaceId)
     .gte("scheduled_day", startIso)
     .lte("scheduled_day", endIso)
     .not("scheduled_time", "is", null)

@@ -25,8 +25,12 @@ import {
   type ClientAppSettings,
 } from "@/lib/client-settings";
 
+export type WorkspaceRole = "admin" | "user";
+
 type Ctx = {
   settings: ClientAppSettings;
+  /** Role of the current user in the current workspace; null while loading. */
+  role: WorkspaceRole | null;
   refresh: () => Promise<void>;
   /** Locally patch the in-memory copy (e.g. after an optimistic save). */
   apply: (patch: Partial<ClientAppSettings>) => void;
@@ -36,6 +40,7 @@ const SettingsCtx = createContext<Ctx | null>(null);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<ClientAppSettings>(DEFAULT_CLIENT_SETTINGS);
+  const [role, setRole] = useState<WorkspaceRole | null>(null);
   const loaded = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -50,6 +55,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           ...DEFAULT_CLIENT_SETTINGS,
           ...(json.settings as Partial<ClientAppSettings>),
         });
+      }
+      if (json?.role === "admin" || json?.role === "user") {
+        setRole(json.role);
       }
     } catch {
       // Non-fatal; callers fall back to DEFAULT_CLIENT_SETTINGS.
@@ -67,8 +75,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<Ctx>(
-    () => ({ settings, refresh, apply }),
-    [settings, refresh, apply]
+    () => ({ settings, role, refresh, apply }),
+    [settings, role, refresh, apply]
   );
 
   return <SettingsCtx.Provider value={value}>{children}</SettingsCtx.Provider>;
@@ -81,6 +89,7 @@ export function useAppSettings(): Ctx {
   // callers never crash in tests or isolated renders.
   return {
     settings: DEFAULT_CLIENT_SETTINGS,
+    role: null,
     refresh: async () => {},
     apply: () => {},
   };

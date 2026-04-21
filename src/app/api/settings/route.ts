@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSettings, updateSettings, type AppSettingsPatch } from "@/lib/settings";
+import { requireMembership, requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -38,11 +39,17 @@ const bodySchema = z
   .strict();
 
 export async function GET() {
-  const settings = await getSettings();
-  return NextResponse.json({ settings });
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+  const settings = await getSettings(auth.workspaceId);
+  return NextResponse.json({ settings, role: auth.role });
 }
 
 export async function PUT(req: Request) {
+  // Only admins can persist settings. Regular members still read via GET.
+  const auth = await requireAdmin();
+  if (auth instanceof NextResponse) return auth;
+
   let parsed;
   try {
     const json = await req.json();
@@ -76,8 +83,8 @@ export async function PUT(req: Request) {
   }
 
   try {
-    const settings = await updateSettings(patch);
-    return NextResponse.json({ settings });
+    const settings = await updateSettings(auth.workspaceId, patch);
+    return NextResponse.json({ settings, role: auth.role });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

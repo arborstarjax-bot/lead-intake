@@ -115,7 +115,8 @@ function diffSettings(next: ClientAppSettings, prev: ClientAppSettings): Patch {
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const { settings: ctxSettings, apply } = useAppSettings();
+  const { settings: ctxSettings, role, apply } = useAppSettings();
+  const canEdit = role === "admin";
 
   const [loading, setLoading] = useState(true);
   const [s, setS] = useState<ClientAppSettings>(DEFAULT_CLIENT_SETTINGS);
@@ -227,18 +228,29 @@ export default function SettingsPage() {
           <ArrowLeft className="h-4 w-4" /> Home
         </Link>
         <h1 className="text-lg sm:text-xl font-semibold">Settings</h1>
-        <span
-          className={cn(
-            "text-xs font-medium",
-            dirty
-              ? "text-amber-600"
-              : "text-[var(--muted)]"
-          )}
-          aria-live="polite"
-        >
-          {dirty ? "Unsaved changes" : "All changes saved"}
-        </span>
+        {canEdit ? (
+          <span
+            className={cn(
+              "text-xs font-medium",
+              dirty ? "text-amber-600" : "text-[var(--muted)]"
+            )}
+            aria-live="polite"
+          >
+            {dirty ? "Unsaved changes" : "All changes saved"}
+          </span>
+        ) : (
+          <span className="text-xs font-medium text-[var(--muted)]">
+            Read only
+          </span>
+        )}
       </header>
+
+      {!canEdit && role === "user" ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm px-3 py-2">
+          Only workspace admins can change settings. Ask an admin to make
+          edits on your behalf.
+        </div>
+      ) : null}
 
       {/* Company info */}
       <Panel
@@ -473,14 +485,16 @@ export default function SettingsPage() {
         Spacer under the sticky save bar so the last panel isn't
         hidden behind the bar on mobile.
       */}
-      <div className="h-24" aria-hidden />
+      {canEdit ? <div className="h-24" aria-hidden /> : null}
 
-      <SaveBar
-        dirty={dirty}
-        saving={saving}
-        onSave={save}
-        onRevert={revert}
-      />
+      {canEdit ? (
+        <SaveBar
+          dirty={dirty}
+          saving={saving}
+          onSave={save}
+          onRevert={revert}
+        />
+      ) : null}
     </main>
   );
 }

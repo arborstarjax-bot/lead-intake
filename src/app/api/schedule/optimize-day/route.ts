@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
+import { requireMembership } from "@/lib/auth";
 import { MapsUnavailableError, getDriveMatrix } from "@/lib/maps";
 import { leadAddressString, parseHHMM } from "@/lib/schedule";
 import type { Lead } from "@/lib/types";
@@ -59,12 +60,16 @@ export async function GET(req: Request) {
     );
   }
 
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const supabase = createAdminClient();
   const [settings, rowsResp] = await Promise.all([
-    getSettings(),
+    getSettings(auth.workspaceId),
     supabase
       .from("leads")
       .select("*")
+      .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", iso)
       .not("scheduled_time", "is", null)
       .neq("status", "Completed")

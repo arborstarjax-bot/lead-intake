@@ -4,6 +4,7 @@ import { EDITABLE_COLUMNS, LEAD_STATUSES } from "@/lib/types";
 import { displayName, normalizeEmail, normalizePhone, normalizeState, normalizeZip } from "@/lib/format";
 import { getAccessToken } from "@/lib/google/oauth";
 import { deleteCalendarEvent } from "@/lib/google/calendar";
+import { requireMembership } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -11,8 +12,23 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   const supabase = createAdminClient();
+
+  // Membership check: the lead must belong to this workspace before any
+  // mutation. A missing row is indistinguishable from "belongs to another
+  // workspace" from the caller's perspective — surface as 404.
+  const { data: existing } = await supabase
+    .from("leads")
+    .select("id, workspace_id, status, calendar_event_id, first_name, last_name, client")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existing || existing.workspace_id !== auth.workspaceId) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const patch: Record<string, unknown> = {};
@@ -32,18 +48,11 @@ export async function PATCH(
     patch.zip = normalizeZip(patch.zip as string | null) ?? patch.zip;
 
   if (!("client" in patch) && ("first_name" in patch || "last_name" in patch)) {
-    const { data: row } = await supabase
-      .from("leads")
-      .select("first_name, last_name, client")
-      .eq("id", id)
-      .single();
-    if (row) {
-      const first = "first_name" in patch ? (patch.first_name as string | null) : row.first_name;
-      const last = "last_name" in patch ? (patch.last_name as string | null) : row.last_name;
-      const derived = displayName(first, last);
-      if (!row.client || row.client === displayName(row.first_name, row.last_name)) {
-        patch.client = derived || null;
-      }
+    const first = "first_name" in patch ? (patch.first_name as string | null) : existing.first_name;
+    const last = "last_name" in patch ? (patch.last_name as string | null) : existing.last_name;
+    const derived = displayName(first, last);
+    if (!existing.client || existing.client === displayName(existing.first_name, existing.last_name)) {
+      patch.client = derived || null;
     }
   }
 
@@ -70,47 +79,34 @@ export async function PATCH(
 
   // Flipping status to Completed should make the job disappear from the
   // route map AND from Google Calendar — a completed job is done and no
-  // longer relevant to today's drive plan. We need the prior status to
-  // detect the transition (and the current event id so we can delete it).
-  type PriorRow = {
-    status: string | null;
-    calendar_event_id: string | null;
-  };
-  let prior: PriorRow | null = null;
-  if (patch.status === "Completed") {
-    const { data: row } = await supabase
-      .from("leads")
-      .select("status, calendar_event_id")
-      .eq("id", id)
-      .single();
-    prior = (row as PriorRow | null) ?? null;
-    if (prior?.calendar_event_id) {
-      patch.calendar_event_id = null;
-      patch.calendar_scheduled_day = null;
-      patch.calendar_scheduled_time = null;
-    }
+  // longer relevant to today's drive plan.
+  const completing =
+    patch.status === "Completed" &&
+    existing.status !== "Completed" &&
+    existing.calendar_event_id;
+  if (completing) {
+    patch.calendar_event_id = null;
+    patch.calendar_scheduled_day = null;
+    patch.calendar_scheduled_time = null;
   }
 
   const { data, error } = await supabase
     .from("leads")
     .update(patch)
     .eq("id", id)
+    .eq("workspace_id", auth.workspaceId)
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Best-effort Google delete after the DB write. If Google is down or the
-  // event was already removed, the local state is still correct.
-  if (
-    patch.status === "Completed" &&
-    prior &&
-    prior.status !== "Completed" &&
-    prior.calendar_event_id
-  ) {
-    const token = await getAccessToken();
+  // Best-effort Google delete after the DB write using THIS user's token.
+  // A workspace member who has not connected their own calendar yet will
+  // silently skip — the lead is still Completed locally.
+  if (completing && existing.calendar_event_id) {
+    const token = await getAccessToken(auth.userId);
     if (token) {
       try {
-        await deleteCalendarEvent(token, prior.calendar_event_id);
+        await deleteCalendarEvent(token, existing.calendar_event_id);
       } catch {
         // Swallow: the lead is already Completed locally; a stale Google
         // event is recoverable but blocking the status flip isn't.
@@ -125,9 +121,17 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   const supabase = createAdminClient();
-  const { error } = await supabase.from("leads").delete().eq("id", id);
+  const { error, count } = await supabase
+    .from("leads")
+    .delete({ count: "exact" })
+    .eq("id", id)
+    .eq("workspace_id", auth.workspaceId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!count) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

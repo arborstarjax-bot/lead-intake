@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { requireMembership } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const body = await req.json().catch(() => null);
   if (
     !body ||
@@ -24,6 +28,8 @@ export async function POST(req: NextRequest) {
         p256dh: body.keys.p256dh,
         auth: body.keys.auth,
         user_agent: req.headers.get("user-agent") ?? null,
+        user_id: auth.userId,
+        workspace_id: auth.workspaceId,
       },
       { onConflict: "endpoint" }
     );
@@ -32,11 +38,18 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const body = await req.json().catch(() => null);
   if (!body || typeof body.endpoint !== "string") {
     return NextResponse.json({ error: "Invalid endpoint" }, { status: 400 });
   }
   const admin = createAdminClient();
-  await admin.from("push_subscriptions").delete().eq("endpoint", body.endpoint);
+  await admin
+    .from("push_subscriptions")
+    .delete()
+    .eq("endpoint", body.endpoint)
+    .eq("user_id", auth.userId);
   return NextResponse.json({ ok: true });
 }

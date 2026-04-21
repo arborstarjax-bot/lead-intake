@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
+import { requireMembership } from "@/lib/auth";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import { geocodeMany, type LatLng } from "@/lib/geocode";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
@@ -72,22 +73,31 @@ function validDate(d: string | null): string {
 }
 
 export async function GET(req: Request) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const url = new URL(req.url);
   const iso = validDate(url.searchParams.get("date"));
   const ghostLeadId = url.searchParams.get("ghost");
 
   const supabase = createAdminClient();
   const [settings, rowsResp, ghostResp] = await Promise.all([
-    getSettings(),
+    getSettings(auth.workspaceId),
     supabase
       .from("leads")
       .select("*")
+      .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", iso)
       .not("scheduled_time", "is", null)
       .neq("status", "Completed")
       .order("scheduled_time", { ascending: true }),
     ghostLeadId
-      ? supabase.from("leads").select("*").eq("id", ghostLeadId).maybeSingle()
+      ? supabase
+          .from("leads")
+          .select("*")
+          .eq("id", ghostLeadId)
+          .eq("workspace_id", auth.workspaceId)
+          .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
   if (rowsResp.error) {

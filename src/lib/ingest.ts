@@ -5,6 +5,7 @@ import { displayName } from "@/lib/format";
 import type { Lead, LeadIntakeSource } from "@/lib/types";
 
 type IngestArgs = {
+  workspaceId: string;
   file: Blob;
   fileName: string;
   source: LeadIntakeSource;
@@ -26,6 +27,8 @@ export type IngestResult = {
  *  3. Flag the lead as `needs_review` if any critical field is low-confidence,
  *     or `ready` otherwise. A lead with neither phone nor email is also
  *     marked `needs_review`, per the validation rule.
+ *
+ *  Every row is scoped to the caller's workspace.
  */
 export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> {
   const admin = createAdminClient();
@@ -43,6 +46,7 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
     const { data: failed, error: insertErr } = await admin
       .from("leads")
       .insert({
+        workspace_id: args.workspaceId,
         status: "New",
         intake_source: args.source,
         intake_status: "failed",
@@ -58,10 +62,11 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
     };
   }
 
-  // Duplicate detection against currently-active leads.
+  // Duplicate detection against currently-active leads in THIS workspace.
   const { data: activeLeads } = await admin
     .from("leads")
     .select("id, first_name, last_name, phone_number, email, address, status")
+    .eq("workspace_id", args.workspaceId)
     .neq("status", "Completed");
   const duplicates = findDuplicates(
     {
@@ -92,6 +97,7 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   const { data: inserted, error: insertErr } = await admin
     .from("leads")
     .insert({
+      workspace_id: args.workspaceId,
       date: extracted.date ?? today,
       first_name: extracted.first_name,
       last_name: extracted.last_name,

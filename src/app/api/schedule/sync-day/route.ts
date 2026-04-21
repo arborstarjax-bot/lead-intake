@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getAccessToken } from "@/lib/google/oauth";
+import { requireMembership } from "@/lib/auth";
 import {
   createCalendarEvent,
   updateCalendarEvent,
@@ -45,7 +46,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  const token = await getAccessToken();
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
+  const token = await getAccessToken(auth.userId);
   if (!token) {
     return NextResponse.json(
       { error: "Google Calendar not connected", connectUrl: "/api/google/connect" },
@@ -57,6 +61,7 @@ export async function POST(req: Request) {
   const { data, error } = await supabase
     .from("leads")
     .select("*")
+    .eq("workspace_id", auth.workspaceId)
     .eq("scheduled_day", parsed.date)
     .not("scheduled_time", "is", null)
     .neq("status", "Completed")
@@ -112,7 +117,8 @@ export async function POST(req: Request) {
           calendar_scheduled_time: desiredTime,
           status: nextStatus,
         })
-        .eq("id", lead.id);
+        .eq("id", lead.id)
+        .eq("workspace_id", auth.workspaceId);
       results.push({
         leadId: lead.id,
         label,

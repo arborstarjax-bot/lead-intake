@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
+import { requireMembership } from "@/lib/auth";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
@@ -23,17 +24,21 @@ type TodayRouteResponse =
   | { hasHome: false; date: string; stops: RouteStop[]; totalDriveMinutes: 0; returnDriveMinutes: null };
 
 export async function GET() {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const supabase = createAdminClient();
-  // Pin to America/New_York so the route always reflects David's business
-  // day. Vercel runs UTC; without this, between ~8 PM and midnight ET we'd
-  // query tomorrow's leads and show an empty route.
+  // Pin to America/New_York so the route always reflects the workspace's
+  // business day. Vercel runs UTC; without this, between ~8 PM and
+  // midnight ET we'd query tomorrow's leads and show an empty route.
   const iso = todayIsoInBusinessTz();
 
   const [settings, rowsResp] = await Promise.all([
-    getSettings(),
+    getSettings(auth.workspaceId),
     supabase
       .from("leads")
       .select("*")
+      .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", iso)
       .not("scheduled_time", "is", null)
       .neq("status", "Completed")

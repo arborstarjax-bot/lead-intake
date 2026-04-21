@@ -7,6 +7,7 @@ import {
   deleteCalendarEvent,
   canSchedule,
 } from "@/lib/google/calendar";
+import { requireMembership } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -14,10 +15,18 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   const supabase = createAdminClient();
 
-  const { data: lead } = await supabase.from("leads").select("*").eq("id", id).single();
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", auth.workspaceId)
+    .single();
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (!canSchedule(lead)) {
@@ -27,7 +36,7 @@ export async function POST(
     );
   }
 
-  const token = await getAccessToken();
+  const token = await getAccessToken(auth.userId);
   if (!token) {
     return NextResponse.json(
       { error: "Google Calendar not connected", connectUrl: "/api/google/connect" },
@@ -55,10 +64,6 @@ export async function POST(
       return NextResponse.json({ eventId: lead.calendar_event_id, already: true });
     }
 
-    // Auto-advance status to Scheduled on a successful sync unless the lead
-    // is already past that point (Completed should never be walked back).
-    // Compute this before building the event so the event description
-    // (which embeds lead.status) reflects the value we'll persist.
     const nextStatus =
       lead.status === "Completed" ? lead.status : "Scheduled";
     const leadForEvent = { ...lead, status: nextStatus };
@@ -75,7 +80,8 @@ export async function POST(
         calendar_scheduled_time: desiredTime,
         status: nextStatus,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("workspace_id", auth.workspaceId);
 
     return NextResponse.json({ eventId: event.id, htmlLink: event.htmlLink });
   } catch (e) {
@@ -86,27 +92,29 @@ export async function POST(
 /**
  * DELETE /api/leads/[id]/calendar
  *
- * Cancel / unbook a scheduled lead from the route page. Removes the Google
- * Calendar event (if any), clears the scheduled_time + calendar sync fields,
- * and rolls the status back to "Called / No Response" so the lead shows up
- * in the Called tab ready to be rescheduled. Leaves `scheduled_day` alone
- * so the customer's stated preference isn't lost; the user can clear it
- * from the card if they want to.
+ * Cancel / unbook a scheduled lead. Removes the Google Calendar event (if
+ * any) using the caller's own OAuth token, clears the scheduled_time + sync
+ * fields, and rolls the status back to "Called / No Response".
  */
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   const supabase = createAdminClient();
-  const { data: lead } = await supabase.from("leads").select("*").eq("id", id).single();
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", auth.workspaceId)
+    .single();
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Best-effort delete on Google. A 404/410 (already gone) or a missing
-  // token shouldn't block the local unbook — the user still wants the lead
-  // off the route map.
   if (lead.calendar_event_id) {
-    const token = await getAccessToken();
+    const token = await getAccessToken(auth.userId);
     if (token) {
       try {
         await deleteCalendarEvent(token, lead.calendar_event_id);
@@ -131,6 +139,7 @@ export async function DELETE(
       status: nextStatus,
     })
     .eq("id", id)
+    .eq("workspace_id", auth.workspaceId)
     .select("*")
     .single();
   if (error) {

@@ -22,6 +22,8 @@ function configure() {
 }
 
 export type NewLeadPushInput = {
+  /** Workspace whose members should be notified. */
+  workspaceId: string;
   /** Most recent lead summary (shown in the body if only one is unseen). */
   latestLead: { client: string | null; phone_number: string | null } | null;
   /** Deep-link target for the notification tap. */
@@ -29,10 +31,10 @@ export type NewLeadPushInput = {
 };
 
 /**
- * Fan out a "new lead" push to every stored subscription. Each subscription
- * gets its own payload because the badge count / title depend on how many
- * leads arrived since that device last opened the app. Dead subscriptions
- * (410/404) are pruned so the table stays clean.
+ * Fan out a "new lead" push to every stored subscription in this workspace.
+ * Each subscription gets its own payload because the badge count / title
+ * depend on how many leads arrived since that device last opened the app.
+ * Dead subscriptions (410/404) are pruned so the table stays clean.
  *
  * Silently no-ops if VAPID keys are not configured — push is optional.
  */
@@ -41,16 +43,18 @@ export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
   const admin = createAdminClient();
   const { data: subs } = await admin
     .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth, last_acknowledged_at");
+    .select("id, endpoint, p256dh, auth, last_acknowledged_at")
+    .eq("workspace_id", input.workspaceId);
   if (!subs || subs.length === 0) return;
 
   await Promise.all(
     (subs as PushRow[]).map(async (s) => {
       // How many leads has this device not yet seen (including the one
-      // that just triggered this push).
+      // that just triggered this push) — scoped to the workspace.
       const { count } = await admin
         .from("leads")
         .select("id", { count: "exact", head: true })
+        .eq("workspace_id", input.workspaceId)
         .gt("created_at", s.last_acknowledged_at);
       const unseen = count ?? 1;
 
@@ -99,12 +103,17 @@ export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
 
 /**
  * Mark a subscription as "caught up as of now" so its future badge counts
- * restart from zero.
+ * restart from zero. Scoped to the caller's user_id so a user can't mark
+ * someone else's device caught-up.
  */
-export async function acknowledgeSubscription(endpoint: string): Promise<void> {
+export async function acknowledgeSubscription(
+  userId: string,
+  endpoint: string
+): Promise<void> {
   const admin = createAdminClient();
   await admin
     .from("push_subscriptions")
     .update({ last_acknowledged_at: new Date().toISOString() })
-    .eq("endpoint", endpoint);
+    .eq("endpoint", endpoint)
+    .eq("user_id", userId);
 }

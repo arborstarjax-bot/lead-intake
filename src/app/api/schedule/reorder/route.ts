@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
+import { requireMembership } from "@/lib/auth";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import {
   parseHHMM,
@@ -67,12 +68,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const supabase = createAdminClient();
   const [settings, rowsResp] = await Promise.all([
-    getSettings(),
+    getSettings(auth.workspaceId),
     supabase
       .from("leads")
       .select("*")
+      .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", parsed.date)
       .not("scheduled_time", "is", null)
       .neq("status", "Completed"),
@@ -185,7 +190,8 @@ export async function POST(req: Request) {
     const { error: upErr } = await supabase
       .from("leads")
       .update({ scheduled_time: newTime })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("workspace_id", auth.workspaceId);
     if (upErr) {
       return NextResponse.json(
         { error: `Failed to update time for lead ${id}: ${upErr.message}` },
@@ -204,7 +210,7 @@ export async function POST(req: Request) {
   };
 
   const results: PerLeadResult[] = [];
-  const token = parsed.sync ? await getAccessToken() : null;
+  const token = parsed.sync ? await getAccessToken(auth.userId) : null;
   for (const { id, newMin } of newTimes) {
     const lead = leadsById.get(id)!;
     const newTime = formatHHMM(newMin);
@@ -253,7 +259,8 @@ export async function POST(req: Request) {
           calendar_scheduled_time: newTime,
           status: lead.status === "Completed" ? "Completed" : "Scheduled",
         })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("workspace_id", auth.workspaceId);
       results.push({
         leadId: id,
         label,

@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { googleAuthUrl } from "@/lib/google/oauth";
+import { requireMembership } from "@/lib/auth";
 import { randomBytes } from "node:crypto";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const state = randomBytes(16).toString("hex");
   const url = googleAuthUrl(state);
   const res = NextResponse.redirect(url);

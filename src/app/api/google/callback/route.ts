@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForTokens, saveTokens } from "@/lib/google/oauth";
+import { getSessionMembership } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -8,13 +9,21 @@ export async function GET(req: NextRequest) {
   const state = req.nextUrl.searchParams.get("state");
   const cookieState = req.cookies.get("google_oauth_state")?.value;
 
+  // Require a signed-in session: Google tokens are stored per-user so the
+  // connecting user must be identifiable. Middleware already gates /api,
+  // but we defend in depth in case this route is ever opened up.
+  const auth = await getSessionMembership();
+  if (!auth) {
+    return NextResponse.redirect(new URL("/login?next=/", req.url));
+  }
+
   if (!code || !state || !cookieState || state !== cookieState) {
     return NextResponse.redirect(new URL("/?google=error", req.url));
   }
 
   try {
     const tokens = await exchangeCodeForTokens(code);
-    await saveTokens(tokens);
+    await saveTokens(auth.userId, tokens);
   } catch {
     return NextResponse.redirect(new URL("/?google=error", req.url));
   }
