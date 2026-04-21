@@ -3,7 +3,7 @@
 // table must always show fresh data; stale SSR HTML would silently hide
 // newly-uploaded leads. Runtime caching is limited to static assets.
 
-const STATIC_CACHE = "lead-intake-static-v1";
+const STATIC_CACHE = "lead-intake-static-v2";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/icon-192.png",

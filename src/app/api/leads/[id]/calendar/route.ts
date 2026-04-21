@@ -54,9 +54,17 @@ export async function POST(
       return NextResponse.json({ eventId: lead.calendar_event_id, already: true });
     }
 
+    // Auto-advance status to Scheduled on a successful sync unless the lead
+    // is already past that point (Completed should never be walked back).
+    // Compute this before building the event so the event description
+    // (which embeds lead.status) reflects the value we'll persist.
+    const nextStatus =
+      lead.status === "Completed" ? lead.status : "Scheduled";
+    const leadForEvent = { ...lead, status: nextStatus };
+
     const event = lead.calendar_event_id
-      ? await updateCalendarEvent(token, lead.calendar_event_id, lead)
-      : await createCalendarEvent(token, lead);
+      ? await updateCalendarEvent(token, lead.calendar_event_id, leadForEvent)
+      : await createCalendarEvent(token, leadForEvent);
 
     await supabase
       .from("leads")
@@ -64,6 +72,7 @@ export async function POST(
         calendar_event_id: event.id,
         calendar_scheduled_day: desiredDay,
         calendar_scheduled_time: desiredTime,
+        status: nextStatus,
       })
       .eq("id", id);
 

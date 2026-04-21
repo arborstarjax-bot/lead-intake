@@ -195,6 +195,9 @@ export default function LeadTable({
                 <th className="sticky left-0 z-20 bg-gray-50 border-b border-[var(--border)] px-2 py-2 text-left w-[52px]">
                   <span className="sr-only">Calendar</span>
                 </th>
+                <th className="border-b border-[var(--border)] px-2 py-2 text-left font-medium w-[56px]">
+                  Done
+                </th>
                 {COLUMNS.map((c) => (
                   <th
                     key={c.key as string}
@@ -224,14 +227,14 @@ export default function LeadTable({
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={COLUMNS.length + 2} className="p-6 text-center text-[var(--muted)]">
+                  <td colSpan={COLUMNS.length + 3} className="p-6 text-center text-[var(--muted)]">
                     Loading…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={COLUMNS.length + 2} className="p-10 text-center text-[var(--muted)]">
+                  <td colSpan={COLUMNS.length + 3} className="p-10 text-center text-[var(--muted)]">
                     {view === "active"
                       ? "No active leads yet. Upload a screenshot above."
                       : "No completed leads yet."}
@@ -245,6 +248,7 @@ export default function LeadTable({
                   onPatch={(p) => savePatch(lead.id, p)}
                   onDelete={() => onDelete(lead.id)}
                   onAddCalendar={() => onAddCalendar(lead)}
+                  onToggleComplete={() => onMarkCompleted(lead)}
                 />
               ))}
             </tbody>
@@ -283,11 +287,13 @@ function Row({
   onPatch,
   onDelete,
   onAddCalendar,
+  onToggleComplete,
 }: {
   lead: Lead;
   onPatch: (p: Partial<Lead>) => void;
   onDelete: () => void;
   onAddCalendar: () => void;
+  onToggleComplete: () => void;
 }) {
   const canCalendar = Boolean(lead.scheduled_day);
   const needsReview = lead.intake_status === "needs_review" || lead.intake_status === "failed";
@@ -335,6 +341,22 @@ function Row({
             <CalendarPlus className="h-4 w-4" />
           </button>
         )}
+      </td>
+      <td className="border-b border-[var(--border)] px-2 py-1 align-middle text-center">
+        <input
+          type="checkbox"
+          aria-label="Mark complete"
+          title={lead.status === "Completed" ? "Completed" : "Mark complete"}
+          checked={lead.status === "Completed"}
+          onChange={() => {
+            if (lead.status === "Completed") {
+              onPatch({ status: "New" });
+            } else {
+              onToggleComplete();
+            }
+          }}
+          className="h-5 w-5 cursor-pointer accent-emerald-600"
+        />
       </td>
       {COLUMNS.map((c) => (
         <Cell key={c.key as string} column={c} lead={lead} onPatch={onPatch} />
