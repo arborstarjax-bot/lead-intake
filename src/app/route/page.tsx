@@ -24,6 +24,7 @@ import {
   ChevronRight,
   MessageSquare,
   ListOrdered,
+  Wand2,
 } from "lucide-react";
 import RouteMap, { type RouteMapMode, type RouteMapStop } from "@/components/RouteMap";
 import { cn } from "@/lib/utils";
@@ -726,9 +727,30 @@ function StopList({
   const [draft, setDraft] = useState<Stop[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Auto-optimize: preview of the TSP-optimal order. When non-null the
+  // Timeline shows the proposed order in amber with a diff summary +
+  // Apply/Cancel bar. Separate state from the manual reorder draft so the
+  // two flows never trip over each other.
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeError, setOptimizeError] = useState<string | null>(null);
+  const [optimizePreview, setOptimizePreview] = useState<{
+    currentOrder: string[];
+    optimalOrder: string[];
+    currentDriveMinutes: number;
+    optimalDriveMinutes: number;
+    savingsMinutes: number;
+  } | null>(null);
 
   const reordering = draft !== null;
-  const stops = draft ?? data.stops;
+  const previewingOptimize = optimizePreview !== null;
+  const previewStopMap = useMemo(() => {
+    if (!optimizePreview) return null;
+    const byId = new Map(data.stops.map((s) => [s.id, s]));
+    return optimizePreview.optimalOrder
+      .map((id) => byId.get(id))
+      .filter((s): s is Stop => !!s);
+  }, [data.stops, optimizePreview]);
+  const stops = previewStopMap ?? draft ?? data.stops;
   const dirty =
     draft !== null &&
     (draft.length !== data.stops.length ||
@@ -742,6 +764,71 @@ function StopList({
   function cancelReorder() {
     setDraft(null);
     setError(null);
+  }
+
+  async function runOptimize() {
+    setOptimizing(true);
+    setOptimizeError(null);
+    setOptimizePreview(null);
+    try {
+      const res = await fetch(
+        `/api/schedule/optimize-day?date=${encodeURIComponent(data.date)}`
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`);
+      setOptimizePreview({
+        currentOrder: json.currentOrder,
+        optimalOrder: json.optimalOrder,
+        currentDriveMinutes: json.currentDriveMinutes,
+        optimalDriveMinutes: json.optimalDriveMinutes,
+        savingsMinutes: json.savingsMinutes,
+      });
+    } catch (e) {
+      setOptimizeError((e as Error).message || "Failed to optimize");
+    } finally {
+      setOptimizing(false);
+    }
+  }
+
+  function cancelOptimize() {
+    setOptimizePreview(null);
+    setOptimizeError(null);
+  }
+
+  async function applyOptimize() {
+    if (!optimizePreview) return;
+    setSaving(true);
+    setOptimizeError(null);
+    try {
+      const res = await fetch("/api/schedule/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: data.date,
+          orderedLeadIds: optimizePreview.optimalOrder,
+        }),
+      });
+      const json = await res.json();
+      if (res.status === 428) {
+        if (confirm("Google Calendar is not connected. Connect now?")) {
+          window.location.href = json.connectUrl;
+        }
+        return;
+      }
+      if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`);
+      const savings = optimizePreview.savingsMinutes;
+      onFlash(
+        savings > 0
+          ? `Optimized · saved ~${savings} min of driving`
+          : "Optimized route saved"
+      );
+      setOptimizePreview(null);
+      onReload();
+    } catch (e) {
+      setOptimizeError((e as Error).message || "Failed to apply optimization");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function move(index: number, delta: -1 | 1) {
@@ -797,20 +884,65 @@ function StopList({
         <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
           <Car className="h-3.5 w-3.5" /> Timeline
         </div>
-        {data.stops.length > 1 && !reordering && (
-          <button
-            onClick={startReorder}
-            className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1"
-          >
-            <ListOrdered className="h-3.5 w-3.5" /> Reorder
-          </button>
+        {data.stops.length > 1 && !reordering && !previewingOptimize && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={runOptimize}
+              disabled={optimizing}
+              className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
+              title="Auto-reorder to minimize driving"
+            >
+              {optimizing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Wand2 className="h-3.5 w-3.5" />
+              )}
+              Optimize
+            </button>
+            <button
+              onClick={startReorder}
+              className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1"
+            >
+              <ListOrdered className="h-3.5 w-3.5" /> Reorder
+            </button>
+          </div>
         )}
         {reordering && (
           <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 inline-flex items-center gap-1">
             <ListOrdered className="h-3.5 w-3.5" /> Reorder mode
           </div>
         )}
+        {previewingOptimize && (
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 inline-flex items-center gap-1">
+            <Wand2 className="h-3.5 w-3.5" /> Optimize preview
+          </div>
+        )}
       </div>
+
+      {optimizeError && !previewingOptimize && (
+        <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {optimizeError}
+        </div>
+      )}
+
+      {previewingOptimize && optimizePreview && (
+        <div className="mb-3 text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 space-y-1.5">
+          {optimizePreview.savingsMinutes > 0 ? (
+            <div className="font-semibold">
+              Save ~{optimizePreview.savingsMinutes} min of driving today
+            </div>
+          ) : (
+            <div className="font-semibold">
+              Already close to optimal — no meaningful savings found
+            </div>
+          )}
+          <div className="text-[11px] text-amber-800">
+            Current: {optimizePreview.currentDriveMinutes} min driving · Proposed:{" "}
+            {optimizePreview.optimalDriveMinutes} min. Apply will renumber start
+            times from your work-start and resync Google Calendar.
+          </div>
+        </div>
+      )}
 
       {reordering && (
         <div className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -831,7 +963,7 @@ function StopList({
         )}
         {stops.map((s, i) => (
           <div key={s.id}>
-            {!reordering && s.driveMinutesFromPrev != null && (
+            {!reordering && !previewingOptimize && s.driveMinutesFromPrev != null && (
               <DriveLeg minutes={s.driveMinutesFromPrev} />
             )}
             <TimelineRow
@@ -840,7 +972,7 @@ function StopList({
               title={s.label}
               subtitle={
                 <>
-                  {!reordering && (
+                  {!reordering && !previewingOptimize && (
                     <>
                       <span className="inline-flex items-center gap-1">
                         <Clock className="h-3 w-3" />
@@ -861,7 +993,7 @@ function StopList({
                     onUp={() => move(i, -1)}
                     onDown={() => move(i, 1)}
                   />
-                ) : (
+                ) : previewingOptimize ? null : (
                   <StopMenu
                     leadId={s.id}
                     label={s.label}
@@ -877,7 +1009,7 @@ function StopList({
             />
           </div>
         ))}
-        {!reordering && data.home && data.returnDriveMinutes != null && data.stops.length > 0 && (
+        {!reordering && !previewingOptimize && data.home && data.returnDriveMinutes != null && data.stops.length > 0 && (
           <>
             <DriveLeg minutes={data.returnDriveMinutes} />
             <TimelineRow
@@ -919,6 +1051,43 @@ function StopList({
                   <Check className="h-4 w-4" />
                   {dirty ? "Save new order" : "No changes"}
                 </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {previewingOptimize && optimizePreview && (
+        <div className="mt-3 space-y-2">
+          {optimizeError && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {optimizeError}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={cancelOptimize}
+              disabled={saving}
+              className="rounded-full border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)] px-4 h-10 text-sm font-medium disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={applyOptimize}
+              disabled={saving || optimizePreview.savingsMinutes === 0}
+              className="flex-1 rounded-full bg-[var(--accent)] text-white h-10 text-sm font-semibold inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Applying…
+                </>
+              ) : optimizePreview.savingsMinutes > 0 ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Apply optimization
+                </>
+              ) : (
+                <>No improvement</>
               )}
             </button>
           </div>
