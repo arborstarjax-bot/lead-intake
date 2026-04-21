@@ -899,8 +899,10 @@ function buildMailtoHref(email: string, lead: Lead, settings: ClientAppSettings)
   const vars = templateVars(lead, settings);
   const subject = renderTemplate(emailSubjectTemplate(settings), vars);
   const body = renderTemplate(emailBodyTemplate(settings), vars);
-  const q = new URLSearchParams({ subject, body }).toString();
-  return `mailto:${email}?${q}`;
+  // RFC 6068 requires percent-encoding for mailto: query components.
+  // URLSearchParams uses `application/x-www-form-urlencoded` (spaces as `+`),
+  // which Apple Mail renders as literal `+` characters in the body.
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function ActionIconLink({
