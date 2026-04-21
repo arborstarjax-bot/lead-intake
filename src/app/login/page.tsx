@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { LoginForm } from "./LoginForm";
+import { SignedInNotice } from "./SignedInNotice";
+import { getSessionMembership } from "@/lib/auth";
+import { createSSRClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +13,18 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const sp = await searchParams;
+
+  // If the user is already signed in AND in a workspace, there's nothing
+  // to do here — send them into the app (or wherever they were headed).
+  const membership = await getSessionMembership();
+  if (membership) redirect(sp.next || "/");
+
+  // Signed in but orphaned (no workspace membership): show a sign-out +
+  // rejoin prompt instead of the login form so they're never trapped.
+  const supabase = await createSSRClient();
+  const { data: userRes } = await supabase.auth.getUser();
+  const orphanEmail = userRes.user?.email ?? null;
+
   return (
     <main className="min-h-dvh flex items-center justify-center px-4 py-12 bg-[var(--bg)]">
       <div className="w-full max-w-sm space-y-6">
@@ -18,7 +34,11 @@ export default async function LoginPage({
             Sign in to your workspace
           </p>
         </div>
-        <LoginForm next={sp.next} initialError={sp.error} />
+        {orphanEmail ? (
+          <SignedInNotice email={orphanEmail} />
+        ) : (
+          <LoginForm next={sp.next} initialError={sp.error} />
+        )}
         <p className="text-sm text-center text-[var(--muted)]">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-[var(--accent)] font-medium">

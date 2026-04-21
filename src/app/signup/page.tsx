@@ -1,9 +1,17 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { SignupForm } from "./SignupForm";
+import { getSessionMembership } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default function SignupPage() {
+export default async function SignupPage() {
+  // If the user is already signed in and a member, there's nothing to
+  // sign up for — send them into the app. If they're signed in but
+  // orphaned, /workspace has the rejoin/sign-out affordances.
+  const membership = await getSessionMembership();
+  if (membership) redirect("/");
+
   return (
     <main className="min-h-dvh flex items-center justify-center px-4 py-12 bg-[var(--bg)]">
       <div className="w-full max-w-sm space-y-6">
