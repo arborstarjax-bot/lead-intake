@@ -10,12 +10,50 @@ import {
   UploadCloud,
   Pencil,
   Plus,
-  Loader2,
 } from "lucide-react";
 import UploadBox from "@/components/UploadBox";
 import StandaloneLeadCard from "@/components/StandaloneLeadCard";
+import EnableNotifications from "@/components/EnableNotifications";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types";
+
+/**
+ * Build a placeholder Lead that lives only in React state. The POST to
+ * /api/leads doesn't fire until the user actually types something — see
+ * StandaloneLeadCard's `pending` mode. That way tapping "Start a new
+ * lead" and walking away never leaves a blank ghost row in the table.
+ */
+function buildPendingLead(): Lead {
+  const now = new Date().toISOString();
+  return {
+    id: `pending-${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`,
+    created_at: now,
+    updated_at: now,
+    date: null,
+    first_name: null,
+    last_name: null,
+    client: null,
+    phone_number: null,
+    email: null,
+    address: null,
+    city: null,
+    state: null,
+    zip: null,
+    status: "New",
+    sales_person: null,
+    scheduled_day: null,
+    scheduled_time: null,
+    notes: null,
+    screenshot_url: null,
+    screenshot_path: null,
+    extraction_confidence: null,
+    calendar_event_id: null,
+    calendar_scheduled_day: null,
+    calendar_scheduled_time: null,
+    intake_source: "manual",
+    intake_status: "ready",
+  };
+}
 
 type IntakeTab = "upload" | "manual";
 
@@ -23,8 +61,11 @@ export default function HomePage() {
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
   const [counts, setCounts] = useState<{ active: number; completed: number } | null>(null);
   const [tab, setTab] = useState<IntakeTab>("upload");
+  // Manual-entry cards live locally until the user types. `pendingIds`
+  // tracks which are still un-persisted so we can tell StandaloneLeadCard
+  // to POST (instead of PATCH) on the first keystroke.
   const [manualLeads, setManualLeads] = useState<Lead[]>([]);
-  const [creating, setCreating] = useState(false);
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/google/status")
@@ -44,35 +85,32 @@ export default function HomePage() {
       .catch(() => setCounts({ active: 0, completed: 0 }));
   }, []);
 
-  async function startManualLead() {
-    if (creating) return;
-    setCreating(true);
-    try {
-      const res = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (res.ok && json.lead) {
-        setManualLeads((prev) => [json.lead as Lead, ...prev]);
-      } else {
-        alert(json.error ?? "Could not create lead");
-      }
-    } finally {
-      setCreating(false);
-    }
+  function startManualLead() {
+    const stub = buildPendingLead();
+    setManualLeads((prev) => [stub, ...prev]);
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      next.add(stub.id);
+      return next;
+    });
   }
 
   function removeManualLead(id: string) {
     setManualLeads((prev) => prev.filter((l) => l.id !== id));
+    setPendingIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }
 
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-2">
         <h1 className="text-xl sm:text-2xl font-semibold">Lead Intake</h1>
         <div className="flex items-center gap-2 text-xs sm:text-sm">
+          <EnableNotifications />
           {googleConnected === false && (
             <a
               href="/api/google/connect"
@@ -82,7 +120,7 @@ export default function HomePage() {
             </a>
           )}
           {googleConnected && (
-            <span className="rounded-md border border-green-200 bg-green-50 text-green-800 px-3 py-1.5">
+            <span className="hidden sm:inline rounded-md border border-green-200 bg-green-50 text-green-800 px-3 py-1.5">
               Calendar connected
             </span>
           )}
@@ -123,19 +161,12 @@ export default function HomePage() {
             <div className="space-y-4">
               <button
                 onClick={startManualLead}
-                disabled={creating}
                 className={cn(
                   "inline-flex items-center justify-center gap-2 rounded-xl px-4 h-11 text-sm font-medium w-full sm:w-auto transition active:scale-[0.98]",
-                  creating
-                    ? "bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed"
-                    : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
+                  "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
                 )}
               >
-                {creating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
+                <Plus className="h-4 w-4" />
                 {manualLeads.length === 0 ? "Start a new lead" : "Add another lead"}
               </button>
 
@@ -152,6 +183,7 @@ export default function HomePage() {
                       key={l.id}
                       initialLead={l}
                       onRemoved={removeManualLead}
+                      pending={pendingIds.has(l.id)}
                     />
                   ))}
                 </div>
