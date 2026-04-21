@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * Settings page. Every field autosaves on blur (500 ms after the last
- * keystroke on textareas, immediately on leaving an input). No "Save
- * changes" button — matches the autosave pattern the rest of the app
- * already uses inside LeadCard.
+ * Settings page. Edits update local state only; nothing is persisted
+ * until the user explicitly taps the Save button at the bottom of the
+ * page. The autosave path was too aggressive for the setup flow
+ * (every keystroke fired a PUT, and tab-switch flushes were racing
+ * against the UI), so the page now behaves like a traditional form.
  *
  * Sections:
  *   1. Company         — name, phone, email used in SMS / email copy
@@ -15,15 +16,14 @@
  *   6. Working hours   — day window + work days bitmap
  *   7. Job timing      — default job length + travel buffer
  *
- * Editing any field updates local state optimistically. The patch is
- * deferred by ~500 ms and flushed on blur / tab hide / page leave so
- * edits are never silently lost (same contract as InlineField in
- * LeadTable). Errors surface as toasts.
+ * Errors from the PUT surface as toasts. On success the provider is
+ * updated in-place so the rest of the app picks up the new values
+ * without a reload.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Plus, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
@@ -45,36 +45,85 @@ const DAYS = [
 
 type Patch = Partial<ClientAppSettings>;
 
+/**
+ * Shallow diff between two settings snapshots. Only fields that the
+ * UI renders as editable are compared; the server is authoritative
+ * for the rest. Arrays (work_days, salespeople) are compared via
+ * JSON.stringify — both are short and primitives-only.
+ */
+const EDITABLE_KEYS = [
+  "company_name",
+  "company_phone",
+  "company_email",
+  "salespeople",
+  "sms_intro_template",
+  "sms_confirm_template",
+  "email_subject_template",
+  "email_body_template",
+  "home_address",
+  "home_city",
+  "home_state",
+  "home_zip",
+  "work_start_time",
+  "work_end_time",
+  "work_days",
+  "default_job_minutes",
+  "travel_buffer_minutes",
+] as const satisfies ReadonlyArray<keyof ClientAppSettings>;
+
+function diffSettings(next: ClientAppSettings, prev: ClientAppSettings): Patch {
+  const patch: Patch = {};
+  for (const key of EDITABLE_KEYS) {
+    const a = next[key];
+    const b = prev[key];
+    const same =
+      Array.isArray(a) && Array.isArray(b)
+        ? JSON.stringify(a) === JSON.stringify(b)
+        : a === b;
+    if (!same) {
+      // Assignment goes through `unknown` so TS doesn't infer each
+      // field's individual union type for the merged patch.
+      (patch as Record<string, unknown>)[key] = a;
+    }
+  }
+  return patch;
+}
+
 export default function SettingsPage() {
   const { toast } = useToast();
   const { settings: ctxSettings, apply } = useAppSettings();
 
   const [loading, setLoading] = useState(true);
   const [s, setS] = useState<ClientAppSettings>(DEFAULT_CLIENT_SETTINGS);
+  const [saving, setSaving] = useState(false);
+  // The last-saved snapshot. Used to compute dirty state and the diff
+  // we send on Save. Updated on mount from ctxSettings and after each
+  // successful PUT.
+  const savedRef = useRef<ClientAppSettings>(DEFAULT_CLIENT_SETTINGS);
+  const [savedTick, setSavedTick] = useState(0);
 
-  // Track the most recent unsaved patch so flush() can persist on
-  // blur / visibilitychange / pagehide without relying on stale closures.
-  const pending = useRef<Patch>({});
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const savingRef = useRef(false);
+  // Initial load: seed local state + savedRef from the server-side
+  // settings the provider has already fetched. We treat ctxSettings as
+  // authoritative on mount only — once the page is open, edits live in
+  // `s` until the user taps Save.
+  useEffect(() => {
+    setS(ctxSettings);
+    savedRef.current = ctxSettings;
+    setSavedTick((t) => t + 1);
+    setLoading(false);
+  }, [ctxSettings]);
 
-  // `flush` is self-referential (it retries itself after a save completes
-  // if more edits came in mid-flight), so declare the ref up front.
-  const flushRef = useRef<() => Promise<void>>(async () => {});
-  const flush = useCallback(async () => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-    // If a save is already in flight, leave pending.current alone. The
-    // in-flight save's `finally` will re-invoke flush() so the newer
-    // fields are posted in a follow-up request instead of dropped.
-    if (savingRef.current) return;
-    const patch = pending.current;
-    const keys = Object.keys(patch);
-    if (keys.length === 0) return;
-    pending.current = {};
-    savingRef.current = true;
+  // savedTick forces a recompute after each successful save so the
+  // "All changes saved" state flips immediately. The lint rule doesn't
+  // see that savedRef.current changes in lockstep with savedTick, so
+  // we disable the warning here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const patch = useMemo(() => diffSettings(s, savedRef.current), [s, savedTick]);
+  const dirty = Object.keys(patch).length > 0;
+
+  async function save() {
+    if (!dirty || saving) return;
+    setSaving(true);
     try {
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -86,77 +135,40 @@ export default function SettingsPage() {
         toast({ kind: "error", message: json.error ?? "Save failed" });
         return;
       }
-      if (json?.settings) {
-        apply(json.settings as Partial<ClientAppSettings>);
-      }
+      // Server-normalized settings become the new baseline. Merge onto
+      // the current local state so any field the server doesn't echo
+      // back stays as the user typed it.
+      const serverPatch = (json?.settings ?? {}) as Partial<ClientAppSettings>;
+      const nextSaved: ClientAppSettings = { ...s, ...serverPatch };
+      savedRef.current = nextSaved;
+      setS(nextSaved);
+      setSavedTick((t) => t + 1);
+      if (json?.settings) apply(serverPatch);
+      toast({ kind: "success", message: "Saved" });
     } catch (e) {
       toast({ kind: "error", message: (e as Error).message });
     } finally {
-      savingRef.current = false;
-      // Anything typed mid-save now gets its own round-trip.
-      if (Object.keys(pending.current).length > 0) {
-        // Break out of this call's stack so React can batch state
-        // updates and the caller can finish its own `finally`.
-        setTimeout(() => flushRef.current(), 0);
-      }
+      setSaving(false);
     }
-  }, [apply, toast]);
+  }
 
-  // Keep the ref pointing at the latest flush so the setTimeout retry
-  // above always sees the current closure.
-  useEffect(() => {
-    flushRef.current = flush;
-  }, [flush]);
-
-  // Initial load: seed local state from the server-side settings the
-  // provider has already fetched (or is fetching). This file owns the
-  // only editor, so we treat ctxSettings as authoritative on mount only.
-  useEffect(() => {
-    setS(ctxSettings);
-    setLoading(false);
-  }, [ctxSettings]);
-
-  // Flush pending edits on tab hide / page leave so switching apps
-  // mid-edit doesn't silently drop the patch.
-  useEffect(() => {
-    function onHide() {
-      if (document.visibilityState === "hidden") flush();
-    }
-    document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", flush);
-    return () => {
-      document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", flush);
-    };
-  }, [flush]);
-
-  // Unmount flush — navigating back to Home shouldn't drop the last field.
-  useEffect(() => {
-    return () => {
-      flush();
-    };
-  }, [flush]);
+  function revert() {
+    setS(savedRef.current);
+    setSavedTick((t) => t + 1);
+  }
 
   function update<K extends keyof ClientAppSettings>(
     key: K,
-    value: ClientAppSettings[K],
-    { immediate = false }: { immediate?: boolean } = {}
+    value: ClientAppSettings[K]
   ) {
     setS((prev) => ({ ...prev, [key]: value }));
-    pending.current = { ...pending.current, [key]: value };
-    if (immediate) {
-      flush();
-    } else {
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(flush, 500);
-    }
   }
 
   function toggleDay(d: number) {
     const next = s.work_days.includes(d)
       ? s.work_days.filter((x) => x !== d)
       : [...s.work_days, d].sort((a, b) => a - b);
-    update("work_days", next, { immediate: true });
+    update("work_days", next);
   }
 
   if (loading) {
@@ -178,8 +190,16 @@ export default function SettingsPage() {
           <ArrowLeft className="h-4 w-4" /> Home
         </Link>
         <h1 className="text-lg sm:text-xl font-semibold">Settings</h1>
-        <span className="w-12 text-right text-xs text-[var(--muted)]" aria-hidden>
-          Autosaves
+        <span
+          className={cn(
+            "text-xs font-medium",
+            dirty
+              ? "text-amber-600"
+              : "text-[var(--muted)]"
+          )}
+          aria-live="polite"
+        >
+          {dirty ? "Unsaved changes" : "All changes saved"}
         </span>
       </header>
 
@@ -193,7 +213,6 @@ export default function SettingsPage() {
             className={inputCls}
             value={s.company_name ?? ""}
             onChange={(e) => update("company_name", e.target.value)}
-            onBlur={flush}
             placeholder="Arbor Tech 904"
           />
         </Field>
@@ -203,7 +222,6 @@ export default function SettingsPage() {
               className={inputCls}
               value={s.company_phone ?? ""}
               onChange={(e) => update("company_phone", e.target.value)}
-              onBlur={flush}
               placeholder="(904) 555-0100"
               inputMode="tel"
               autoComplete="tel"
@@ -214,7 +232,6 @@ export default function SettingsPage() {
               className={inputCls}
               value={s.company_email ?? ""}
               onChange={(e) => update("company_email", e.target.value)}
-              onBlur={flush}
               placeholder="hello@arbortech904.com"
               inputMode="email"
               autoComplete="email"
@@ -230,7 +247,7 @@ export default function SettingsPage() {
       >
         <SalespeopleEditor
           roster={s.salespeople}
-          onChange={(next) => update("salespeople", next, { immediate: true })}
+          onChange={(next) => update("salespeople", next)}
         />
       </Panel>
 
@@ -244,14 +261,12 @@ export default function SettingsPage() {
           rows={5}
           value={s.sms_intro_template ?? ""}
           onChange={(v) => update("sms_intro_template", v)}
-          onCommit={flush}
         />
         <TemplateField
           label="Confirmation SMS (after booking)"
           rows={4}
           value={s.sms_confirm_template ?? ""}
           onChange={(v) => update("sms_confirm_template", v)}
-          onCommit={flush}
         />
       </Panel>
 
@@ -265,14 +280,12 @@ export default function SettingsPage() {
           rows={1}
           value={s.email_subject_template ?? ""}
           onChange={(v) => update("email_subject_template", v)}
-          onCommit={flush}
         />
         <TemplateField
           label="Body"
           rows={8}
           value={s.email_body_template ?? ""}
           onChange={(v) => update("email_body_template", v)}
-          onCommit={flush}
         />
       </Panel>
 
@@ -286,7 +299,6 @@ export default function SettingsPage() {
             className={inputCls}
             value={s.home_address ?? ""}
             onChange={(e) => update("home_address", e.target.value)}
-            onBlur={flush}
             placeholder="123 Main St"
             autoComplete="street-address"
           />
@@ -297,7 +309,6 @@ export default function SettingsPage() {
               className={inputCls}
               value={s.home_city ?? ""}
               onChange={(e) => update("home_city", e.target.value)}
-              onBlur={flush}
               placeholder="Jacksonville"
               autoComplete="address-level2"
             />
@@ -307,7 +318,6 @@ export default function SettingsPage() {
               className={inputCls}
               value={s.home_state ?? ""}
               onChange={(e) => update("home_state", e.target.value)}
-              onBlur={flush}
               placeholder="FL"
               maxLength={2}
               autoComplete="address-level1"
@@ -318,7 +328,6 @@ export default function SettingsPage() {
               className={inputCls}
               value={s.home_zip ?? ""}
               onChange={(e) => update("home_zip", e.target.value)}
-              onBlur={flush}
               placeholder="32210"
               inputMode="numeric"
               autoComplete="postal-code"
@@ -338,9 +347,7 @@ export default function SettingsPage() {
               type="time"
               className={inputCls}
               value={s.work_start_time.slice(0, 5)}
-              onChange={(e) =>
-                update("work_start_time", e.target.value, { immediate: true })
-              }
+              onChange={(e) => update("work_start_time", e.target.value)}
             />
           </Field>
           <Field label="Day ends">
@@ -348,9 +355,7 @@ export default function SettingsPage() {
               type="time"
               className={inputCls}
               value={s.work_end_time.slice(0, 5)}
-              onChange={(e) =>
-                update("work_end_time", e.target.value, { immediate: true })
-              }
+              onChange={(e) => update("work_end_time", e.target.value)}
             />
           </Field>
         </div>
@@ -388,10 +393,7 @@ export default function SettingsPage() {
               value={s.default_job_minutes}
               min={5}
               max={600}
-              onCommit={(n) => {
-                update("default_job_minutes", n);
-                flush();
-              }}
+              onCommit={(n) => update("default_job_minutes", n)}
             />
           </Field>
           <Field label="Travel buffer (min)">
@@ -399,15 +401,76 @@ export default function SettingsPage() {
               value={s.travel_buffer_minutes}
               min={0}
               max={120}
-              onCommit={(n) => {
-                update("travel_buffer_minutes", n);
-                flush();
-              }}
+              onCommit={(n) => update("travel_buffer_minutes", n)}
             />
           </Field>
         </div>
       </Panel>
+
+      {/*
+        Spacer under the sticky save bar so the last panel isn't
+        hidden behind the bar on mobile.
+      */}
+      <div className="h-24" aria-hidden />
+
+      <SaveBar
+        dirty={dirty}
+        saving={saving}
+        onSave={save}
+        onRevert={revert}
+      />
     </main>
+  );
+}
+
+function SaveBar({
+  dirty,
+  saving,
+  onSave,
+  onRevert,
+}: {
+  dirty: boolean;
+  saving: boolean;
+  onSave: () => void;
+  onRevert: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-white/95 backdrop-blur",
+        "px-4 py-3 sm:px-6"
+      )}
+    >
+      <div className="mx-auto max-w-2xl flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onRevert}
+          disabled={!dirty || saving}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)] px-4 h-11 text-sm font-medium disabled:opacity-40"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Revert
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!dirty || saving}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-[var(--accent)] text-white h-11 text-sm font-semibold disabled:opacity-40"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+            </>
+          ) : dirty ? (
+            <>
+              <Check className="h-4 w-4" /> Save changes
+            </>
+          ) : (
+            <>All changes saved</>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -495,13 +558,11 @@ function TemplateField({
   value,
   rows,
   onChange,
-  onCommit,
 }: {
   label: string;
   value: string;
   rows: number;
   onChange: (next: string) => void;
-  onCommit: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   // Remember the last cursor position even after the textarea blurs so
@@ -543,10 +604,7 @@ function TemplateField({
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
       onChange(e.target.value);
     },
-    onBlur: () => {
-      rememberCaret();
-      onCommit();
-    },
+    onBlur: rememberCaret,
     onKeyUp: rememberCaret,
     onClick: rememberCaret,
     onSelect: rememberCaret,
