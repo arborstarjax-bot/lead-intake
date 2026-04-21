@@ -34,8 +34,9 @@ export default function StandaloneLeadCard({
   const [isPending, setIsPending] = useState(pending);
   const [deleted, setDeleted] = useState(false);
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Coalesce concurrent patches while the initial POST is in-flight so
-  // two quick edits on a pending card don't race into two creates.
+  // Guard against double-creation when two patches race during the initial
+  // POST. The first caller owns the create; later callers wait on the same
+  // promise and then replay their patch as a PATCH against the real id.
   const createInFlight = useRef<Promise<Lead | null> | null>(null);
 
   async function createFromPending(patch: Partial<Lead>): Promise<Lead | null> {
@@ -62,19 +63,12 @@ export default function StandaloneLeadCard({
     return promise;
   }
 
-  async function savePatch(patch: Partial<Lead>) {
-    const prev = lead;
-    // Optimistic update so typing feels instant; snap back on error.
-    setLead({ ...prev, ...patch });
-
-    if (isPending) {
-      // First keystroke on a manual-entry card — persist the lead now.
-      const created = await createFromPending({ ...patch });
-      if (!created) setLead(prev);
-      return;
-    }
-
-    const res = await fetch(`/api/leads/${prev.id}`, {
+  async function patchExisting(
+    id: string,
+    patch: Partial<Lead>,
+    prev: Lead
+  ): Promise<void> {
+    const res = await fetch(`/api/leads/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
@@ -86,6 +80,34 @@ export default function StandaloneLeadCard({
       setLead(prev);
       toast({ kind: "error", message: json.error ?? "Save failed" });
     }
+  }
+
+  async function savePatch(patch: Partial<Lead>) {
+    const prev = lead;
+    // Optimistic update so typing feels instant; snap back on error.
+    setLead({ ...prev, ...patch });
+
+    if (isPending || createInFlight.current) {
+      // If a POST is already in-flight we must not fire a second one —
+      // but we also must not silently drop this caller's new fields.
+      // Wait for the create, then replay this patch against the real id.
+      const alreadyCreating = Boolean(createInFlight.current);
+      const created = alreadyCreating
+        ? await createInFlight.current
+        : await createFromPending({ ...patch });
+      if (!created) {
+        setLead(prev);
+        return;
+      }
+      // The very first caller's patch is included in the POST body, so
+      // only replay if we piggy-backed on someone else's in-flight create.
+      if (alreadyCreating) {
+        await patchExisting(created.id, patch, { ...prev, ...patch });
+      }
+      return;
+    }
+
+    await patchExisting(prev.id, patch, prev);
   }
 
   function onDelete() {

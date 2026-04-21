@@ -68,7 +68,12 @@ export default function LeadTable({
     if (!silent) setLoading(true);
     try {
       const r = await fetch(`/api/leads?view=all`).then((r) => r.json());
-      const all: Lead[] = r.leads ?? [];
+      // Hide any leads the user just optimistically deleted; the server
+      // won't drop them until the 5s undo timer fires, and we don't want a
+      // mid-window background poll to resurrect them.
+      const all: Lead[] = (r.leads ?? []).filter(
+        (l: Lead) => !pendingDeletes.current.has(l.id)
+      );
       setLeads(all);
       const counts: LeadCounts = {
         All: all.length,
@@ -104,7 +109,7 @@ export default function LeadTable({
     );
   }, [leads, search, filter]);
 
-  async function savePatch(id: string, patch: Partial<Lead>) {
+  async function savePatch(id: string, patch: Partial<Lead>): Promise<boolean> {
     const res = await fetch(`/api/leads/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -135,14 +140,18 @@ export default function LeadTable({
       if ("scheduled_time" in patch || "scheduled_day" in patch) {
         onScheduleChange?.();
       }
-    } else {
-      toast({ kind: "error", message: json.error ?? "Save failed" });
+      return true;
     }
+    toast({ kind: "error", message: json.error ?? "Save failed" });
+    return false;
   }
 
   async function onMarkCompleted(lead: Lead) {
     const prev = lead.status;
-    await savePatch(lead.id, { status: "Completed" });
+    const ok = await savePatch(lead.id, { status: "Completed" });
+    // savePatch surfaces its own error toast on failure; don't stack a
+    // contradictory "Marked Completed" success on top of it.
+    if (!ok) return;
     toast({
       kind: "success",
       message: "Marked Completed",
