@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Copy, Loader2, RotateCcw, Shield, UserMinus, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
@@ -114,6 +115,33 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
       router.replace("/login");
       router.refresh();
     });
+  }
+
+  async function deleteAccount() {
+    const first = confirm(
+      "Delete your account permanently? This cannot be undone."
+    );
+    if (!first) return;
+    const second = confirm(
+      "Final confirmation. Your leads, settings, and membership will be deleted. If you are the only member of this workspace, the workspace itself will be deleted. Continue?"
+    );
+    if (!second) return;
+
+    const res = await fetch("/api/account", { method: "DELETE" });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast({
+        kind: "error",
+        message: json.error ?? "Account deletion failed",
+      });
+      return;
+    }
+    // Session cookie is still present until the browser clears it on
+    // next navigation — log out explicitly so we don't flash a
+    // half-authenticated screen.
+    await logout().catch(() => {});
+    router.replace("/login");
+    router.refresh();
   }
 
   return (
@@ -236,6 +264,35 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         Sign out
       </button>
+
+      <section className="rounded-2xl border border-red-200 bg-red-50/30 p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-red-700">Danger zone</h2>
+          <p className="text-xs text-[var(--muted)] mt-1">
+            Permanently delete your account. If you are the only member of
+            your workspace, the workspace and all of its leads are deleted
+            too. If you are the only admin with other members, promote
+            someone else first.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={deleteAccount}
+          className="w-full inline-flex items-center justify-center h-10 rounded-full border border-red-200 bg-white text-sm font-medium text-red-700 hover:bg-red-100"
+        >
+          Delete my account
+        </button>
+      </section>
+
+      <div className="text-center text-xs text-[var(--muted)] space-x-3">
+        <Link href="/privacy" className="hover:underline">
+          Privacy
+        </Link>
+        <span aria-hidden>·</span>
+        <Link href="/terms" className="hover:underline">
+          Terms
+        </Link>
+      </div>
     </div>
   );
 }
