@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ClipboardList } from "lucide-react";
+import { CheckCircle2, ClipboardList, Settings as SettingsIcon } from "lucide-react";
 import UploadBox from "@/components/UploadBox";
 
 export default function HomePage() {
@@ -45,6 +45,13 @@ export default function HomePage() {
               Calendar connected
             </span>
           )}
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
+          >
+            <SettingsIcon className="h-4 w-4" />
+          </Link>
         </div>
       </header>
 
