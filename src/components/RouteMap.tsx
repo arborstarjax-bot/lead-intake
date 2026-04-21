@@ -81,7 +81,13 @@ export default function RouteMap({
     if (window.__googleMapsAuthError) onAuthFailure();
     loadGoogleMaps()
       .then((google) => {
+        // `loadGoogleMaps` caches its resolved promise on `window`, so on
+        // remount after an auth failure this microtask fires immediately
+        // after the sync `onAuthFailure()` above and would overwrite the
+        // error state with `setStatus("ready")`. Short-circuit if auth is
+        // known broken or the component unmounted.
         if (cancelled || !containerRef.current) return;
+        if (window.__googleMapsAuthError) return;
         const map = new google.maps.Map(containerRef.current, {
           center: { lat: 30.3322, lng: -81.6557 }, // Jacksonville fallback
           zoom: 10,
