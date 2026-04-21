@@ -91,6 +91,15 @@ function diffSettings(next: ClientAppSettings, prev: ClientAppSettings): Patch {
       same = JSON.stringify(a) === JSON.stringify(b);
     } else if (key === "work_start_time" || key === "work_end_time") {
       same = timeEq(a, b);
+    } else if (
+      (typeof a === "string" || a === null) &&
+      (typeof b === "string" || b === null)
+    ) {
+      // Nullable text columns: the API collapses "" to null before
+      // saving, so after a successful save `savedRef` holds null while
+      // the input still holds "". Normalize both sides so cleared
+      // fields don't get stuck showing Unsaved changes forever.
+      same = (a ?? "") === (b ?? "");
     } else {
       same = a === b;
     }
