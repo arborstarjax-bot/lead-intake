@@ -1,14 +1,44 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f7f7f5;
-  --fg: #111827;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --accent: #2563eb;
+  /* Surfaces */
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+
+  /* Text */
+  --fg: #0f172a;
+  --muted: #64748b;
+  --subtle: #94a3b8;
+
+  /* Lines */
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  /* Accents */
+  --accent: #059669;
+  --accent-hover: #047857;
   --accent-fg: #ffffff;
+  --accent-soft: #d1fae5;
+  --link: #0ea5e9;
+
+  /* Semantics */
   --danger: #dc2626;
-  --success: #059669;
+  --danger-soft: #fee2e2;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --success: #047857;
+  --success-soft: #d1fae5;
+
+  /* Status palette (sequential, for lead lifecycle) */
+  --status-new-fg: #1e3a8a;
+  --status-new-bg: #dbeafe;
+  --status-called-fg: #92400e;
+  --status-called-bg: #fef3c7;
+  --status-scheduled-fg: #3730a3;
+  --status-scheduled-bg: #e0e7ff;
+  --status-completed-fg: #065f46;
+  --status-completed-bg: #d1fae5;
 }
 
 html,
@@ -16,34 +46,63 @@ body {
   background: var(--bg);
   color: var(--fg);
   -webkit-font-smoothing: antialiased;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
 body {
   min-height: 100dvh;
+  /* Respect iOS home-indicator / notch so cards don't get clipped. */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Avoid iOS zoom-on-focus */
+/* iOS Safari zooms inputs with font-size < 16px on focus. */
 input,
 select,
 textarea {
   font-size: 16px;
 }
 
-/* Spreadsheet-style table */
-.cell-input {
+/* Inline editors used inside the lead card. Transparent until focused,
+   then reveal a subtle surface + accent ring so users always know what
+   has focus without cluttering the idle state. */
+.field-input {
   width: 100%;
   background: transparent;
-  padding: 0.5rem 0.5rem;
+  padding: 0.625rem 0.75rem;
   outline: none;
   border: 1px solid transparent;
+  border-radius: 0.5rem;
+  color: var(--fg);
+  min-height: 44px;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
-.cell-input:focus {
-  border-color: var(--accent);
+.field-input::placeholder {
+  color: var(--subtle);
+}
+.field-input:hover {
+  background: var(--surface-2);
+}
+.field-input:focus {
   background: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+}
+.field-input.invalid-soft {
+  background: var(--warning-soft);
+  border-color: #f59e0b;
 }
 
 @keyframes slide {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
+}
+
+/* Hide scrollbars on the horizontal status-tab strip while keeping swipe. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

@@ -11,47 +11,40 @@ import {
   Undo2,
   Plus,
   Search,
+  MoreVertical,
+  MapPin,
+  StickyNote,
+  User,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import type { Lead, LeadStatus } from "@/lib/types";
 import { LEAD_STATUSES, EDITABLE_COLUMNS } from "@/lib/types";
 import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type Column = {
+type FieldDef = {
   key: keyof Lead;
   label: string;
-  width: string;
-  type?: "text" | "date" | "time" | "select" | "textarea";
+  type?: "text" | "date" | "time" | "textarea" | "tel" | "email";
+  placeholder?: string;
+  inputMode?: "text" | "tel" | "email" | "numeric";
 };
 
-const COLUMNS: Column[] = [
-  { key: "status", label: "Status", width: "min-w-[170px]", type: "select" },
-  { key: "date", label: "Date", width: "min-w-[120px]", type: "date" },
-  { key: "client", label: "Client Name", width: "min-w-[180px]" },
-  { key: "phone_number", label: "Phone", width: "min-w-[150px]" },
-  { key: "email", label: "Email", width: "min-w-[200px]" },
-  { key: "address", label: "Address", width: "min-w-[180px]" },
-  { key: "city", label: "City", width: "min-w-[120px]" },
-  { key: "state", label: "State", width: "min-w-[70px]" },
-  { key: "zip", label: "Zip", width: "min-w-[90px]" },
-  { key: "sales_person", label: "Sales Person", width: "min-w-[140px]" },
-  { key: "scheduled_day", label: "Sched. Day", width: "min-w-[130px]", type: "date" },
-  { key: "scheduled_time", label: "Sched. Time", width: "min-w-[110px]", type: "time" },
-  { key: "notes", label: "Notes", width: "min-w-[260px]", type: "textarea" },
-];
+export type LeadFilter = "All" | LeadStatus;
+export type LeadCounts = Record<LeadFilter, number>;
 
 export default function LeadTable({
-  view,
+  filter,
   onCounts,
 }: {
-  view: "active" | "completed";
-  onCounts?: (n: { active: number; completed: number }) => void;
+  filter: LeadFilter;
+  onCounts?: (n: LeadCounts) => void;
 }) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<keyof Lead>("created_at");
-  const [sortAsc, setSortAsc] = useState(false);
   const [toast, setToast] = useState<{ leadId: string; prev: LeadStatus } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -62,14 +55,19 @@ export default function LeadTable({
 
   async function refresh() {
     setLoading(true);
-    const [a, c] = await Promise.all([
-      fetch(`/api/leads?view=active`).then((r) => r.json()),
-      fetch(`/api/leads?view=completed`).then((r) => r.json()),
-    ]);
-    const activeLeads: Lead[] = a.leads ?? [];
-    const completedLeads: Lead[] = c.leads ?? [];
-    setLeads(view === "active" ? activeLeads : completedLeads);
-    onCounts?.({ active: activeLeads.length, completed: completedLeads.length });
+    const r = await fetch(`/api/leads?view=all`).then((r) => r.json());
+    const all: Lead[] = r.leads ?? [];
+    setLeads(all);
+    const counts: LeadCounts = {
+      All: all.length,
+      New: 0,
+      "Called / No Response": 0,
+      Scheduled: 0,
+      Completed: 0,
+      Lost: 0,
+    };
+    for (const l of all) counts[l.status] = (counts[l.status] ?? 0) + 1;
+    onCounts?.(counts);
     setLoading(false);
   }
 
@@ -78,25 +76,19 @@ export default function LeadTable({
     const t = setInterval(refresh, 15_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, []);
 
   const filtered = useMemo(() => {
+    const byStatus = filter === "All" ? leads : leads.filter((l) => l.status === filter);
     const q = search.trim().toLowerCase();
-    const rows = q
-      ? leads.filter((l) =>
-          EDITABLE_COLUMNS.some((k) => {
-            const v = l[k];
-            return typeof v === "string" && v.toLowerCase().includes(q);
-          })
-        )
-      : leads.slice();
-    rows.sort((a, b) => {
-      const av = (a[sortKey] ?? "") as string;
-      const bv = (b[sortKey] ?? "") as string;
-      return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
-    });
-    return rows;
-  }, [leads, search, sortKey, sortAsc]);
+    if (!q) return byStatus;
+    return byStatus.filter((l) =>
+      EDITABLE_COLUMNS.some((k) => {
+        const v = l[k];
+        return typeof v === "string" && v.toLowerCase().includes(q);
+      })
+    );
+  }, [leads, search, filter]);
 
   async function savePatch(id: string, patch: Partial<Lead>) {
     const res = await fetch(`/api/leads/${id}`, {
@@ -106,16 +98,9 @@ export default function LeadTable({
     });
     const json = await res.json();
     if (res.ok && json.lead) {
-      setLeads((prev) => {
-        // When status changes to/from Completed, the row may need to leave
-        // this view; filter it out accordingly.
-        const shouldStay =
-          view === "active"
-            ? json.lead.status !== "Completed"
-            : json.lead.status === "Completed";
-        const withoutOld = prev.filter((l) => l.id !== id);
-        return shouldStay ? [json.lead, ...withoutOld.filter((l) => l.id !== id)] : withoutOld;
-      });
+      // Update the lead in-place; the `filtered` memo re-tabs it automatically
+      // if its status changed.
+      setLeads((prev) => prev.map((l) => (l.id === id ? json.lead : l)));
       refresh();
     } else {
       alert(json.error ?? "Save failed");
@@ -135,7 +120,12 @@ export default function LeadTable({
   }
 
   async function onDelete(id: string) {
-    if (!confirm("Delete this lead permanently? Use Completed instead if you want to keep history.")) return;
+    if (
+      !confirm(
+        "Delete this lead permanently? Use Completed instead if you want to keep history."
+      )
+    )
+      return;
     await fetch(`/api/leads/${id}`, { method: "DELETE" });
     refresh();
   }
@@ -168,97 +158,62 @@ export default function LeadTable({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--muted)]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--subtle)]" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search leads…"
-            className="w-full rounded-lg border border-[var(--border)] pl-8 pr-3 py-2 bg-white"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-9 pr-3 py-2.5 text-[15px] shadow-sm focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_rgba(5,150,105,0.15)]"
           />
         </div>
         <button
           onClick={onAddRow}
-          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm font-medium"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5 text-sm font-medium shadow-sm hover:bg-[var(--surface-2)] active:scale-[0.98] transition"
         >
-          <Plus className="h-4 w-4" /> Row
+          <Plus className="h-4 w-4" />
+          <span className="hidden sm:inline">Add Lead</span>
         </button>
       </div>
 
-      <div className="rounded-xl border border-[var(--border)] bg-white overflow-hidden">
-        <div className="overflow-auto">
-          <table className="min-w-max w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0 z-10">
-              <tr>
-                <th className="sticky left-0 z-20 bg-gray-50 border-b border-[var(--border)] px-2 py-2 text-left w-[52px]">
-                  <span className="sr-only">Calendar</span>
-                </th>
-                <th className="border-b border-[var(--border)] px-2 py-2 text-left font-medium w-[56px]">
-                  Done
-                </th>
-                {COLUMNS.map((c) => (
-                  <th
-                    key={c.key as string}
-                    className={cn(
-                      "border-b border-[var(--border)] px-3 py-2 text-left font-medium",
-                      c.width
-                    )}
-                  >
-                    <button
-                      className="inline-flex items-center gap-1"
-                      onClick={() => {
-                        if (sortKey === c.key) setSortAsc((v) => !v);
-                        else {
-                          setSortKey(c.key);
-                          setSortAsc(true);
-                        }
-                      }}
-                    >
-                      {c.label}
-                      {sortKey === c.key && <span>{sortAsc ? "▲" : "▼"}</span>}
-                    </button>
-                  </th>
-                ))}
-                <th className="border-b border-[var(--border)] px-2 py-2 w-[96px]"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={COLUMNS.length + 3} className="p-6 text-center text-[var(--muted)]">
-                    Loading…
-                  </td>
-                </tr>
-              )}
-              {!loading && filtered.length === 0 && (
-                <tr>
-                  <td colSpan={COLUMNS.length + 3} className="p-10 text-center text-[var(--muted)]">
-                    {view === "active"
-                      ? "No active leads yet. Upload a screenshot above."
-                      : "No completed leads yet."}
-                  </td>
-                </tr>
-              )}
-              {filtered.map((lead) => (
-                <Row
-                  key={lead.id}
-                  lead={lead}
-                  onPatch={(p) => savePatch(lead.id, p)}
-                  onDelete={() => onDelete(lead.id)}
-                  onAddCalendar={() => onAddCalendar(lead)}
-                  onToggleComplete={() => onMarkCompleted(lead)}
-                />
-              ))}
-            </tbody>
-          </table>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-64 rounded-2xl bg-[var(--surface)] border border-[var(--border)] animate-pulse"
+            />
+          ))}
         </div>
-      </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center text-[var(--muted)]">
+          {filter === "All"
+            ? "No leads yet. Upload a screenshot on the home page."
+            : filter === "Completed"
+            ? "No completed leads yet."
+            : `No leads in "${filter}" yet.`}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filtered.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              onPatch={(p) => savePatch(lead.id, p)}
+              onDelete={() => onDelete(lead.id)}
+              onAddCalendar={() => onAddCalendar(lead)}
+              onToggleComplete={() => onMarkCompleted(lead)}
+            />
+          ))}
+        </div>
+      )}
 
       {toast && (
-        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center pointer-events-none">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[var(--fg)] text-white px-4 py-2 shadow-lg text-sm">
+        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center pointer-events-none px-4">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[var(--fg)] text-white px-4 py-2.5 shadow-lg text-sm">
+            <CheckCircle2 className="h-4 w-4 text-[var(--accent-soft)]" />
             Marked Completed.
             <button
               onClick={() => onUndoComplete(toast.leadId, toast.prev)}
@@ -271,8 +226,8 @@ export default function LeadTable({
       )}
 
       {flash && (
-        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center pointer-events-none">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-emerald-600 text-white px-4 py-2 shadow-lg text-sm">
+        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center pointer-events-none px-4">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-[var(--accent)] text-white px-4 py-2.5 shadow-lg text-sm">
             <CalendarCheck className="h-4 w-4" />
             {flash}
           </div>
@@ -282,7 +237,9 @@ export default function LeadTable({
   );
 }
 
-function Row({
+/* ---------------- Lead card ---------------- */
+
+function LeadCard({
   lead,
   onPatch,
   onDelete,
@@ -295,217 +252,489 @@ function Row({
   onAddCalendar: () => void;
   onToggleComplete: () => void;
 }) {
-  const canCalendar = Boolean(lead.scheduled_day);
-  const needsReview = lead.intake_status === "needs_review" || lead.intake_status === "failed";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
-  // "Lead Scheduled": a Google event already exists AND the lead's scheduled
-  // day/time still match what was synced. Changing either field puts the
-  // row back in a "needs resync" state so the button re-enables.
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    if (menuOpen) document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [menuOpen]);
+
+  const needsReview =
+    lead.intake_status === "needs_review" || lead.intake_status === "failed";
+
   const scheduledInSync =
     Boolean(lead.calendar_event_id) &&
     lead.calendar_scheduled_day === lead.scheduled_day &&
     (lead.calendar_scheduled_time ?? null) === (lead.scheduled_time ?? null);
   const needsResync = Boolean(lead.calendar_event_id) && !scheduledInSync;
 
+  const dateLabel = formatDateHuman(lead.date ?? lead.created_at);
+
   return (
-    <tr className={cn("odd:bg-white even:bg-gray-50", needsReview && "bg-amber-50")}>
-      <td className="sticky left-0 z-10 bg-inherit border-b border-[var(--border)] px-1 py-1 align-middle">
-        {scheduledInSync ? (
-          <span
-            title="Calendar event created. Change Scheduled Day/Time to resync."
-            className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 h-9 text-xs font-medium text-emerald-700 whitespace-nowrap"
-          >
-            <CalendarCheck className="h-4 w-4" />
-            Lead Scheduled
-          </span>
-        ) : (
-          <button
-            onClick={onAddCalendar}
-            disabled={!canCalendar}
-            title={
-              needsResync
-                ? "Scheduled time changed — click to update calendar event"
-                : canCalendar
-                ? "Add to Google Calendar"
-                : "Set Scheduled Day first"
-            }
-            className={cn(
-              "inline-flex items-center justify-center h-9 w-9 rounded-md border",
-              needsResync
-                ? "border-amber-500 text-amber-700 hover:bg-amber-50"
-                : canCalendar
-                ? "border-[var(--accent)] text-[var(--accent)] hover:bg-blue-50"
-                : "border-[var(--border)] text-[var(--muted)] opacity-50 cursor-not-allowed"
-            )}
-          >
-            <CalendarPlus className="h-4 w-4" />
-          </button>
-        )}
-      </td>
-      <td className="border-b border-[var(--border)] px-2 py-1 align-middle text-center">
-        <input
-          type="checkbox"
-          aria-label="Mark complete"
-          title={lead.status === "Completed" ? "Completed" : "Mark complete"}
-          checked={lead.status === "Completed"}
-          onChange={() => {
-            if (lead.status === "Completed") {
-              onPatch({ status: "New" });
-            } else {
+    <article
+      className={cn(
+        "relative rounded-2xl bg-[var(--surface)] border shadow-sm overflow-hidden",
+        "transition-shadow hover:shadow-md",
+        needsReview ? "border-amber-300" : "border-[var(--border)]"
+      )}
+    >
+      {/* Header: status pill + actions menu */}
+      <div className="flex items-center justify-between gap-2 px-4 pt-4">
+        <StatusPill
+          status={lead.status}
+          onChange={(next) => {
+            if (next === "Completed" && lead.status !== "Completed") {
               onToggleComplete();
+            } else {
+              onPatch({ status: next });
             }
           }}
-          className="h-5 w-5 cursor-pointer accent-emerald-600"
         />
-      </td>
-      {COLUMNS.map((c) => (
-        <Cell key={c.key as string} column={c} lead={lead} onPatch={onPatch} />
-      ))}
-      <td className="border-b border-[var(--border)] px-2 py-2 whitespace-nowrap align-middle">
-        <div className="flex items-center gap-1 justify-end">
-          {needsReview && (
-            <span className="text-xs text-amber-700 mr-1">review</span>
-          )}
-          {lead.screenshot_path && (
-            <a
-              href={`/api/leads/${lead.id}/screenshot`}
-              target="_blank"
-              rel="noreferrer"
-              title="View original screenshot"
-              className="inline-flex items-center justify-center h-8 w-8 rounded-md text-[var(--muted)] hover:bg-gray-100"
-            >
-              <ImageIcon className="h-4 w-4" />
-            </a>
-          )}
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={onDelete}
-            title="Delete lead"
-            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-[var(--muted)] hover:bg-red-50 hover:text-[var(--danger)]"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="More actions"
+            className="inline-flex items-center justify-center h-11 w-11 -mr-2 rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)] active:bg-slate-100"
           >
-            <Trash2 className="h-4 w-4" />
+            <MoreVertical className="h-5 w-5" />
           </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-12 z-30 w-52 rounded-xl border border-[var(--border)] bg-white shadow-lg overflow-hidden">
+              {lead.screenshot_path && (
+                <a
+                  href={`/api/leads/${lead.id}/screenshot`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-3 text-sm hover:bg-[var(--surface-2)]"
+                >
+                  <ImageIcon className="h-4 w-4 text-[var(--muted)]" />
+                  View original screenshot
+                </a>
+              )}
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDelete();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-3 text-sm text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete lead
+              </button>
+            </div>
+          )}
         </div>
-      </td>
-    </tr>
+      </div>
+
+      {/* Headline: client name */}
+      <div className="px-4 pt-2">
+        <InlineField
+          value={lead.client ?? ""}
+          placeholder="Client name"
+          lead={lead}
+          field="client"
+          onPatch={onPatch}
+          className="field-input !py-1.5 !px-2 !min-h-[40px] text-xl sm:text-2xl font-semibold tracking-tight"
+        />
+        <div className="mt-1 flex items-center gap-2 text-xs text-[var(--muted)]">
+          <span>Uploaded {dateLabel}</span>
+          {lead.intake_source !== "web_upload" && (
+            <>
+              <span className="text-[var(--subtle)]">·</span>
+              <span className="capitalize">{lead.intake_source.replace("_", " ")}</span>
+            </>
+          )}
+          {needsReview && (
+            <>
+              <span className="text-[var(--subtle)]">·</span>
+              <span className="inline-flex items-center gap-1 text-[var(--warning)]">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                needs review
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Contact: phone + email */}
+      <Section>
+        <ContactRow
+          icon={<Phone className="h-4 w-4" />}
+          tel
+          lead={lead}
+          field="phone_number"
+          onPatch={onPatch}
+        />
+        <ContactRow
+          icon={<Mail className="h-4 w-4" />}
+          email
+          lead={lead}
+          field="email"
+          onPatch={onPatch}
+        />
+      </Section>
+
+      {/* Location */}
+      <Section label="Location" icon={<MapPin className="h-4 w-4" />}>
+        <InlineField
+          value={lead.address ?? ""}
+          placeholder="Street address"
+          lead={lead}
+          field="address"
+          onPatch={onPatch}
+          className="field-input"
+        />
+        <div className="grid grid-cols-[1fr_72px_100px] gap-1 mt-1">
+          <InlineField
+            value={lead.city ?? ""}
+            placeholder="City"
+            lead={lead}
+            field="city"
+            onPatch={onPatch}
+            className="field-input"
+          />
+          <InlineField
+            value={lead.state ?? ""}
+            placeholder="ST"
+            lead={lead}
+            field="state"
+            onPatch={onPatch}
+            className="field-input uppercase"
+          />
+          <InlineField
+            value={lead.zip ?? ""}
+            placeholder="Zip"
+            lead={lead}
+            field="zip"
+            onPatch={onPatch}
+            className="field-input"
+            inputMode="numeric"
+          />
+        </div>
+      </Section>
+
+      {/* Appointment */}
+      <Section label="Appointment" icon={<Clock className="h-4 w-4" />}>
+        <div className="grid grid-cols-2 gap-1">
+          <InlineField
+            value={lead.scheduled_day ?? ""}
+            lead={lead}
+            field="scheduled_day"
+            onPatch={onPatch}
+            type="date"
+            className="field-input"
+            placeholder="Day"
+          />
+          <InlineField
+            value={lead.scheduled_time ?? ""}
+            lead={lead}
+            field="scheduled_time"
+            onPatch={onPatch}
+            type="time"
+            className="field-input"
+            placeholder="Time"
+          />
+        </div>
+        <div className="mt-1 flex items-center gap-1 text-[var(--muted)]">
+          <User className="h-4 w-4 ml-2" />
+          <InlineField
+            value={lead.sales_person ?? ""}
+            placeholder="Salesperson"
+            lead={lead}
+            field="sales_person"
+            onPatch={onPatch}
+            className="field-input"
+          />
+        </div>
+        <div className="mt-2">
+          {scheduledInSync ? (
+            <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--success-soft)] text-[var(--success)] px-3 h-11 text-sm font-medium w-full justify-center sm:w-auto">
+              <CalendarCheck className="h-4 w-4" />
+              Lead Scheduled
+            </span>
+          ) : (
+            <button
+              onClick={onAddCalendar}
+              disabled={!lead.scheduled_day}
+              className={cn(
+                "inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto transition active:scale-[0.98]",
+                needsResync
+                  ? "bg-[var(--warning-soft)] text-[var(--warning)] hover:bg-amber-200"
+                  : lead.scheduled_day
+                  ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
+                  : "bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed"
+              )}
+            >
+              <CalendarPlus className="h-4 w-4" />
+              {needsResync ? "Update calendar event" : "Add to Calendar"}
+            </button>
+          )}
+        </div>
+      </Section>
+
+      {/* Notes */}
+      <Section label="Notes" icon={<StickyNote className="h-4 w-4" />}>
+        <InlineField
+          value={lead.notes ?? ""}
+          placeholder="Add notes…"
+          lead={lead}
+          field="notes"
+          onPatch={onPatch}
+          type="textarea"
+          className="field-input resize-y min-h-[80px]"
+        />
+      </Section>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+        <label className="inline-flex items-center gap-2.5 text-sm text-[var(--fg)] cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={lead.status === "Completed"}
+            onChange={() => {
+              if (lead.status === "Completed") {
+                onPatch({ status: "New" });
+              } else {
+                onToggleComplete();
+              }
+            }}
+            className="h-5 w-5 cursor-pointer accent-[var(--accent)]"
+          />
+          Mark as completed
+        </label>
+      </div>
+    </article>
   );
 }
 
-function Cell({
-  column,
+/* ---------------- Sub-components ---------------- */
+
+function Section({
+  label,
+  icon,
+  children,
+}: {
+  label?: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="px-4 pt-3 pb-1">
+      {label && (
+        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+          {icon}
+          <span>{label}</span>
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+function StatusPill({
+  status,
+  onChange,
+}: {
+  status: LeadStatus;
+  onChange: (next: LeadStatus) => void;
+}) {
+  const style = STATUS_STYLE[status];
+  return (
+    <div
+      className={cn(
+        "relative inline-flex items-center rounded-full px-3 h-9 text-sm font-medium",
+        style.bg,
+        style.fg
+      )}
+    >
+      <span className="mr-1.5 h-2 w-2 rounded-full" style={{ backgroundColor: style.dot }} />
+      <select
+        value={status}
+        onChange={(e) => onChange(e.target.value as LeadStatus)}
+        className={cn(
+          "appearance-none bg-transparent pr-6 focus:outline-none",
+          style.fg
+        )}
+      >
+        {LEAD_STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs",
+          style.fg
+        )}
+      >
+        ▾
+      </span>
+    </div>
+  );
+}
+
+const STATUS_STYLE: Record<LeadStatus, { bg: string; fg: string; dot: string }> = {
+  New: { bg: "bg-[var(--status-new-bg)]", fg: "text-[var(--status-new-fg)]", dot: "#2563eb" },
+  "Called / No Response": {
+    bg: "bg-[var(--status-called-bg)]",
+    fg: "text-[var(--status-called-fg)]",
+    dot: "#d97706",
+  },
+  Scheduled: {
+    bg: "bg-[var(--status-scheduled-bg)]",
+    fg: "text-[var(--status-scheduled-fg)]",
+    dot: "#4f46e5",
+  },
+  Completed: {
+    bg: "bg-[var(--status-completed-bg)]",
+    fg: "text-[var(--status-completed-fg)]",
+    dot: "#059669",
+  },
+  Lost: {
+    bg: "bg-slate-100",
+    fg: "text-slate-600",
+    dot: "#64748b",
+  },
+};
+
+function ContactRow({
+  icon,
+  tel,
+  email,
   lead,
+  field,
   onPatch,
 }: {
-  column: Column;
+  icon: React.ReactNode;
+  tel?: boolean;
+  email?: boolean;
   lead: Lead;
+  field: "phone_number" | "email";
   onPatch: (p: Partial<Lead>) => void;
 }) {
-  const initial = lead[column.key];
-  const [value, setValue] = useState<string>(initial ? String(initial) : "");
+  const raw = (lead[field] ?? "") as string;
+  const trimmed = raw.trim();
+  const href = tel && trimmed ? `tel:${trimmed}` : email && trimmed ? `mailto:${trimmed}` : undefined;
+
+  return (
+    <div className="flex items-stretch gap-1">
+      <a
+        href={href}
+        aria-disabled={!href}
+        onClick={(e) => {
+          if (!href) e.preventDefault();
+        }}
+        title={tel ? "Call" : "Email"}
+        className={cn(
+          "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition",
+          href
+            ? "border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+            : "border-[var(--border)] text-[var(--subtle)] opacity-50 cursor-not-allowed"
+        )}
+      >
+        {icon}
+      </a>
+      <InlineField
+        value={raw}
+        placeholder={tel ? "Phone number" : "Email address"}
+        lead={lead}
+        field={field}
+        onPatch={onPatch}
+        type={tel ? "tel" : "email"}
+        inputMode={tel ? "tel" : "email"}
+        className="field-input flex-1"
+        formatAs={tel ? "phone" : undefined}
+      />
+    </div>
+  );
+}
+
+/* ---------------- Inline editable field ---------------- */
+
+function InlineField({
+  value,
+  placeholder,
+  lead,
+  field,
+  onPatch,
+  type,
+  inputMode,
+  className,
+  formatAs,
+}: {
+  value: string;
+  placeholder?: string;
+  lead: Lead;
+  field: keyof Lead;
+  onPatch: (p: Partial<Lead>) => void;
+  type?: FieldDef["type"];
+  inputMode?: FieldDef["inputMode"];
+  className?: string;
+  formatAs?: "phone";
+}) {
+  const [local, setLocal] = useState<string>(value);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setValue(initial ? String(initial) : "");
-  }, [initial]);
+    setLocal(value);
+  }, [value]);
 
   function scheduleSave(next: string) {
-    setValue(next);
+    setLocal(next);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const patch: Partial<Lead> = {};
-      // Treat empty string as null so the column clears cleanly.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (patch as any)[column.key] = next === "" ? null : next;
+      (patch as any)[field] = next === "" ? null : next;
       onPatch(patch);
     }, 500);
   }
 
-  const conf = lead.extraction_confidence?.[column.key as string];
-  const lowConf = typeof conf === "number" && conf > 0 && conf < 0.6 && value;
+  const conf = lead.extraction_confidence?.[field as string];
+  const lowConf =
+    typeof conf === "number" && conf > 0 && conf < 0.6 && Boolean(local);
+  const display = formatAs === "phone" && local ? formatPhone(local) : local;
 
-  const display =
-    column.key === "phone_number" && value ? formatPhone(value) : value;
-
-  const cellClass = cn(
-    "cell-input",
-    lowConf && "bg-amber-50 border-amber-300"
-  );
-
-  const isPhone = column.key === "phone_number";
-  const isEmail = column.key === "email";
-  const hasPhone = isPhone && Boolean(value.trim());
-  const hasEmail = isEmail && Boolean(value.trim());
+  if (type === "textarea") {
+    return (
+      <textarea
+        value={display}
+        placeholder={placeholder}
+        onChange={(e) => scheduleSave(e.target.value)}
+        rows={3}
+        className={cn(className, lowConf && "invalid-soft")}
+      />
+    );
+  }
 
   return (
-    <td
-      className={cn(
-        "border-b border-[var(--border)] align-top",
-        column.width,
-        lowConf && "bg-amber-50"
-      )}
+    <input
+      type={type ?? "text"}
+      value={display}
+      placeholder={placeholder}
+      inputMode={inputMode}
+      onChange={(e) => scheduleSave(e.target.value)}
+      className={cn(className, lowConf && "invalid-soft")}
       title={lowConf ? `Low confidence (${Math.round((conf ?? 0) * 100)}%)` : undefined}
-    >
-      {column.type === "select" ? (
-        <select
-          value={value || "New"}
-          onChange={(e) => {
-            setValue(e.target.value);
-            onPatch({ status: e.target.value as LeadStatus });
-          }}
-          className={cellClass}
-        >
-          {LEAD_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-      ) : column.type === "textarea" ? (
-        <textarea
-          value={display}
-          rows={2}
-          onChange={(e) => scheduleSave(e.target.value)}
-          className={cn(cellClass, "resize-y")}
-        />
-      ) : isPhone || isEmail ? (
-        <div className="flex items-center gap-1 pl-1">
-          <a
-            href={
-              hasPhone
-                ? `tel:${value}`
-                : hasEmail
-                ? `mailto:${value}`
-                : undefined
-            }
-            aria-disabled={isPhone ? !hasPhone : !hasEmail}
-            onClick={(e) => {
-              if (isPhone ? !hasPhone : !hasEmail) e.preventDefault();
-            }}
-            title={isPhone ? "Call" : "Email"}
-            className={cn(
-              "inline-flex items-center justify-center h-7 w-7 shrink-0 rounded-md border",
-              (isPhone ? hasPhone : hasEmail)
-                ? "border-[var(--accent)] text-[var(--accent)] hover:bg-blue-50"
-                : "border-[var(--border)] text-[var(--muted)] opacity-40 cursor-not-allowed"
-            )}
-          >
-            {isPhone ? <Phone className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-          </a>
-          <input
-            type="text"
-            value={isPhone ? display : value}
-            inputMode={isPhone ? "tel" : "email"}
-            onChange={(e) => scheduleSave(e.target.value)}
-            className={cellClass}
-          />
-        </div>
-      ) : (
-        <input
-          type={column.type ?? "text"}
-          value={display}
-          onChange={(e) => scheduleSave(e.target.value)}
-          className={cellClass}
-        />
-      )}
-    </td>
+    />
   );
+}
+
+function formatDateHuman(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  });
 }
