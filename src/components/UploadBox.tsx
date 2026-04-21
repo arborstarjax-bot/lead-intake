@@ -48,13 +48,29 @@ export default function UploadBox({
     picked.forEach((f) => form.append("file", f));
     try {
       const res = await fetch(endpoint, { method: "POST", body: form });
-      const json: ApiOk & ApiErr = await res.json();
-      if (!res.ok) {
+      // Vercel returns an HTML error page on timeout/crash (504/502). Parsing
+      // that as JSON throws a cryptic Safari error ("The string did not match
+      // the expected pattern"). Read as text first and only parse if it
+      // actually looks like JSON so users see an actionable message.
+      const bodyText = await res.text();
+      let json: (ApiOk & ApiErr) | null = null;
+      try {
+        json = bodyText ? (JSON.parse(bodyText) as ApiOk & ApiErr) : null;
+      } catch {
+        json = null;
+      }
+      if (!res.ok || !json) {
+        const fallback =
+          res.status === 504
+            ? "Upload timed out — the image took too long to process. Try again or use a smaller/cropped screenshot."
+            : res.status >= 500
+            ? `Server error (${res.status}). Please try again.`
+            : `Upload failed (${res.status || "network"}).`;
         setFiles(
           initial.map((f) => ({
             ...f,
             state: "error",
-            message: json.error ?? "Upload failed",
+            message: json?.error ?? fallback,
           }))
         );
       } else {
