@@ -29,14 +29,13 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const { response, user } = await updateSession(request);
 
+  // Public paths always pass through. Note: signed-in users are NOT
+  // bounced away from /login or /signup — those pages handle it
+  // themselves. Doing it here would trap a signed-in user with no
+  // workspace membership (e.g. after an admin removed them) in a redirect
+  // loop between /workspace → /login → / with every API call 401ing and
+  // no way to sign out or rejoin a workspace.
   if (isPublic(pathname)) {
-    // If a signed-in user hits /login or /signup, bounce them into the app.
-    if (user && (pathname === "/login" || pathname === "/signup")) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/";
-      url.search = "";
-      return NextResponse.redirect(url);
-    }
     return response;
   }
 

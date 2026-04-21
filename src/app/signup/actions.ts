@@ -55,12 +55,8 @@ export async function signup(form: FormData): Promise<SignupResult> {
   if (signUpErr) return { error: signUpErr.message };
   const userId = signUp.user?.id;
   if (!userId) {
-    // Email confirmation is required on this project — user exists but has
-    // no session. Let them know so they don't sit at a spinner.
-    return {
-      notice:
-        "Check your email to confirm your account, then sign in to finish setup.",
-    };
+    // Truly unexpected: signUp reported success but returned no user.
+    return { error: "Signup failed — please try again." };
   }
 
   try {
@@ -98,6 +94,19 @@ export async function signup(form: FormData): Promise<SignupResult> {
       // ignore — admin can clean this up manually if both fail
     }
     return { error: (e as Error).message || "Signup failed" };
+  }
+
+  // If email confirmation is enabled on the Supabase project, signUp
+  // returns a user object (with id) but NO session. The user needs to
+  // click a link in their email before they can actually sign in. The
+  // workspace is already wired up by that point, so we just tell them
+  // to check their email instead of redirecting to / (where the
+  // middleware would bounce them straight to /login with no context).
+  if (!signUp.session) {
+    return {
+      notice:
+        "Check your email to confirm your account, then sign in to finish setup.",
+    };
   }
 
   return {};

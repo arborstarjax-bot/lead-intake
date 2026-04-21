@@ -2,8 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getSessionMembership } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createSSRClient } from "@/lib/supabase/server";
 import { WorkspaceClient } from "./WorkspaceClient";
+import { OrphanWorkspaceClient } from "./OrphanWorkspaceClient";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,27 @@ type MemberRow = {
 
 export default async function WorkspacePage() {
   const auth = await getSessionMembership();
-  if (!auth) redirect("/login?next=/workspace");
+
+  // No session at all — send them to sign in.
+  if (!auth) {
+    const supabase = await createSSRClient();
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) redirect("/login?next=/workspace");
+
+    // Signed in but no workspace membership (e.g. admin removed them, or
+    // email confirmed but never finished setup). Render an orphan state
+    // so they can sign out — don't bounce to /login, middleware would
+    // just send them right back here.
+    return (
+      <main className="mx-auto max-w-md p-4 sm:p-6 space-y-6">
+        <header className="flex items-center justify-between gap-3">
+          <h1 className="text-lg sm:text-xl font-semibold">No workspace</h1>
+          <span className="text-xs text-[var(--muted)]">{data.user.email}</span>
+        </header>
+        <OrphanWorkspaceClient email={data.user.email ?? ""} />
+      </main>
+    );
+  }
 
   const admin = createAdminClient();
   const [{ data: memberRows }, { data: users }] = await Promise.all([
