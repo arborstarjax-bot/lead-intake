@@ -2,7 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/server";
 
 export type AppSettings = {
-  id: number;
+  workspace_id: string;
   home_address: string | null;
   home_city: string | null;
   home_state: string | null;
@@ -56,59 +56,68 @@ export type AppSettingsPatch = Partial<
   >
 >;
 
-export const DEFAULT_SETTINGS: AppSettings = {
-  id: 1,
-  home_address: null,
-  home_city: null,
-  home_state: null,
-  home_zip: null,
-  work_start_time: "08:00",
-  work_end_time: "17:00",
-  work_days: [1, 2, 3, 4, 5, 6],
-  default_job_minutes: 60,
-  travel_buffer_minutes: 15,
-  company_name: null,
-  company_phone: null,
-  company_email: null,
-  salespeople: [],
-  default_salesperson: null,
-  sms_intro_template: null,
-  sms_confirm_template: null,
-  email_subject_template: null,
-  email_body_template: null,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
+export function defaultSettings(workspaceId: string): AppSettings {
+  const now = new Date().toISOString();
+  return {
+    workspace_id: workspaceId,
+    home_address: null,
+    home_city: null,
+    home_state: null,
+    home_zip: null,
+    work_start_time: "08:00",
+    work_end_time: "17:00",
+    work_days: [1, 2, 3, 4, 5, 6],
+    default_job_minutes: 60,
+    travel_buffer_minutes: 15,
+    company_name: null,
+    company_phone: null,
+    company_email: null,
+    salespeople: [],
+    default_salesperson: null,
+    sms_intro_template: null,
+    sms_confirm_template: null,
+    email_subject_template: null,
+    email_body_template: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
 
 /**
- * Returns the singleton settings row. Falls back to DEFAULT_SETTINGS if the
- * table is empty or the migration has not been run yet — this keeps the app
- * usable during the brief window between deploy and SQL apply.
+ * Returns the workspace's settings row. Falls back to sensible defaults if
+ * the row hasn't been seeded yet (new workspace bootstrap is supposed to
+ * seed it, but we stay defensive).
  */
-export async function getSettings(): Promise<AppSettings> {
+export async function getSettings(workspaceId: string): Promise<AppSettings> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("app_settings")
     .select("*")
-    .eq("id", 1)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
-  if (error || !data) return DEFAULT_SETTINGS;
-  // The 2026-04-24 migration adds company/template columns; before it runs
-  // those keys are simply missing from the row — coerce via merge so the
-  // caller always sees the full shape.
-  return { ...DEFAULT_SETTINGS, ...(data as Partial<AppSettings>) } as AppSettings;
+  if (error || !data) return defaultSettings(workspaceId);
+  return {
+    ...defaultSettings(workspaceId),
+    ...(data as Partial<AppSettings>),
+  } as AppSettings;
 }
 
-export async function updateSettings(patch: AppSettingsPatch): Promise<AppSettings> {
+export async function updateSettings(
+  workspaceId: string,
+  patch: AppSettingsPatch
+): Promise<AppSettings> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("app_settings")
     .update(patch)
-    .eq("id", 1)
+    .eq("workspace_id", workspaceId)
     .select("*")
     .single();
   if (error) throw new Error(`Update settings failed: ${error.message}`);
-  return { ...DEFAULT_SETTINGS, ...(data as Partial<AppSettings>) } as AppSettings;
+  return {
+    ...defaultSettings(workspaceId),
+    ...(data as Partial<AppSettings>),
+  } as AppSettings;
 }
 
 /**
@@ -121,5 +130,3 @@ export function homeAddressString(s: AppSettings): string | null {
     .filter(Boolean);
   return parts.length ? parts.join(", ") : null;
 }
-
-

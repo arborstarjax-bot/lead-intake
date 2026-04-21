@@ -4,11 +4,6 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
-// Single-tenant: only one Google account is ever connected, keyed by this
-// fixed row id. Swapping in per-user later is just a matter of threading a
-// user id through these helpers.
-const SINGLETON_ID = "default";
-
 export function googleAuthUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
@@ -75,15 +70,15 @@ async function refreshAccessToken(refresh_token: string): Promise<TokenResponse>
 }
 
 /**
- * Return a usable access token, refreshing if needed. Returns null if Google
- * has never been connected.
+ * Return a usable access token for this user, refreshing if needed.
+ * Returns null if they have never connected their Google Calendar.
  */
-export async function getAccessToken(): Promise<string | null> {
+export async function getAccessToken(userId: string): Promise<string | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("google_oauth_tokens")
     .select("*")
-    .eq("id", SINGLETON_ID)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error || !data) return null;
@@ -99,21 +94,31 @@ export async function getAccessToken(): Promise<string | null> {
   await admin
     .from("google_oauth_tokens")
     .update({ access_token: fresh.access_token, expires_at: newExpiry })
-    .eq("id", SINGLETON_ID);
+    .eq("user_id", userId);
   return fresh.access_token;
 }
 
-export async function saveTokens(tokens: TokenResponse): Promise<void> {
+export async function saveTokens(userId: string, tokens: TokenResponse): Promise<void> {
   const admin = createAdminClient();
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
   await admin.from("google_oauth_tokens").upsert(
     {
-      id: SINGLETON_ID,
+      user_id: userId,
       access_token: tokens.access_token,
       ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
       expires_at: expiresAt,
       scope: tokens.scope,
     },
-    { onConflict: "id" }
+    { onConflict: "user_id" }
   );
+}
+
+export async function isGoogleConnected(userId: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("google_oauth_tokens")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return Boolean(data);
 }

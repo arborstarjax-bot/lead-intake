@@ -10,6 +10,7 @@ import {
   UploadCloud,
   Pencil,
   Plus,
+  Users,
 } from "lucide-react";
 import UploadBox from "@/components/UploadBox";
 import StandaloneLeadCard from "@/components/StandaloneLeadCard";
@@ -124,6 +125,13 @@ export default function HomePage() {
               Calendar connected
             </span>
           )}
+          <Link
+            href="/workspace"
+            aria-label="Workspace"
+            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
+          >
+            <Users className="h-4 w-4" />
+          </Link>
           <Link
             href="/settings"
             aria-label="Settings"

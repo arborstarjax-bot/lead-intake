@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getSettings } from "@/lib/settings";
+import { requireMembership } from "@/lib/auth";
 import { suggestSlots } from "@/lib/schedule";
 import { MapsUnavailableError } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
@@ -41,11 +42,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const supabase = createAdminClient();
 
   const [leadResp, settings] = await Promise.all([
-    supabase.from("leads").select("*").eq("id", parsed.leadId).maybeSingle(),
-    getSettings(),
+    supabase
+      .from("leads")
+      .select("*")
+      .eq("id", parsed.leadId)
+      .eq("workspace_id", auth.workspaceId)
+      .maybeSingle(),
+    getSettings(auth.workspaceId),
   ]);
 
   if (leadResp.error || !leadResp.data) {
@@ -81,6 +90,7 @@ export async function POST(req: Request) {
   const { data: sameDay, error: sameDayErr } = await supabase
     .from("leads")
     .select("*")
+    .eq("workspace_id", auth.workspaceId)
     .eq("scheduled_day", targetDay)
     .not("scheduled_time", "is", null)
     .neq("status", "Completed")

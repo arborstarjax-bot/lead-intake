@@ -3,12 +3,16 @@ import { ingestScreenshot } from "@/lib/ingest";
 import { maybeConvertHeic } from "@/lib/convert-heic";
 import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
+import { requireMembership } from "@/lib/auth";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
   const form = await req.formData();
   const files = form.getAll("file").filter((f): f is File => f instanceof File);
   if (files.length === 0) {
@@ -29,6 +33,7 @@ export async function POST(req: NextRequest) {
     try {
       const { blob, fileName } = await maybeConvertHeic(file, file.name);
       const res = await ingestScreenshot({
+        workspaceId: auth.workspaceId,
         file: blob,
         fileName,
         source: "web_upload",
@@ -47,6 +52,7 @@ export async function POST(req: NextRequest) {
       const { data: createdLeads } = await admin
         .from("leads")
         .select("*")
+        .eq("workspace_id", auth.workspaceId)
         .in(
           "id",
           results.map((r) => r.lead_id)
@@ -66,7 +72,7 @@ export async function POST(req: NextRequest) {
       const latestLead = latest
         ? { client: latest.client, phone_number: latest.phone_number }
         : null;
-      await sendNewLeadPush({ latestLead });
+      await sendNewLeadPush({ workspaceId: auth.workspaceId, latestLead });
     } catch {
       // Push is best-effort; never fail the upload response over it.
     }
