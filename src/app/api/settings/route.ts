@@ -19,6 +19,20 @@ const bodySchema = z
     work_days: z.array(z.number().int().min(0).max(6)).optional(),
     default_job_minutes: z.number().int().min(5).max(600).optional(),
     travel_buffer_minutes: z.number().int().min(0).max(120).optional(),
+
+    // Tailoring fields (see 2026-04-24 migration).
+    company_name: z.string().trim().nullable().optional(),
+    company_phone: z.string().trim().nullable().optional(),
+    company_email: z.string().trim().nullable().optional(),
+    // Salespeople is a small roster; cap it so one typo can't blow up the UI.
+    salespeople: z
+      .array(z.string().trim().min(1).max(80))
+      .max(20)
+      .optional(),
+    sms_intro_template: z.string().nullable().optional(),
+    sms_confirm_template: z.string().nullable().optional(),
+    email_subject_template: z.string().nullable().optional(),
+    email_body_template: z.string().nullable().optional(),
   })
   .strict();
 
@@ -49,7 +63,15 @@ export async function PUT(req: Request) {
 
   const patch: AppSettingsPatch = {};
   for (const [k, v] of Object.entries(parsed)) {
-    (patch as Record<string, unknown>)[k] = v === "" ? null : v;
+    // Collapse empty strings to null for nullable text columns, but leave
+    // string[] (salespeople) and templates (where "" means "use default")
+    // as-is. Template empties are mapped to null so the resolver falls
+    // back to DEFAULT_* copy.
+    if (v === "" || (typeof v === "string" && v.trim() === "" && k !== "salespeople")) {
+      (patch as Record<string, unknown>)[k] = null;
+    } else {
+      (patch as Record<string, unknown>)[k] = v;
+    }
   }
 
   try {

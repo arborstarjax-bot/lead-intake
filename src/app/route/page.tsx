@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import RouteMap, { type RouteMapMode, type RouteMapStop } from "@/components/RouteMap";
 import { cn } from "@/lib/utils";
+import { useAppSettings } from "@/components/SettingsProvider";
+import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
 
 type Stop = {
   id: string;
@@ -1257,18 +1259,27 @@ function StopMenu({
     router.push(`/route?scheduleLead=${leadId}&day=${date}`);
   }
 
+  const { settings } = useAppSettings();
   const smsHref = useMemo(() => {
     if (!phoneNumber) return null;
     const who = firstName?.trim() || "there";
-    const day = formatDateLong(date);
-    const when = `${day} at ${formatClock(startTime)}`;
-    const body = `Hi ${who}, David with Arbor Tech 904. Confirming our arborist assessment on ${when}. Reply here if anything changes — see you then!`;
+    const dayLabel = formatDateLong(date);
+    const timeLabel = formatClock(startTime);
+    const body = renderTemplate(smsConfirmTemplate(settings), {
+      firstName: who,
+      salesPerson: "",
+      companyName: (settings.company_name ?? "").trim(),
+      companyPhone: (settings.company_phone ?? "").trim(),
+      companyEmail: (settings.company_email ?? "").trim(),
+      day: dayLabel,
+      time: timeLabel,
+    });
     const digits = phoneNumber.replace(/[^\d+]/g, "");
     // `?` (RFC 5724) is the only separator Android accepts — `&` gets
     // absorbed into the phone-number portion so the prefilled body drops.
     // iOS accepts both, so `?` is safe on iPhone too.
     return `sms:${digits}?body=${encodeURIComponent(body)}`;
-  }, [firstName, phoneNumber, date, startTime]);
+  }, [firstName, phoneNumber, date, startTime, settings]);
 
   return (
     <div className="relative shrink-0" ref={menuRef}>

@@ -14,6 +14,19 @@ export type AppSettings = {
   work_days: number[];
   default_job_minutes: number;
   travel_buffer_minutes: number;
+
+  // Tailoring: company identity, salespeople roster, and per-channel
+  // message templates. Nullable templates mean "fall back to the built-in
+  // default" so the app still sends reasonable copy if nothing is filled.
+  company_name: string | null;
+  company_phone: string | null;
+  company_email: string | null;
+  salespeople: string[];
+  sms_intro_template: string | null;
+  sms_confirm_template: string | null;
+  email_subject_template: string | null;
+  email_body_template: string | null;
+
   created_at: string;
   updated_at: string;
 };
@@ -30,6 +43,14 @@ export type AppSettingsPatch = Partial<
     | "work_days"
     | "default_job_minutes"
     | "travel_buffer_minutes"
+    | "company_name"
+    | "company_phone"
+    | "company_email"
+    | "salespeople"
+    | "sms_intro_template"
+    | "sms_confirm_template"
+    | "email_subject_template"
+    | "email_body_template"
   >
 >;
 
@@ -44,6 +65,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   work_days: [1, 2, 3, 4, 5, 6],
   default_job_minutes: 60,
   travel_buffer_minutes: 15,
+  company_name: null,
+  company_phone: null,
+  company_email: null,
+  salespeople: [],
+  sms_intro_template: null,
+  sms_confirm_template: null,
+  email_subject_template: null,
+  email_body_template: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
@@ -61,7 +90,10 @@ export async function getSettings(): Promise<AppSettings> {
     .eq("id", 1)
     .maybeSingle();
   if (error || !data) return DEFAULT_SETTINGS;
-  return data as AppSettings;
+  // The 2026-04-24 migration adds company/template columns; before it runs
+  // those keys are simply missing from the row — coerce via merge so the
+  // caller always sees the full shape.
+  return { ...DEFAULT_SETTINGS, ...(data as Partial<AppSettings>) } as AppSettings;
 }
 
 export async function updateSettings(patch: AppSettingsPatch): Promise<AppSettings> {
@@ -73,7 +105,7 @@ export async function updateSettings(patch: AppSettingsPatch): Promise<AppSettin
     .select("*")
     .single();
   if (error) throw new Error(`Update settings failed: ${error.message}`);
-  return data as AppSettings;
+  return { ...DEFAULT_SETTINGS, ...(data as Partial<AppSettings>) } as AppSettings;
 }
 
 /**
@@ -86,3 +118,5 @@ export function homeAddressString(s: AppSettings): string | null {
     .filter(Boolean);
   return parts.length ? parts.join(", ") : null;
 }
+
+

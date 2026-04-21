@@ -34,6 +34,10 @@ export default function StandaloneLeadCard({
   const [isPending, setIsPending] = useState(pending);
   const [deleted, setDeleted] = useState(false);
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The parent tracks manual leads by their original `pending-xxx` id.
+  // After the first POST swaps it for the server UUID the parent can no
+  // longer match, so we keep the original around for onRemoved.
+  const originalId = useRef(initialLead.id);
   // Guard against double-creation when two patches race during the initial
   // POST. The first caller owns the create; later callers wait on the same
   // promise and then replay their patch as a PATCH against the real id.
@@ -115,7 +119,7 @@ export default function StandaloneLeadCard({
     // Unsaved manual card — nothing to delete on the server.
     if (isPending) {
       setDeleted(true);
-      onRemoved?.(snapshot.id);
+      onRemoved?.(originalId.current);
       return;
     }
     setDeleted(true);
@@ -123,7 +127,7 @@ export default function StandaloneLeadCard({
       deleteTimer.current = null;
       const res = await fetch(`/api/leads/${snapshot.id}`, { method: "DELETE" });
       if (res.ok) {
-        onRemoved?.(snapshot.id);
+        onRemoved?.(originalId.current);
       } else {
         setDeleted(false);
         toast({ kind: "error", message: "Couldn't delete. Restored." });
