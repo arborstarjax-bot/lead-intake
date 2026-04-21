@@ -26,10 +26,60 @@ type DayPreview =
   | {
       date: string;
       isWorkDay: true;
+      /** Actual minimum drive time among feasible slots, in minutes. */
       bestTotalDriveMinutes: number | null;
+      /**
+       * Minutes discounted from `bestTotalDriveMinutes` because the day
+       * already has a job in the same ZIP / nearby area as the new lead.
+       * Purely additive to ranking — the raw drive time shown in the UI is
+       * still `bestTotalDriveMinutes`.
+       */
+      clusterBonusMinutes: number;
+      /**
+       * What the UI actually ranks on: max(0, best - bonus). A day with
+       * strictly more driving but a cluster match can beat a day with
+       * slightly less driving and no match.
+       */
+      effectiveBestMinutes: number | null;
       slotCount: number;
     }
   | { date: string; isWorkDay: false };
+
+/** Zero out any non-digits and grab the 5-digit US zip, if any. */
+function normalizeZip(zip: string | null | undefined): string | null {
+  if (!zip) return null;
+  const digits = zip.replace(/\D/g, "");
+  return digits.length >= 5 ? digits.slice(0, 5) : null;
+}
+
+/**
+ * Clustering score: reward days that already have a job geographically
+ * near the new lead, because stacking routes in the same area densifies
+ * the schedule and saves driving over the full week — even when a given
+ * day's standalone best slot is a few minutes cheaper elsewhere.
+ *
+ * Scoring (minutes, capped at 15):
+ *   - Exact same ZIP as the new lead: 5 min each
+ *   - Same 3-digit ZIP prefix (same region) but different full ZIP: 2 min each
+ *
+ * Cap at 15 min so clustering never flips a much-better day — it only
+ * tiebreaks reasonable alternatives.
+ */
+function computeClusterBonus(
+  newZip: string | null,
+  sameDayLeads: Lead[]
+): number {
+  if (!newZip) return 0;
+  const zip3 = newZip.slice(0, 3);
+  let bonus = 0;
+  for (const other of sameDayLeads) {
+    const otherZip = normalizeZip(other.zip);
+    if (!otherZip) continue;
+    if (otherZip === newZip) bonus += 5;
+    else if (otherZip.slice(0, 3) === zip3) bonus += 2;
+  }
+  return Math.min(15, bonus);
+}
 
 export async function POST(req: Request) {
   if (!process.env.GOOGLE_MAPS_API_KEY) {
@@ -118,6 +168,7 @@ export async function POST(req: Request) {
   // call total, not one per day.
   const drive = createDriveMemo();
   const workDays = new Set(settings.work_days);
+  const newLeadZip = normalizeZip(lead.zip);
 
   try {
     const out: DayPreview[] = [];
@@ -144,10 +195,15 @@ export async function POST(req: Request) {
         const best = slots.length
           ? Math.min(...slots.map((s) => s.totalDriveMinutes))
           : null;
+        const clusterBonusMinutes = computeClusterBonus(newLeadZip, others);
+        const effectiveBestMinutes =
+          best == null ? null : Math.max(0, best - clusterBonusMinutes);
         return {
           date: iso,
           isWorkDay: true,
           bestTotalDriveMinutes: best,
+          clusterBonusMinutes,
+          effectiveBestMinutes,
           slotCount: slots.length,
         };
       })
