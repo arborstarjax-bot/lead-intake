@@ -617,7 +617,12 @@ function BookedView({
     firstName: firstName(lead),
     lastName: (lead.last_name ?? "").trim(),
     client: (lead.client ?? "").trim(),
-    salesPerson: (lead.sales_person ?? "").trim(),
+    // Mirror LeadTable.templateVars: fall back to the configured
+    // default salesperson so {salesPerson} renders correctly even
+    // when the lead has none explicitly assigned.
+    salesPerson:
+      (lead.sales_person ?? "").trim() ||
+      (settings.default_salesperson ?? "").trim(),
     companyName: (settings.company_name ?? "").trim(),
     companyPhone: (settings.company_phone ?? "").trim(),
     companyEmail: (settings.company_email ?? "").trim(),

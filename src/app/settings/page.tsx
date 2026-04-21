@@ -56,6 +56,7 @@ const EDITABLE_KEYS = [
   "company_phone",
   "company_email",
   "salespeople",
+  "default_salesperson",
   "sms_intro_template",
   "sms_confirm_template",
   "email_subject_template",
@@ -283,7 +284,32 @@ export default function SettingsPage() {
       >
         <SalespeopleEditor
           roster={s.salespeople}
-          onChange={(next) => update("salespeople", next)}
+          onChange={(next) => {
+            update("salespeople", next);
+            // If the chosen default is no longer in the roster, clear
+            // it so "Default salesperson" doesn't render a ghost chip.
+            if (
+              s.default_salesperson &&
+              !next.some(
+                (n) =>
+                  n.toLowerCase() === s.default_salesperson!.toLowerCase()
+              )
+            ) {
+              update("default_salesperson", null);
+            }
+          }}
+        />
+      </Panel>
+
+      {/* Default salesperson */}
+      <Panel
+        title="Default salesperson"
+        description="Used whenever a lead doesn't have a salesperson assigned. Shows up in SMS / email {salesPerson} as a fallback so templates still read correctly for un-assigned leads."
+      >
+        <DefaultSalespersonPicker
+          roster={s.salespeople}
+          value={s.default_salesperson}
+          onChange={(next) => update("default_salesperson", next)}
         />
       </Panel>
 
@@ -506,6 +532,59 @@ function SaveBar({
           )}
         </button>
       </div>
+    </div>
+  );
+}
+
+function DefaultSalespersonPicker({
+  roster,
+  value,
+  onChange,
+}: {
+  roster: string[];
+  value: string | null;
+  onChange: (next: string | null) => void;
+}) {
+  if (roster.length === 0) {
+    return (
+      <p className="text-sm text-[var(--muted)]">
+        Add a salesperson above first, then pick one as the default.
+      </p>
+    );
+  }
+  const current = value?.trim() ?? "";
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        className={cn(
+          "h-9 px-3 rounded-full text-sm font-medium transition-colors",
+          current === ""
+            ? "bg-[var(--accent)] text-white"
+            : "bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--fg)]"
+        )}
+      >
+        None
+      </button>
+      {roster.map((name) => {
+        const active = name.toLowerCase() === current.toLowerCase();
+        return (
+          <button
+            key={name}
+            type="button"
+            onClick={() => onChange(active ? null : name)}
+            className={cn(
+              "h-9 px-3 rounded-full text-sm font-medium transition-colors",
+              active
+                ? "bg-[var(--accent)] text-white"
+                : "bg-[var(--surface-2)] text-[var(--fg)] hover:bg-slate-200"
+            )}
+          >
+            {name}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -872,7 +872,12 @@ function templateVars(lead: Lead, settings: ClientAppSettings): TemplateVars {
     firstName: first,
     lastName: (lead.last_name ?? "").trim(),
     client: (lead.client ?? "").trim(),
-    salesPerson: (lead.sales_person ?? "").trim(),
+    // Fall back to the configured default_salesperson when the lead
+    // has none assigned so {salesPerson} in templates doesn't render
+    // as the literal placeholder.
+    salesPerson:
+      (lead.sales_person ?? "").trim() ||
+      (settings.default_salesperson ?? "").trim(),
     companyName: (settings.company_name ?? "").trim(),
     companyPhone: (settings.company_phone ?? "").trim(),
     companyEmail: (settings.company_email ?? "").trim(),
