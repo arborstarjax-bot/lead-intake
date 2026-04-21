@@ -53,6 +53,12 @@ export default function LeadTable({
   const [sortKey, setSortKey] = useState<keyof Lead>("created_at");
   const [sortAsc, setSortAsc] = useState(false);
   const [toast, setToast] = useState<{ leadId: string; prev: LeadStatus } | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  function showFlash(message: string) {
+    setFlash(message);
+    setTimeout(() => setFlash((f) => (f === message ? null : f)), 3_000);
+  }
 
   async function refresh() {
     setLoading(true);
@@ -157,6 +163,7 @@ export default function LeadTable({
       return;
     }
     if (json.htmlLink) window.open(json.htmlLink, "_blank");
+    showFlash("Estimate Added to Calendar");
     refresh();
   }
 
@@ -255,6 +262,15 @@ export default function LeadTable({
             >
               <Undo2 className="h-4 w-4" /> Undo
             </button>
+          </div>
+        </div>
+      )}
+
+      {flash && (
+        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-emerald-600 text-white px-4 py-2 shadow-lg text-sm">
+            <CalendarCheck className="h-4 w-4" />
+            {flash}
           </div>
         </div>
       )}
