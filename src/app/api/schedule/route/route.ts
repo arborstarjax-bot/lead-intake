@@ -31,6 +31,23 @@ type MapStop = {
   startTime: string; // HH:MM
   endTime: string; // HH:MM
   driveMinutesFromPrev: number | null;
+  /** Carried through so the timeline menu can surface a "Text confirmation"
+   *  action without a second round-trip per lead. */
+  firstName: string | null;
+  phoneNumber: string | null;
+};
+
+type GhostStop = {
+  id: string;
+  label: string;
+  address: string;
+  lat: number;
+  lng: number;
+  /** Lead's own scheduled_day — hint so the scheduler panel can default the
+   *  day picker to what the customer asked for. */
+  desiredDay: string | null;
+  /** Current scheduled_time, if any — so rescheduling pre-selects a half. */
+  currentTime: string | null;
 };
 
 type RouteResponse = {
@@ -41,6 +58,10 @@ type RouteResponse = {
   unresolved: { id: string; label: string; address: string }[];
   totalDriveMinutes: number | null;
   returnDriveMinutes: number | null;
+  /** Prospective lead being scheduled (if ?ghost=<leadId> was passed). */
+  ghost: GhostStop | null;
+  /** If the ghost lead's address couldn't be geocoded, surface a reason. */
+  ghostError: string | null;
 };
 
 function validDate(d: string | null): string {
@@ -52,9 +73,10 @@ function validDate(d: string | null): string {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const iso = validDate(url.searchParams.get("date"));
+  const ghostLeadId = url.searchParams.get("ghost");
 
   const supabase = createAdminClient();
-  const [settings, rowsResp] = await Promise.all([
+  const [settings, rowsResp, ghostResp] = await Promise.all([
     getSettings(),
     supabase
       .from("leads")
@@ -62,11 +84,19 @@ export async function GET(req: Request) {
       .eq("scheduled_day", iso)
       .not("scheduled_time", "is", null)
       .order("scheduled_time", { ascending: true }),
+    ghostLeadId
+      ? supabase.from("leads").select("*").eq("id", ghostLeadId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
   if (rowsResp.error) {
     return NextResponse.json({ error: rowsResp.error.message }, { status: 500 });
   }
-  const leads = (rowsResp.data ?? []) as Lead[];
+  // Exclude the ghost lead from the rendered day so its existing (stale)
+  // pin doesn't overlap with the amber ghost preview during a reschedule.
+  const leads = ((rowsResp.data ?? []) as Lead[]).filter(
+    (l) => !ghostLeadId || l.id !== ghostLeadId
+  );
+  const ghostLead = (ghostResp?.data ?? null) as Lead | null;
 
   const stopsInput = leads
     .map((l) => {
@@ -83,6 +113,8 @@ export async function GET(req: Request) {
         address: addr,
         startMin,
         endMin: startMin + settings.default_job_minutes,
+        firstName: l.first_name ?? null,
+        phoneNumber: l.phone_number ?? null,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -94,11 +126,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "GOOGLE_MAPS_API_KEY is not set." }, { status: 503 });
   }
 
-  // Geocode the home (if set) + every stop in parallel. Cache-hit paths are
-  // instant; misses go out to Google.
+  // Resolve the ghost lead's address up-front so it joins the same geocoding
+  // batch as the rest of the day — one round-trip to Google either way, and
+  // the result sits in the same cache table.
+  const ghostAddr = ghostLead ? leadAddressString(ghostLead) : null;
+
+  // Geocode the home (if set) + every stop + the ghost address in parallel.
+  // Cache-hit paths are instant; misses go out to Google.
   const geocodeInputs = [
     ...(home ? [home] : []),
     ...stopsInput.map((s) => s.address),
+    ...(ghostAddr ? [ghostAddr] : []),
   ];
   let geocodes: Map<string, LatLng | null>;
   try {
@@ -127,6 +165,8 @@ export async function GET(req: Request) {
       startTime: formatHHMM(s.startMin),
       endTime: formatHHMM(s.endMin),
       driveMinutesFromPrev: null,
+      firstName: s.firstName,
+      phoneNumber: s.phoneNumber,
     });
   }
 
@@ -156,6 +196,37 @@ export async function GET(req: Request) {
     }
   }
 
+  // Build the ghost payload. Any failure path (no lead, no address, geocode
+  // miss) collapses to ghost=null + a human-readable ghostError so the
+  // scheduler panel can explain why no preview pin appears.
+  let ghost: GhostStop | null = null;
+  let ghostError: string | null = null;
+  if (ghostLeadId) {
+    if (!ghostLead) {
+      ghostError = "Lead not found.";
+    } else if (!ghostAddr) {
+      ghostError = "This lead has no address yet — add one to preview on the map.";
+    } else {
+      const g = geocodes.get(ghostAddr);
+      if (!g) {
+        ghostError = "Google couldn't geocode this lead's address.";
+      } else {
+        ghost = {
+          id: ghostLead.id,
+          label:
+            ghostLead.client?.trim() ||
+            `${ghostLead.first_name ?? ""} ${ghostLead.last_name ?? ""}`.trim() ||
+            "Prospective job",
+          address: ghostAddr,
+          lat: g.lat,
+          lng: g.lng,
+          desiredDay: ghostLead.scheduled_day ?? null,
+          currentTime: ghostLead.scheduled_time ?? null,
+        };
+      }
+    }
+  }
+
   const body: RouteResponse = {
     date: iso,
     home: homeLatLng && home ? { ...homeLatLng, address: home } : null,
@@ -163,6 +234,8 @@ export async function GET(req: Request) {
     unresolved,
     totalDriveMinutes,
     returnDriveMinutes,
+    ghost,
+    ghostError,
   };
   return NextResponse.json(body);
 }
