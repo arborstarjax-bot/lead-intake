@@ -38,3 +38,35 @@ export function dayOfWeekInBusinessTz(d: Date): number {
   };
   return map[parts] ?? d.getDay();
 }
+
+/**
+ * Build a Date anchored at noon UTC for a given YYYY-MM-DD business-tz day.
+ *
+ * Noon UTC is 7–8 AM ET regardless of DST, so converting the Date back to
+ * the business tz always produces the intended calendar day — never slips
+ * to the day before (which midnight-UTC would) and never slips forward.
+ * This is the only safe way to iterate whole calendar days for ET.
+ */
+export function dateAtBusinessTzDay(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+}
+
+/** Returns YYYY-MM-DD in business tz for (iso + n days). DST-safe. */
+export function addDaysToBusinessTzIso(iso: string, n: number): string {
+  const base = dateAtBusinessTzDay(iso);
+  base.setUTCDate(base.getUTCDate() + n);
+  return isoInBusinessTz(base);
+}
+
+/**
+ * Returns [today, today+1, ..., today+(count-1)] as Date objects anchored at
+ * noon UTC for each ET calendar day. Safe to pass to isoInBusinessTz() and
+ * dayOfWeekInBusinessTz() — they'll resolve to the ET day you expect.
+ */
+export function upcomingBusinessTzDays(count: number): Date[] {
+  const today = todayIsoInBusinessTz();
+  return Array.from({ length: count }, (_, i) =>
+    dateAtBusinessTzDay(addDaysToBusinessTzIso(today, i))
+  );
+}
