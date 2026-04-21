@@ -4,10 +4,28 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import LeadTable from "@/components/LeadTable";
+import LeadTable, { type LeadFilter, type LeadCounts } from "@/components/LeadTable";
 import EnableNotifications from "@/components/EnableNotifications";
 import NotificationAcknowledge from "@/components/NotificationAcknowledge";
 import { cn } from "@/lib/utils";
+
+const TABS: { id: LeadFilter; label: string }[] = [
+  { id: "All", label: "All" },
+  { id: "New", label: "New" },
+  { id: "Called / No Response", label: "Called" },
+  { id: "Scheduled", label: "Scheduled" },
+  { id: "Completed", label: "Completed" },
+  { id: "Lost", label: "Lost" },
+];
+
+const EMPTY_COUNTS: LeadCounts = {
+  All: 0,
+  New: 0,
+  "Called / No Response": 0,
+  Scheduled: 0,
+  Completed: 0,
+  Lost: 0,
+};
 
 export default function LeadsPage() {
   return (
@@ -17,17 +35,39 @@ export default function LeadsPage() {
   );
 }
 
+function filterFromParam(p: string | null): LeadFilter {
+  const match = TABS.find((t) => paramFor(t.id) === p);
+  return match ? match.id : "All";
+}
+
+function paramFor(id: LeadFilter): string {
+  switch (id) {
+    case "All":
+      return "all";
+    case "New":
+      return "new";
+    case "Called / No Response":
+      return "called";
+    case "Scheduled":
+      return "scheduled";
+    case "Completed":
+      return "completed";
+    case "Lost":
+      return "lost";
+  }
+}
+
 function LeadsPageInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const initial = params.get("view") === "completed" ? "completed" : "active";
-  const [view, setView] = useState<"active" | "completed">(initial);
-  const [counts, setCounts] = useState({ active: 0, completed: 0 });
+  const initial = filterFromParam(params.get("status"));
+  const [filter, setFilter] = useState<LeadFilter>(initial);
+  const [counts, setCounts] = useState<LeadCounts>(EMPTY_COUNTS);
 
-  function switchView(next: "active" | "completed") {
-    setView(next);
-    const url = next === "active" ? "/leads" : "/leads?view=completed";
-    router.replace(url, { scroll: false });
+  function switchFilter(next: LeadFilter) {
+    setFilter(next);
+    const q = paramFor(next);
+    router.replace(q === "all" ? "/leads" : `/leads?status=${q}`, { scroll: false });
   }
 
   return (
@@ -40,27 +80,29 @@ function LeadsPageInner() {
         >
           <ArrowLeft className="h-4 w-4" /> Home
         </Link>
-        <h1 className="text-lg sm:text-xl font-semibold">
-          {view === "active" ? "View / Edit Leads" : "Completed Leads"}
-        </h1>
+        <h1 className="text-lg sm:text-xl font-semibold">Leads</h1>
         <EnableNotifications />
       </header>
 
-      <div className="flex gap-2 border-b border-[var(--border)]">
-        <TabButton active={view === "active"} onClick={() => switchView("active")}>
-          View / Edit Leads
-          <span className="ml-2 text-xs text-[var(--muted)]">{counts.active}</span>
-        </TabButton>
-        <TabButton
-          active={view === "completed"}
-          onClick={() => switchView("completed")}
-        >
-          Completed Leads
-          <span className="ml-2 text-xs text-[var(--muted)]">{counts.completed}</span>
-        </TabButton>
-      </div>
+      <nav
+        aria-label="Lead status"
+        className="-mx-4 sm:mx-0 overflow-x-auto no-scrollbar border-b border-[var(--border)]"
+      >
+        <div className="inline-flex min-w-full gap-1 px-4 sm:px-0">
+          {TABS.map((t) => (
+            <TabButton
+              key={t.id}
+              active={filter === t.id}
+              onClick={() => switchFilter(t.id)}
+            >
+              {t.label}
+              <CountBadge n={counts[t.id] ?? 0} active={filter === t.id} />
+            </TabButton>
+          ))}
+        </div>
+      </nav>
 
-      <LeadTable view={view} onCounts={setCounts} />
+      <LeadTable filter={filter} onCounts={setCounts} />
     </main>
   );
 }
@@ -78,10 +120,10 @@ function TabButton({
     <button
       onClick={onClick}
       className={cn(
-        "px-4 py-2 text-sm font-medium border-b-2 -mb-px",
+        "inline-flex items-center gap-1.5 whitespace-nowrap px-3 sm:px-4 h-11 text-sm font-medium border-b-2 -mb-px transition-colors",
         active
           ? "border-[var(--accent)] text-[var(--fg)]"
-          : "border-transparent text-[var(--muted)]"
+          : "border-transparent text-[var(--muted)] hover:text-[var(--fg)]"
       )}
     >
       {children}
@@ -89,11 +131,26 @@ function TabButton({
   );
 }
 
+function CountBadge({ n, active }: { n: number; active: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex min-w-[1.5rem] justify-center rounded-full px-1.5 text-[11px] font-semibold",
+        active
+          ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+          : "bg-[var(--surface-2)] text-[var(--muted)]"
+      )}
+    >
+      {n}
+    </span>
+  );
+}
+
 function LeadsSkeleton() {
   return (
     <main className="mx-auto max-w-6xl p-4 sm:p-6">
       <div className="h-6 w-40 rounded bg-gray-100 animate-pulse" />
-      <div className="mt-6 h-64 rounded-xl bg-gray-100 animate-pulse" />
+      <div className="mt-6 h-64 rounded-2xl bg-gray-100 animate-pulse" />
     </main>
   );
 }

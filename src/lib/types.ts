@@ -3,7 +3,14 @@ export const LEAD_STATUSES = [
   "Called / No Response",
   "Scheduled",
   "Completed",
+  "Lost",
 ] as const;
+
+/**
+ * A lead is auto-moved from "Called / No Response" to "Lost" once
+ * `status_changed_at` is older than this many days.
+ */
+export const LOST_AFTER_DAYS = 30;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 export const LEAD_INTAKE_SOURCES = [

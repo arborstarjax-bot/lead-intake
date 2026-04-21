@@ -1,15 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { displayName } from "@/lib/format";
+import { LOST_AFTER_DAYS } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+/**
+ * Best-effort sweep: promote any "Called / No Response" lead whose status
+ * hasn't changed in >= LOST_AFTER_DAYS to "Lost". Runs before every list
+ * fetch so the UI stays consistent without a scheduled job.
+ *
+ * Safe to no-op if the `status_changed_at` column doesn't exist yet
+ * (first deploy before the SQL migration runs).
+ */
+async function sweepLostLeads(
+  supabase: ReturnType<typeof createAdminClient>
+): Promise<void> {
+  const cutoff = new Date(
+    Date.now() - LOST_AFTER_DAYS * 24 * 60 * 60 * 1000
+  ).toISOString();
+  try {
+    await supabase
+      .from("leads")
+      .update({ status: "Lost" })
+      .eq("status", "Called / No Response")
+      .lt("status_changed_at", cutoff);
+  } catch {
+    // column missing or other transient error — ignore; sweep resumes next request
+  }
+}
+
 export async function GET(req: NextRequest) {
   const supabase = createAdminClient();
+  await sweepLostLeads(supabase);
+
   const view = req.nextUrl.searchParams.get("view") ?? "active";
   let query = supabase.from("leads").select("*").order("created_at", { ascending: false });
   if (view === "completed") {
     query = query.eq("status", "Completed");
+  } else if (view === "all") {
+    // no status filter
   } else {
     query = query.neq("status", "Completed");
   }
