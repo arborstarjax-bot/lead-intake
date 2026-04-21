@@ -1,16 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { UploadCloud, Loader2 } from "lucide-react";
+import { UploadCloud, Loader2, Plus, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale";
-
-type PendingFile = {
-  name: string;
-  state: "uploading" | "added" | "needs_review" | "error";
-  message?: string;
-  lead_id?: string;
-};
+import StandaloneLeadCard from "@/components/StandaloneLeadCard";
+import type { Lead } from "@/lib/types";
 
 type ApiOk = {
   results?: {
@@ -18,6 +13,7 @@ type ApiOk = {
     originalFileName?: string;
     lead_id?: string;
     intake_status?: string;
+    lead?: Lead;
   }[];
   errors?: { fileName: string; error: string }[];
 };
@@ -34,17 +30,17 @@ export default function UploadBox({
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [files, setFiles] = useState<PendingFile[]>([]);
+  const [busyCount, setBusyCount] = useState(0);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [failures, setFailures] = useState<{ fileName: string; message: string }[]>([]);
+  const [topError, setTopError] = useState<string | null>(null);
 
   async function handleFiles(list: FileList | File[]) {
     const picked = Array.from(list);
     if (picked.length === 0 || busy) return;
     setBusy(true);
-    const initial: PendingFile[] = picked.map((f) => ({
-      name: f.name,
-      state: "uploading",
-    }));
-    setFiles(initial);
+    setBusyCount(picked.length);
+    setTopError(null);
     // Downscale large screenshots before upload so we stay under Vercel's
     // 4.5 MB request body limit. GPT-4o only needs the visible text, so
     // shrinking to ~1600px edge is lossless in practice.
@@ -73,50 +69,40 @@ export default function UploadBox({
             : res.status >= 500
             ? `Server error (${res.status}). Please try again.`
             : `Upload failed (${res.status || "network"}).`;
-        setFiles(
-          initial.map((f) => ({
-            ...f,
-            state: "error",
-            message: json?.error ?? fallback,
-          }))
-        );
+        setTopError(json?.error ?? fallback);
       } else {
-        const byName = new Map<string, PendingFile>();
-        (json.results ?? []).forEach((r) => {
-          // Server may have converted HEIC -> JPEG and renamed the file; key
-          // status by the original client-side name so the row still matches.
-          const key = r.originalFileName ?? r.fileName;
-          byName.set(key, {
-            name: key,
-            lead_id: r.lead_id,
-            state: r.intake_status === "needs_review" ? "needs_review" : "added",
-          });
-        });
-        (json.errors ?? []).forEach((e) => {
-          byName.set(e.fileName, {
-            name: e.fileName,
-            state: "error",
+        const newLeads = (json.results ?? [])
+          .map((r) => r.lead)
+          .filter((l): l is Lead => Boolean(l));
+        setLeads((prev) => [...newLeads, ...prev]);
+        setFailures((prev) => [
+          ...(json.errors ?? []).map((e) => ({
+            fileName: e.fileName,
             message: e.error,
-          });
-        });
-        setFiles(initial.map((f) => byName.get(f.name) ?? f));
+          })),
+          ...prev,
+        ]);
         onUploaded?.();
       }
     } catch (e) {
-      setFiles(
-        initial.map((f) => ({
-          ...f,
-          state: "error",
-          message: (e as Error).message,
-        }))
-      );
+      setTopError((e as Error).message || "Upload failed");
     } finally {
       setBusy(false);
+      setBusyCount(0);
     }
   }
 
+  function removeLead(id: string) {
+    setLeads((prev) => prev.filter((l) => l.id !== id));
+  }
+
+  const hasCards = leads.length > 0;
+
   return (
-    <div>
+    <div className="space-y-4">
+      {/* Dropzone. Shrinks to a compact "Upload more" strip once we have
+          cards to show, so the screenshot + card stack stays the focal
+          point rather than the empty uploader. */}
       <div
         onClick={() => !busy && inputRef.current?.click()}
         onDragOver={(e) => {
@@ -131,7 +117,8 @@ export default function UploadBox({
         }}
         aria-busy={busy}
         className={cn(
-          "relative w-full rounded-2xl border-2 border-dashed p-8 text-center transition",
+          "relative w-full rounded-2xl border-2 border-dashed text-center transition",
+          hasCards ? "p-4" : "p-8",
           busy
             ? "cursor-not-allowed border-[var(--accent)] bg-blue-50/60"
             : dragging
@@ -140,27 +127,38 @@ export default function UploadBox({
         )}
       >
         {busy ? (
-          <Loader2 className="mx-auto h-10 w-10 text-[var(--accent)] animate-spin" />
+          <Loader2
+            className={cn(
+              "mx-auto text-[var(--accent)] animate-spin",
+              hasCards ? "h-6 w-6" : "h-10 w-10"
+            )}
+          />
+        ) : hasCards ? (
+          <Plus className="mx-auto h-5 w-5 text-[var(--muted)]" />
         ) : (
           <UploadCloud className="mx-auto h-10 w-10 text-[var(--muted)]" />
         )}
-        <div className="mt-3 font-medium">
+        <div className={cn("font-medium", hasCards ? "mt-1.5 text-sm" : "mt-3")}>
           {busy
-            ? `Uploading & extracting ${files.length} ${files.length === 1 ? "screenshot" : "screenshots"}…`
+            ? `Uploading & extracting ${busyCount} ${busyCount === 1 ? "screenshot" : "screenshots"}…`
+            : hasCards
+            ? "Upload another screenshot"
             : "Upload lead screenshot"}
         </div>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          {busy
-            ? "Hang tight — GPT-4o is reading each image."
-            : "Tap to choose from your phone, or drag & drop images here."}
-        </p>
-        {!busy && (
+        {!hasCards && (
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {busy
+              ? "Hang tight — GPT-4o is reading each image."
+              : "Tap to choose from your phone, or drag & drop images here."}
+          </p>
+        )}
+        {!busy && !hasCards && (
           <p className="mt-1 text-xs text-[var(--muted)]">
             JPG, PNG, HEIC — one or many at once.
           </p>
         )}
         {busy && (
-          <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/60">
+          <div className={cn("w-full overflow-hidden rounded-full bg-white/60", hasCards ? "mt-2 h-1" : "mt-4 h-1.5")}>
             <div className="h-full w-1/3 animate-[slide_1.2s_ease-in-out_infinite] rounded-full bg-[var(--accent)]" />
           </div>
         )}
@@ -175,32 +173,38 @@ export default function UploadBox({
         />
       </div>
 
-      {files.length > 0 && (
-        <ul className="mt-3 space-y-1 text-sm">
-          {files.map((f, i) => (
+      {topError && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-900">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>{topError}</span>
+        </div>
+      )}
+
+      {failures.length > 0 && (
+        <ul className="space-y-1 text-sm">
+          {failures.map((f, i) => (
             <li
-              key={i}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 border",
-                f.state === "uploading" && "border-[var(--border)] bg-gray-50 text-[var(--muted)]",
-                f.state === "added" && "border-green-200 bg-green-50 text-green-900",
-                f.state === "needs_review" && "border-amber-200 bg-amber-50 text-amber-900",
-                f.state === "error" && "border-red-200 bg-red-50 text-red-900"
-              )}
+              key={`err-${i}`}
+              className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-900"
             >
-              {f.state === "uploading" && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-              )}
-              <span className="font-medium truncate">{f.name}</span>
-              <span className="ml-auto text-xs shrink-0">
-                {f.state === "uploading" && "processing…"}
-                {f.state === "added" && "added"}
-                {f.state === "needs_review" && "needs review"}
-                {f.state === "error" && (f.message ?? "failed")}
-              </span>
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span className="font-medium truncate">{f.fileName}</span>
+              <span className="ml-auto text-xs shrink-0">{f.message}</span>
             </li>
           ))}
         </ul>
+      )}
+
+      {hasCards && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {leads.map((l) => (
+            <StandaloneLeadCard
+              key={l.id}
+              initialLead={l}
+              onRemoved={removeLead}
+            />
+          ))}
+        </div>
       )}
     </div>
   );

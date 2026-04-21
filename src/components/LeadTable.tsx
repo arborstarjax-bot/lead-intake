@@ -285,7 +285,7 @@ export default function LeadTable({
 
 /* ---------------- Lead card ---------------- */
 
-function LeadCard({
+export function LeadCard({
   lead,
   onPatch,
   onDelete,
