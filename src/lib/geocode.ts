@@ -72,8 +72,13 @@ export async function geocodeMany(
     unique.map(async (a) => {
       try {
         out.set(a, await geocode(a));
-      } catch {
-        // One bad address shouldn't kill the whole page; treat as unresolvable.
+      } catch (e) {
+        // Systemic failures (bad API key, quota exceeded, HTTP 4xx/5xx)
+        // must propagate so the route handler can surface a diagnostic
+        // error instead of rendering every stop as "unresolvable."
+        if (e instanceof MapsUnavailableError) throw e;
+        // Other per-address oddities (e.g. transient network blip on a
+        // single call) shouldn't kill the whole page.
         out.set(a, null);
       }
     })
