@@ -531,13 +531,13 @@ function LeadCard({
               {needsResync ? "Update calendar event" : "Add to Calendar"}
             </button>
           )}
-          {lead.scheduled_day && !scheduledInSync && (
+          {!scheduledInSync && (
             <button
               onClick={onAISchedule}
               className="inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto border border-[var(--accent)] text-[var(--accent)] bg-white hover:bg-[var(--accent-soft)] transition active:scale-[0.98]"
             >
               <Sparkles className="h-4 w-4" />
-              Find best time
+              {lead.scheduled_day ? "Find best time" : "Find best day & time"}
             </button>
           )}
         </div>
