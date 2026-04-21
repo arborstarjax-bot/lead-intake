@@ -25,6 +25,15 @@ import { LEAD_STATUSES, EDITABLE_COLUMNS } from "@/lib/types";
 import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
+import { useAppSettings } from "@/components/SettingsProvider";
+import {
+  renderTemplate,
+  smsIntroTemplate,
+  emailSubjectTemplate,
+  emailBodyTemplate,
+  type TemplateVars,
+} from "@/lib/templates";
+import type { ClientAppSettings } from "@/lib/client-settings";
 
 type FieldDef = {
   key: keyof Lead;
@@ -173,7 +182,13 @@ export default function LeadTable({
     // Optimistically remove from the list; only hit the API if the user
     // doesn't tap Undo within the toast window. This makes delete feel
     // like Gmail archive instead of a modal confirm dialog.
-    setLeads((prev) => prev.filter((l) => l.id !== id));
+    setLeads((prev) => {
+      const next = prev.filter((l) => l.id !== id);
+      const counts: LeadCounts = { All: next.length, New: 0, "Called / No Response": 0, Scheduled: 0, Completed: 0, Lost: 0 };
+      for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
+      onCounts?.(counts);
+      return next;
+    });
     const timer = setTimeout(async () => {
       pendingDeletes.current.delete(id);
       const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
@@ -196,7 +211,14 @@ export default function LeadTable({
             clearTimeout(t);
             pendingDeletes.current.delete(id);
           }
-          setLeads((prev) => (prev.some((l) => l.id === id) ? prev : [lead, ...prev]));
+          setLeads((prev) => {
+            if (prev.some((l) => l.id === id)) return prev;
+            const next = [lead, ...prev];
+            const counts: LeadCounts = { All: next.length, New: 0, "Called / No Response": 0, Scheduled: 0, Completed: 0, Lost: 0 };
+            for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
+            onCounts?.(counts);
+            return next;
+          });
         },
       },
     });
@@ -326,6 +348,7 @@ export function LeadCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const { settings } = useAppSettings();
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -442,6 +465,7 @@ export function LeadCard({
           lead={lead}
           field="phone_number"
           onPatch={onPatch}
+          settings={settings}
         />
         <ContactRow
           icon={<Mail className="h-4 w-4" />}
@@ -449,6 +473,7 @@ export function LeadCard({
           lead={lead}
           field="email"
           onPatch={onPatch}
+          settings={settings}
         />
       </Section>
 
@@ -513,15 +538,12 @@ export function LeadCard({
             placeholder="Time"
           />
         </div>
-        <div className="mt-1 flex items-center gap-1 text-[var(--muted)]">
-          <User className="h-4 w-4 ml-2" />
-          <InlineField
+        <div className="mt-1 flex items-start gap-1 text-[var(--muted)]">
+          <User className="h-4 w-4 ml-2 mt-3 shrink-0" />
+          <SalespersonPicker
             value={lead.sales_person ?? ""}
-            placeholder="Salesperson"
-            lead={lead}
-            field="sales_person"
+            roster={settings.salespeople}
             onPatch={onPatch}
-            className="field-input"
           />
         </div>
         <div className="mt-2 flex flex-col sm:flex-row gap-2">
@@ -693,6 +715,7 @@ function ContactRow({
   lead,
   field,
   onPatch,
+  settings,
 }: {
   icon: React.ReactNode;
   tel?: boolean;
@@ -700,12 +723,16 @@ function ContactRow({
   lead: Lead;
   field: "phone_number" | "email";
   onPatch: (p: Partial<Lead>) => void;
+  settings: ClientAppSettings;
 }) {
   const raw = (lead[field] ?? "") as string;
   const trimmed = raw.trim();
-  const primaryHref =
-    tel && trimmed ? `tel:${trimmed}` : email && trimmed ? `mailto:${trimmed}` : undefined;
-  const smsHref = tel && trimmed ? buildSmsHref(trimmed, lead) : undefined;
+  const primaryHref = tel && trimmed
+    ? `tel:${trimmed}`
+    : email && trimmed
+    ? buildMailtoHref(trimmed, lead, settings)
+    : undefined;
+  const smsHref = tel && trimmed ? buildSmsHref(trimmed, lead, settings) : undefined;
 
   return (
     <div className="flex items-stretch gap-1">
@@ -733,20 +760,147 @@ function ContactRow({
 }
 
 /**
- * Build the tel/sms link for a lead. The body is David's standard
- * first-touch intro; the greeting uses the lead's first name when known
- * and falls back to "there" so the sentence still reads naturally.
+ * Salesperson picker — renders configured salespeople as tappable chips
+ * and falls back to a free-text input for one-off names. Selecting a chip
+ * immediately patches the lead so subsequent SMS / email templates see
+ * the updated `{salesPerson}` placeholder.
+ *
+ * When `roster` is empty we render just the free-text input, preserving
+ * the pre-settings behavior for users who haven't populated a roster yet.
+ */
+function SalespersonPicker({
+  value,
+  roster,
+  onPatch,
+}: {
+  value: string;
+  roster: string[];
+  onPatch: (p: Partial<Lead>) => void;
+}) {
+  const trimmed = value.trim();
+  const inRoster = roster.some(
+    (n) => n.toLowerCase() === trimmed.toLowerCase()
+  );
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(trimmed && !inRoster ? trimmed : "");
+
+  // Keep the input seeded with the current custom value when the lead
+  // changes underneath us (e.g. polling or server patches).
+  useEffect(() => {
+    if (!trimmed) setDraft("");
+    else if (!inRoster) setDraft(trimmed);
+  }, [trimmed, inRoster]);
+
+  function commit(next: string) {
+    const n = next.trim();
+    if (n === trimmed) return;
+    onPatch({ sales_person: n === "" ? null : n });
+  }
+
+  return (
+    <div className="flex-1 min-w-0 space-y-1.5">
+      {roster.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {roster.map((name) => {
+            const active = name.toLowerCase() === trimmed.toLowerCase();
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => {
+                  commit(active ? "" : name);
+                  setEditing(false);
+                  setDraft("");
+                }}
+                className={cn(
+                  "h-8 px-3 rounded-full text-xs font-medium transition-colors",
+                  active
+                    ? "bg-[var(--accent)] text-white"
+                    : "bg-[var(--surface-2)] text-[var(--fg)] hover:bg-slate-200"
+                )}
+              >
+                {name}
+              </button>
+            );
+          })}
+          {!editing && !(trimmed && !inRoster) && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="h-8 px-3 rounded-full text-xs font-medium text-[var(--muted)] border border-dashed border-[var(--border)] hover:text-[var(--fg)]"
+            >
+              Other…
+            </button>
+          )}
+        </div>
+      )}
+      {(roster.length === 0 || editing || (trimmed && !inRoster)) && (
+        <input
+          className="field-input w-full"
+          value={draft}
+          placeholder="Salesperson"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            commit(draft);
+            setEditing(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit(draft);
+              setEditing(false);
+            }
+            if (e.key === "Escape") {
+              setDraft(inRoster ? "" : trimmed);
+              setEditing(false);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Variable bag consumed by `renderTemplate`. Centralized so all
+ *  channels (SMS intro, SMS confirm, email) see the same values. */
+function templateVars(lead: Lead, settings: ClientAppSettings): TemplateVars {
+  const first =
+    (lead.first_name ?? "").trim() ||
+    (lead.client ?? "").trim().split(" ")[0] ||
+    "there";
+  return {
+    firstName: first,
+    lastName: (lead.last_name ?? "").trim(),
+    client: (lead.client ?? "").trim(),
+    salesPerson: (lead.sales_person ?? "").trim(),
+    companyName: (settings.company_name ?? "").trim(),
+    companyPhone: (settings.company_phone ?? "").trim(),
+    companyEmail: (settings.company_email ?? "").trim(),
+    day: lead.scheduled_day ?? "",
+    time: lead.scheduled_time ?? "",
+  };
+}
+
+/**
+ * Build the sms: link for a lead's first-touch text. Uses the user's
+ * configured SMS intro template with `{firstName}`, `{salesPerson}`, and
+ * company-name placeholder substitution.
  *
  * iOS and Android both honor `sms:<number>?body=<urlencoded>`.
  */
-function buildSmsHref(phone: string, lead: Lead): string {
-  const firstName = (lead.first_name ?? "").trim() || (lead.client ?? "").trim().split(" ")[0] || "there";
-  const body =
-    `Hi ${firstName}, this is David with Arbor Tech 904. I'm reaching ` +
-    `out regarding your request for a free estimate/arborist assessment. ` +
-    `Feel free to call or text me to schedule a day and time that works ` +
-    `best for you. I look forward to helping you out!`;
+function buildSmsHref(phone: string, lead: Lead, settings: ClientAppSettings): string {
+  const body = renderTemplate(smsIntroTemplate(settings), templateVars(lead, settings));
   return `sms:${phone}?body=${encodeURIComponent(body)}`;
+}
+
+/** Build the mailto: href — subject + body come from the user's
+ *  configured email template. */
+function buildMailtoHref(email: string, lead: Lead, settings: ClientAppSettings): string {
+  const vars = templateVars(lead, settings);
+  const subject = renderTemplate(emailSubjectTemplate(settings), vars);
+  const body = renderTemplate(emailBodyTemplate(settings), vars);
+  const q = new URLSearchParams({ subject, body }).toString();
+  return `mailto:${email}?${q}`;
 }
 
 function ActionIconLink({

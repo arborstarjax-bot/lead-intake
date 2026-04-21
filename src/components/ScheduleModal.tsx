@@ -15,6 +15,8 @@ import {
 import type { Lead } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
+import { useAppSettings } from "@/components/SettingsProvider";
+import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
 
 type Half = "all" | "morning" | "afternoon";
 
@@ -607,10 +609,21 @@ function BookedView({
   htmlLink?: string;
   onDone: () => void;
 }) {
+  const { settings } = useAppSettings();
   const phone = sanitizePhone(lead.phone_number);
   const dayLabel = formatLongDayLabel(day);
   const timeLabel = clockFromHHMM(time);
-  const message = `Hi ${firstName(lead)}, David with Arbor Tech 904. Confirming our arborist assessment on ${dayLabel} at ${timeLabel}. Reply here if anything changes — see you then!`;
+  const message = renderTemplate(smsConfirmTemplate(settings), {
+    firstName: firstName(lead),
+    lastName: (lead.last_name ?? "").trim(),
+    client: (lead.client ?? "").trim(),
+    salesPerson: (lead.sales_person ?? "").trim(),
+    companyName: (settings.company_name ?? "").trim(),
+    companyPhone: (settings.company_phone ?? "").trim(),
+    companyEmail: (settings.company_email ?? "").trim(),
+    day: dayLabel,
+    time: timeLabel,
+  });
   // Matches the format used by the SMS button on the lead card — "?body="
   // works on both iPhone and Android (see LeadTable.buildSmsHref).
   const smsHref = phone
