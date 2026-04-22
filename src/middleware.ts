@@ -5,6 +5,9 @@ import { updateSession } from "@/lib/supabase/middleware";
 // - Auth pages themselves
 // - Auth callback (magic-link / email-confirm redirect target)
 // - Public health endpoint
+// - Stripe webhook (Stripe POSTs server-to-server, signature-authed by the
+//   route handler; redirecting to /login here would fail every delivery
+//   with a 307)
 // - PWA shell assets (manifest, SW, icons) and Next static
 const PUBLIC_PATHS = [
   "/login",
@@ -12,6 +15,7 @@ const PUBLIC_PATHS = [
   "/auth",
   "/api/auth",
   "/api/health",
+  "/api/stripe",
   "/manifest.webmanifest",
   "/sw.js",
   "/icons",
