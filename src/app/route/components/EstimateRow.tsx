@@ -103,12 +103,17 @@ export function EstimateRow({
   // from the previous stop. null means the server couldn't compute a leg
   // (e.g. no home address configured).
   const isFirst = index === 1;
-  const driveLabel =
-    stop.driveMinutesFromPrev === null
-      ? null
-      : isFirst
-        ? `${stop.driveMinutesFromPrev} min from home`
-        : `${stop.driveMinutesFromPrev} min drive`;
+  const driveLabel = (() => {
+    if (stop.driveMinutesFromPrev === null) return null;
+    const min = stop.driveMinutesFromPrev;
+    const mi = stop.distanceMilesFromPrev;
+    // Distance is informative only when the server returned it; fall back
+    // to minutes-only so we don't print "— mi" when Distance Matrix is out.
+    const distance = mi != null && mi > 0 ? `${mi} mi · ` : "";
+    return isFirst
+      ? `${distance}${min} min from home`
+      : `${distance}${min} min from prev stop`;
+  })();
 
   async function handleMarkComplete() {
     const ok = await confirmDialog({

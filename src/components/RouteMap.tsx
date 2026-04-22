@@ -29,12 +29,19 @@ type Props = {
    *  slot (not yet booked). */
   ghost?: RouteMapStop | null;
   /** When a slot time is being previewed, the ghost is inserted chronologically
-   *  into the day's stops and an amber directions polyline is drawn through
-   *  the whole reshaped day. The confirmed blue route is hidden during preview
-   *  so the two colors don't overlap. When null, the regular blue route renders
-   *  and the ghost pin shows with no connector. */
+   *  into the day's stops. Only the new leg (into the ghost) is drawn in amber
+   *  so the user can see exactly which segment is changing; the rest of the
+   *  day stays blue. When null, the regular blue route renders. */
   previewStopTime?: string | null;
 };
+
+const ROUTE_COLOR = "#2563eb";
+const HIGHLIGHT_COLOR = "#f59e0b";
+const DIMMED_COLOR = "#94a3b8";
+// House silhouette centered at (0, 0) tip-anchored on the base so it plants
+// on the exact marker position. Dimensions tuned for ~28 px rendered height.
+const HOUSE_PATH =
+  "M -11 2 L 0 -10 L 11 2 L 11 13 L 3 13 L 3 6 L -3 6 L -3 13 L -11 13 Z";
 
 function formatClock(t: string): string {
   const m = t.match(/^(\d{2}):(\d{2})/);
@@ -57,19 +64,19 @@ export default function RouteMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
-  const polylinesRef = useRef<google.maps.Polyline[]>([]);
-  const directionsRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const legPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Selected leg index. A leg[i] is the polyline landing on stop i+1 (so
+  // leg 0 is Home → Stop 1, leg N-1 is Stop N-1 → Stop N, and leg N is
+  // the return Stop N → Home). Null = nothing selected, all legs default-
+  // colored.
+  const [selectedLeg, setSelectedLeg] = useState<number | null>(null);
 
   // One-shot: load Google Maps and instantiate the map inside the container.
   useEffect(() => {
     let cancelled = false;
-    // Google Maps auth failures (bad key, referrer mismatch, billing off) don't
-    // reject the loader promise — they fire `window.gm_authFailure`, which the
-    // loader hooks and rebroadcasts as a DOM event. Surface it as a visible
-    // error so it doesn't look like a silent blank map on iPhone.
     const onAuthFailure = () => {
       if (cancelled) return;
       setStatus("error");
@@ -81,11 +88,6 @@ export default function RouteMap({
     if (window.__googleMapsAuthError) onAuthFailure();
     loadGoogleMaps()
       .then((google) => {
-        // `loadGoogleMaps` caches its resolved promise on `window`, so on
-        // remount after an auth failure this microtask fires immediately
-        // after the sync `onAuthFailure()` above and would overwrite the
-        // error state with `setStatus("ready")`. Short-circuit if auth is
-        // known broken or the component unmounted.
         if (cancelled || !containerRef.current) return;
         if (window.__googleMapsAuthError) return;
         const map = new google.maps.Map(containerRef.current, {
@@ -94,7 +96,6 @@ export default function RouteMap({
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
-          // Reduce POI noise so the route stands out.
           styles: [
             { featureType: "poi", stylers: [{ visibility: "off" }] },
             { featureType: "transit", stylers: [{ visibility: "off" }] },
@@ -102,6 +103,9 @@ export default function RouteMap({
         });
         mapRef.current = map;
         infoWindowRef.current = new google.maps.InfoWindow();
+        // Tapping anywhere on the base map clears a selected leg so the
+        // route returns to its unselected (all-blue) state.
+        map.addListener("click", () => setSelectedLeg(null));
         setStatus("ready");
       })
       .catch((e: Error) => {
@@ -114,7 +118,13 @@ export default function RouteMap({
     };
   }, []);
 
-  // Re-render overlays whenever stops/home/mode/ghost change.
+  // Reset selection whenever the underlying stops list or the ghost state
+  // changes, since the leg indices the selection refers to become stale.
+  useEffect(() => {
+    setSelectedLeg(null);
+  }, [stops, ghost, previewStopTime]);
+
+  // Re-render overlays whenever stops/home/mode/ghost/selection change.
   useEffect(() => {
     if (status !== "ready" || !mapRef.current) return;
     const google = window.google;
@@ -123,31 +133,29 @@ export default function RouteMap({
     // Tear down previous overlays.
     for (const m of markersRef.current) m.setMap(null);
     markersRef.current = [];
-    for (const p of polylinesRef.current) p.setMap(null);
-    polylinesRef.current = [];
-    if (directionsRef.current) {
-      directionsRef.current.setMap(null);
-      directionsRef.current = null;
-    }
+    for (const p of legPolylinesRef.current) p.setMap(null);
+    legPolylinesRef.current = [];
 
     const bounds = new google.maps.LatLngBounds();
     let anyPoint = false;
 
-    // Home marker — distinct color + letter H.
+    // Home marker — house-shaped pin rather than the old circle-with-H. The
+    // path is tip-anchored at (0, 0) so it sits cleanly on the home address.
     if (home) {
       const marker = new google.maps.Marker({
         position: { lat: home.lat, lng: home.lng },
         map,
-        label: { text: "H", color: "#fff", fontSize: "12px", fontWeight: "700" },
         icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 12,
+          path: HOUSE_PATH,
+          scale: 1.1,
           fillColor: "#0f766e",
           fillOpacity: 1,
           strokeColor: "#fff",
           strokeWeight: 2,
+          anchor: new google.maps.Point(0, 13),
         },
         title: `Home · ${home.address}`,
+        zIndex: 1000,
       });
       marker.addListener("click", () => {
         infoWindowRef.current?.setContent(
@@ -160,7 +168,9 @@ export default function RouteMap({
       anyPoint = true;
     }
 
-    // Numbered stop markers.
+    // Numbered stop markers. Clicking a pin highlights the leg that ends
+    // at that stop (so stop i+1 highlights leg i). Tapping the map
+    // background clears the selection.
     stops.forEach((s, i) => {
       const marker = new google.maps.Marker({
         position: { lat: s.lat, lng: s.lng },
@@ -174,7 +184,7 @@ export default function RouteMap({
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           scale: 12,
-          fillColor: "#2563eb",
+          fillColor: ROUTE_COLOR,
           fillOpacity: 1,
           strokeColor: "#fff",
           strokeWeight: 2,
@@ -182,6 +192,9 @@ export default function RouteMap({
         title: `${s.label} · ${formatClock(s.startTime)}`,
       });
       marker.addListener("click", () => {
+        // stopPropagation — the map click listener would otherwise
+        // immediately null-out the selection we just set.
+        setSelectedLeg(i);
         infoWindowRef.current?.setContent(
           `<div style="font-size:12px"><strong>${escapeHtml(s.label)}</strong><br/>${formatClock(
             s.startTime
@@ -195,6 +208,8 @@ export default function RouteMap({
     });
 
     // Ghost marker — faded amber, no number. Shown when previewing a slot.
+    // The only route color change in preview mode is the single leg that
+    // would feed into the ghost; the rest of the day stays blue.
     if (ghost) {
       const marker = new google.maps.Marker({
         position: { lat: ghost.lat, lng: ghost.lng },
@@ -202,7 +217,7 @@ export default function RouteMap({
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           scale: 12,
-          fillColor: "#f59e0b",
+          fillColor: HIGHLIGHT_COLOR,
           fillOpacity: 0.7,
           strokeColor: "#fff",
           strokeWeight: 2,
@@ -214,41 +229,42 @@ export default function RouteMap({
       anyPoint = true;
     }
 
-    // Pins mode: show markers only, no connectors between them.
-    // Route mode: draw the actual driving path via DirectionsService. While
-    // previewing a prospective slot, hide the confirmed blue route and draw
-    // the preview route below instead so the two colors don't overlap.
-    if (mode === "route" && !previewing && stops.length > 0) {
-      drawDirections({
-        google,
-        map,
-        home,
-        stops,
-        directionsRef,
-        color: "#2563eb",
-      }).catch(() => {
-        // If Directions fails (quota, no route, etc.) silently degrade to
-        // pins-only — markers are already on the map.
-      });
-    }
-
-    // Preview route: insert the ghost into the day's stops chronologically
-    // by its proposed start time and draw the whole reshaped day in amber
-    // so the user can see how the slot fits before committing.
-    if (previewing && ghost && previewStopTime) {
-      const insertedStops: RouteMapStop[] = [
-        ...stops,
-        { ...ghost, startTime: previewStopTime },
-      ].sort((a, b) => a.startTime.localeCompare(b.startTime));
-      drawDirections({
+    // Route mode: draw one polyline per leg so individual legs can be
+    // recolored without redrawing the whole route. When previewing a new
+    // pin, insert the ghost chronologically and highlight only the inbound
+    // leg in amber; confirmed legs stay blue so the user sees exactly the
+    // new segment being added.
+    if (mode === "route" && stops.length > 0) {
+      const insertedStops: RouteMapStop[] = previewing && ghost && previewStopTime
+        ? [...stops, { ...ghost, startTime: previewStopTime }].sort((a, b) =>
+            a.startTime.localeCompare(b.startTime)
+          )
+        : stops;
+      const previewLegIndex =
+        previewing && ghost
+          ? insertedStops.findIndex((s) => s.id === ghost.id)
+          : -1;
+      drawPerLegDirections({
         google,
         map,
         home,
         stops: insertedStops,
-        directionsRef,
-        color: "#f59e0b",
+        legPolylinesRef,
+        getLegColor: (legIdx) => {
+          if (previewing) {
+            return legIdx === previewLegIndex ? HIGHLIGHT_COLOR : DIMMED_COLOR;
+          }
+          if (selectedLeg == null) return ROUTE_COLOR;
+          return legIdx === selectedLeg ? HIGHLIGHT_COLOR : DIMMED_COLOR;
+        },
+        onLegClick: (legIdx) => {
+          // Clicking a leg polyline selects it too — matches the expected
+          // behavior of "tap a line, it highlights."
+          if (!previewing) setSelectedLeg(legIdx);
+        },
       }).catch(() => {
-        // Same graceful degradation — markers already on map.
+        // Directions can fail (quota, no route, etc.). Markers are already
+        // on the map; fall through to pins-only.
       });
     }
 
@@ -260,7 +276,7 @@ export default function RouteMap({
         map.fitBounds(bounds, 64);
       }
     }
-  }, [status, home, stops, mode, ghost, previewStopTime, previewing]);
+  }, [status, home, stops, mode, ghost, previewStopTime, previewing, selectedLeg]);
 
   return (
     <div className="relative w-full h-[60vh] min-h-[320px] rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-2)]">
@@ -289,37 +305,33 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-async function drawDirections({
+/**
+ * Build the day's directions in a single DirectionsService call, then
+ * render each leg as its own Polyline so we can recolor one without
+ * touching the others. Google returns N legs for (N+1) waypoints (home
+ * counts as 0 and N+1 when round-tripping), which maps 1:1 to our leg
+ * indices used elsewhere in the component.
+ */
+async function drawPerLegDirections({
   google,
   map,
   home,
   stops,
-  directionsRef,
-  color,
+  legPolylinesRef,
+  getLegColor,
+  onLegClick,
 }: {
   google: typeof window.google;
   map: google.maps.Map;
   home: RouteMapHome | null;
   stops: RouteMapStop[];
-  directionsRef: React.MutableRefObject<google.maps.DirectionsRenderer | null>;
-  color: string;
+  legPolylinesRef: React.MutableRefObject<google.maps.Polyline[]>;
+  getLegColor: (legIdx: number) => string;
+  onLegClick: (legIdx: number) => void;
 }) {
-  // Build origin/destination: prefer the home-to-home round trip; if there's
-  // no home set, go from stop 1 to stop N with intermediates.
   if (stops.length === 0) return;
 
   const service = new google.maps.DirectionsService();
-  const renderer = new google.maps.DirectionsRenderer({
-    map,
-    suppressMarkers: true, // keep our numbered markers, don't overlay A/B
-    polylineOptions: {
-      strokeColor: color,
-      strokeOpacity: 0.9,
-      strokeWeight: 4,
-    },
-  });
-  directionsRef.current = renderer;
-
   let origin: google.maps.LatLngLiteral;
   let destination: google.maps.LatLngLiteral;
   let waypoints: google.maps.DirectionsWaypoint[];
@@ -343,10 +355,24 @@ async function drawDirections({
     origin,
     destination,
     waypoints,
-    // Keep the user's chronological order — optimizeWaypoints=true would
-    // reorder, which contradicts the scheduled times shown on the pins.
     optimizeWaypoints: false,
     travelMode: google.maps.TravelMode.DRIVING,
   });
-  renderer.setDirections(result);
+
+  const route = result.routes[0];
+  if (!route) return;
+
+  route.legs.forEach((leg, legIdx) => {
+    const polyline = new google.maps.Polyline({
+      map,
+      path: leg.steps.flatMap((step) => step.path ?? []),
+      strokeColor: getLegColor(legIdx),
+      strokeOpacity: 0.9,
+      strokeWeight: 5,
+      clickable: true,
+      zIndex: legIdx === -1 ? 0 : 10,
+    });
+    polyline.addListener("click", () => onLegClick(legIdx));
+    legPolylinesRef.current.push(polyline);
+  });
 }

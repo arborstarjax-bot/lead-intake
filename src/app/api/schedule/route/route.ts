@@ -32,6 +32,9 @@ type MapStop = {
   startTime: string; // HH:MM
   endTime: string; // HH:MM
   driveMinutesFromPrev: number | null;
+  /** Road-distance from the previous stop in miles. Null when Distance
+   *  Matrix didn't return a value (API error, unroutable, no home). */
+  distanceMilesFromPrev: number | null;
   /** Carried through so the timeline menu can surface a "Text confirmation"
    *  action without a second round-trip per lead. */
   firstName: string | null;
@@ -178,6 +181,7 @@ export async function GET(req: Request) {
       startTime: formatHHMM(s.startMin),
       endTime: formatHHMM(s.endMin),
       driveMinutesFromPrev: null,
+      distanceMilesFromPrev: null,
       firstName: s.firstName,
       phoneNumber: s.phoneNumber,
       salesPerson: s.salesPerson,
@@ -198,6 +202,8 @@ export async function GET(req: Request) {
         const from = i === 0 ? home : resolvedStops[i - 1].address;
         const leg = await drive(from, resolvedStops[i].address);
         resolvedStops[i].driveMinutesFromPrev = Math.round(leg.drive_seconds / 60);
+        resolvedStops[i].distanceMilesFromPrev =
+          Math.round((leg.distance_meters / 1609.344) * 10) / 10;
       }
       const ret = await drive(resolvedStops[resolvedStops.length - 1].address, home);
       returnDriveMinutes = Math.round(ret.drive_seconds / 60);

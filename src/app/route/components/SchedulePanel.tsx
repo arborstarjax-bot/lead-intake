@@ -81,8 +81,18 @@ export function SchedulePanel({
 
   const confirmDialog = useConfirm();
 
+  // Monotonic request ID. Each fetch grabs the current value; when the
+  // response lands we compare against the latest ID and drop the result
+  // if a newer fetch has superseded it. Prevents the "stale page 2
+  // response arrives after page 0" race when the user flips half/day
+  // while offset is non-zero (the reset and the load run in separate
+  // effects, so the first cycle fires a doomed fetch with the old offset
+  // before the second cycle fires the correct one).
+  const requestIdRef = useRef(0);
+
   const loadSlots = useCallback(
     async (nextOffset: number) => {
+      const requestId = ++requestIdRef.current;
       setLoading(true);
       setError(null);
       try {
@@ -97,6 +107,7 @@ export function SchedulePanel({
           }),
         });
         const json = await res.json();
+        if (requestId !== requestIdRef.current) return;
         if (!res.ok) {
           setError(json.error ?? `Failed (${res.status})`);
           setSlots([]);
@@ -108,9 +119,10 @@ export function SchedulePanel({
         setWarnings(json.warnings ?? []);
         setHasMore(Boolean(json.hasMore));
       } catch (e) {
+        if (requestId !== requestIdRef.current) return;
         setError((e as Error).message || "Network error");
       } finally {
-        setLoading(false);
+        if (requestId === requestIdRef.current) setLoading(false);
       }
     },
     [leadId, half, selectedDay]

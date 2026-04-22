@@ -118,6 +118,14 @@ export async function PATCH(
   const clearingSchedule =
     ("scheduled_day" in patch && patch.scheduled_day === null) ||
     ("scheduled_time" in patch && patch.scheduled_time === null);
+  // Setting a flex window intentionally nulls scheduled_time but the lead
+  // is still meant to be on this day — it's just "any time in the window"
+  // instead of a pinned minute. The calendar event's specific time is no
+  // longer accurate, so tear the event down, but do NOT demote the status.
+  const settingFlexWindow =
+    "flex_window" in patch &&
+    patch.flex_window !== null &&
+    patch.flex_window !== undefined;
   const unbookingCalendar =
     !completing && clearingSchedule && existing.calendar_event_id;
   if (unbookingCalendar) {
@@ -126,7 +134,13 @@ export async function PATCH(
     patch.calendar_scheduled_time = null;
     // Demote the lead back to "Called / No Response" so it reappears in the
     // pre-booked buckets instead of lingering as "Scheduled" with no time.
-    if (existing.status === "Scheduled" && !("status" in patch)) {
+    // Exception: when a flex_window is being set, the lead is still booked
+    // on this day — just without a pinned time. Leave the status alone.
+    if (
+      existing.status === "Scheduled" &&
+      !("status" in patch) &&
+      !settingFlexWindow
+    ) {
       patch.status = "Called / No Response";
     }
   }
