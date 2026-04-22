@@ -10,6 +10,7 @@ import {
   type BillingState,
 } from "@/lib/billing";
 import { PlanCompareCard } from "./PlanCompareCard";
+import { ManageBillingButton } from "./ManageBillingButton";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,11 @@ export default async function BillingPage({ searchParams }: Props) {
 
       {billing.plan === "free" && <LapsedBanner billing={billing} />}
 
-      <CurrentPlanCard billing={billing} workspaceName={auth.workspaceName} />
+      <CurrentPlanCard
+        billing={billing}
+        workspaceName={auth.workspaceName}
+        isAdmin={isAdmin}
+      />
 
       {!isAdmin && (
         <p className="text-sm text-[var(--muted)] px-1">
@@ -88,9 +93,11 @@ function CheckoutCanceledBanner() {
 function CurrentPlanCard({
   billing,
   workspaceName,
+  isAdmin,
 }: {
   billing: BillingState;
   workspaceName: string;
+  isAdmin: boolean;
 }) {
   const price =
     billing.plan === "starter" || billing.plan === "pro"
@@ -167,10 +174,15 @@ function CurrentPlanCard({
         )}
       </dl>
 
-      <p className="text-xs text-[var(--muted)]">
-        Payment management coming soon. For now, contact support to change
-        your plan or cancel.
-      </p>
+      {isAdmin && billing.stripeCustomerId && (
+        <div className="pt-1 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-[var(--muted)]">
+            Update your card, download invoices, or cancel anytime in the
+            Stripe billing portal.
+          </p>
+          <ManageBillingButton />
+        </div>
+      )}
     </section>
   );
 }
