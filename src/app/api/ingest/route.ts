@@ -5,16 +5,17 @@ import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireMembership } from "@/lib/auth";
 import { checkRateLimit, rateLimitKey } from "@/lib/rateLimit";
+import { PRICING } from "@/lib/billing";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 // Per-workspace ingest cap on the Starter tier. Each screenshot triggers a
-// GPT-4o vision call, which is the most expensive operation in the app. 30
-// uploads/day matches the Starter plan's per-workspace allotment; Pro-tier
-// workspaces will bypass this cap once billing is wired (see TODO below).
-const INGEST_LIMIT_PER_DAY = 30;
+// GPT-4o vision call, which is the most expensive operation in the app.
+// Pro-tier workspaces will bypass this cap once billing is wired (see TODO
+// below).
+const INGEST_LIMIT_PER_DAY = PRICING.starter.uploadsPerDay;
 const INGEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   // Count each uploaded file as a separate hit: a batch of 10 screenshots
   // burns 10 OpenAI calls even though it's one request. Keyed by workspace
   // (not user) because the Starter plan sells a workspace-level quota — a
-  // five-person team still shares the same 30/day bucket.
+  // five-person team shares the same daily bucket.
   //
   // TODO(billing): once plans exist on the workspace row, skip this whole
   // block when plan === 'pro' (unlimited tier).

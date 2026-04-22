@@ -30,9 +30,8 @@ export function stripe(): Stripe {
 }
 
 /**
- * Price IDs configured per tier. Each tier has a "base" recurring price
- * + a "seat" price (licensed quantity, we push updated quantity when
- * team size changes).
+ * Price IDs configured per tier. Flat pricing: one recurring price per
+ * tier covers the whole workspace. No per-seat add-on.
  *
  * Set these in Vercel env after creating the products in Stripe dashboard.
  */
@@ -40,11 +39,9 @@ export function priceIds() {
   return {
     starter: {
       base: requireEnv("STRIPE_PRICE_STARTER_BASE"),
-      seat: requireEnv("STRIPE_PRICE_STARTER_SEAT"),
     },
     pro: {
       base: requireEnv("STRIPE_PRICE_PRO_BASE"),
-      seat: requireEnv("STRIPE_PRICE_PRO_SEAT"),
     },
   };
 }

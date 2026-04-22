@@ -157,31 +157,25 @@ export function planLabel(plan: WorkspacePlan): string {
 /**
  * Pricing constants mirrored from Stripe. Centralized here so we don't
  * hard-code them across components.
+ *
+ * Flat-per-workspace pricing: one recurring price per tier, all members
+ * of the workspace are covered under it (no per-seat add-on).
  */
 export const PRICING = {
   starter: {
     base: 29.99,
-    perSeat: 9.99,
-    includedSeats: 1,
-    uploadsPerDay: 30,
+    uploadsPerDay: 50,
   },
   pro: {
     base: 59.99,
-    perSeat: 9.99,
-    includedSeats: 1,
     uploadsPerDay: null, // unlimited
   },
 } as const;
 
 /**
- * Monthly price for a plan given current seat count.
- * Example: Starter with 3 seats = $29.99 + 2 × $9.99 = $49.97
+ * Monthly charge for a plan. Flat — seat count doesn't affect billing.
+ * Kept as a function so callers don't need to know the pricing shape.
  */
-export function monthlyPrice(
-  plan: "starter" | "pro",
-  seatCount: number
-): number {
-  const tier = PRICING[plan];
-  const extraSeats = Math.max(0, seatCount - tier.includedSeats);
-  return tier.base + extraSeats * tier.perSeat;
+export function monthlyPrice(plan: "starter" | "pro"): number {
+  return PRICING[plan].base;
 }
