@@ -29,11 +29,16 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Pro-tier workspaces have unlimited uploads. Everyone else (trial,
-  // starter, free, lapsed) hits the Starter cap. Cheap one-row lookup.
+  // Pro-tier workspaces with an active/trialing subscription have
+  // unlimited uploads. Everyone else (trial, starter, free, past_due,
+  // canceled Pro) hits the Starter cap. Checking subscription_status
+  // alongside plan is critical: a Pro workspace whose card failed
+  // (past_due) or that canceled mid-cycle still has plan='pro', but
+  // shouldn't get unlimited GPT-4o calls. Mirrors the same gate used by
+  // canUsePaidFeatures in lib/billing.ts.
   const { data: planRow } = await admin
     .from("workspaces")
-    .select("plan")
+    .select("plan, subscription_status")
     .eq("id", auth.workspaceId)
     .maybeSingle();
   const plan = (planRow?.plan ?? "trial") as
@@ -41,8 +46,11 @@ export async function POST(req: NextRequest) {
     | "starter"
     | "pro"
     | "free";
+  const subscriptionActive =
+    planRow?.subscription_status === "active" ||
+    planRow?.subscription_status === "trialing";
 
-  if (plan !== "pro") {
+  if (!(plan === "pro" && subscriptionActive)) {
     // Count each uploaded file as a separate hit: a batch of 10 screenshots
     // burns 10 OpenAI calls even though it's one request. Keyed by workspace
     // (not user) because the Starter plan sells a workspace-level quota — a
