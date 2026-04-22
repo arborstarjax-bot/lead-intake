@@ -13,8 +13,7 @@ export const maxDuration = 60;
 
 // Per-workspace ingest cap on the Starter tier. Each screenshot triggers a
 // GPT-4o vision call, which is the most expensive operation in the app.
-// Pro-tier workspaces will bypass this cap once billing is wired (see TODO
-// below).
+// Pro tier is unlimited; the cap is skipped when plan === 'pro'.
 const INGEST_LIMIT_PER_DAY = PRICING.starter.uploadsPerDay;
 const INGEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -28,34 +27,52 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No files" }, { status: 400 });
   }
 
-  // Count each uploaded file as a separate hit: a batch of 10 screenshots
-  // burns 10 OpenAI calls even though it's one request. Keyed by workspace
-  // (not user) because the Starter plan sells a workspace-level quota — a
-  // five-person team shares the same daily bucket.
-  //
-  // TODO(billing): once plans exist on the workspace row, skip this whole
-  // block when plan === 'pro' (unlimited tier).
-  const limit = checkRateLimit({
-    key: rateLimitKey(["ingest", auth.workspaceId]),
-    limit: INGEST_LIMIT_PER_DAY,
-    windowMs: INGEST_WINDOW_MS,
-    cost: files.length,
-  });
-  if (!limit.ok) {
-    const hours = Math.ceil((limit.retryAfterSeconds ?? 0) / 3600);
-    return NextResponse.json(
-      {
-        error: `Daily upload limit reached (${INGEST_LIMIT_PER_DAY}/day on Starter). Try again in ~${hours}h or upgrade to Pro for unlimited uploads.`,
-      },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(limit.retryAfterSeconds),
-          "X-RateLimit-Limit": String(limit.limit),
-          "X-RateLimit-Remaining": "0",
+  const admin = createAdminClient();
+
+  // Pro-tier workspaces have unlimited uploads. Everyone else (trial,
+  // starter, free, lapsed) hits the Starter cap. Cheap one-row lookup.
+  const { data: planRow } = await admin
+    .from("workspaces")
+    .select("plan")
+    .eq("id", auth.workspaceId)
+    .maybeSingle();
+  const plan = (planRow?.plan ?? "trial") as
+    | "trial"
+    | "starter"
+    | "pro"
+    | "free";
+
+  if (plan !== "pro") {
+    // Count each uploaded file as a separate hit: a batch of 10 screenshots
+    // burns 10 OpenAI calls even though it's one request. Keyed by workspace
+    // (not user) because the Starter plan sells a workspace-level quota — a
+    // five-person team shares the same daily bucket.
+    const limit = checkRateLimit({
+      key: rateLimitKey(["ingest", auth.workspaceId]),
+      limit: INGEST_LIMIT_PER_DAY,
+      windowMs: INGEST_WINDOW_MS,
+      cost: files.length,
+    });
+    if (!limit.ok) {
+      const hours = Math.ceil((limit.retryAfterSeconds ?? 0) / 3600);
+      return NextResponse.json(
+        {
+          error: `Daily upload limit reached (${INGEST_LIMIT_PER_DAY}/day on Starter). Try again in ~${hours}h or upgrade to Pro for unlimited uploads.`,
+          reason: "plan_cap",
+          plan,
+          limit: INGEST_LIMIT_PER_DAY,
+          retryAfterSeconds: limit.retryAfterSeconds ?? null,
         },
-      }
-    );
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(limit.retryAfterSeconds),
+            "X-RateLimit-Limit": String(limit.limit),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
+      );
+    }
   }
 
   const results: Array<{
@@ -84,7 +101,6 @@ export async function POST(req: NextRequest) {
   }
 
   if (results.length > 0) {
-    const admin = createAdminClient();
     // Attach the full lead record to each successful result so the client
     // can render the same LeadCard used on /leads without a round-trip.
     try {
