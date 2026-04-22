@@ -2,10 +2,11 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { UploadCloud, Loader2, Plus, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { UploadCloud, Loader2, Plus, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale";
 import StandaloneLeadCard from "@/components/StandaloneLeadCard";
+import { useToast } from "@/components/Toast";
 import type { Lead } from "@/lib/types";
 
 type ApiOk = {
@@ -19,7 +20,12 @@ type ApiOk = {
   errors?: { fileName: string; error: string }[];
 };
 
-type ApiErr = { error?: string };
+type ApiErr = {
+  error?: string;
+  reason?: string;
+  plan?: string;
+  limit?: number;
+};
 
 export default function UploadBox({
   endpoint,
@@ -38,6 +44,39 @@ export default function UploadBox({
   >([]);
   const [failures, setFailures] = useState<{ fileName: string; message: string }[]>([]);
   const [topError, setTopError] = useState<string | null>(null);
+  const [capHit, setCapHit] = useState<{ plan: string; limit: number } | null>(
+    null
+  );
+  const [upgrading, setUpgrading] = useState(false);
+  const { toast } = useToast();
+
+  async function upgradeToPro() {
+    if (upgrading) return;
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ plan: "pro" }),
+      });
+      const data: { url?: string; error?: string; detail?: string } = await res
+        .json()
+        .catch(() => ({ error: "bad response" }));
+      if (!res.ok || !data.url) {
+        throw new Error(data.detail || data.error || `http ${res.status}`);
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      setUpgrading(false);
+      toast({
+        kind: "error",
+        message:
+          err instanceof Error
+            ? `Could not start upgrade: ${err.message}`
+            : "Could not start upgrade",
+      });
+    }
+  }
 
   async function handleFiles(list: FileList | File[]) {
     const picked = Array.from(list);
@@ -65,15 +104,25 @@ export default function UploadBox({
         json = null;
       }
       if (!res.ok || !json) {
-        const fallback =
-          res.status === 504
-            ? "Upload timed out — the image took too long to process. Try again or use a smaller/cropped screenshot."
-            : res.status === 413
-            ? "Image is too large. Try taking a new screenshot or cropping before uploading."
-            : res.status >= 500
-            ? `Server error (${res.status}). Please try again.`
-            : `Upload failed (${res.status || "network"}).`;
-        setTopError(json?.error ?? fallback);
+        // Daily Starter cap — show an upsell modal instead of an error
+        // banner. Users hit this mid-workflow; the friction has to buy
+        // them a 1-click upgrade, not a dead end.
+        if (res.status === 429 && json?.reason === "plan_cap") {
+          setCapHit({
+            plan: json.plan ?? "starter",
+            limit: json.limit ?? 50,
+          });
+        } else {
+          const fallback =
+            res.status === 504
+              ? "Upload timed out — the image took too long to process. Try again or use a smaller/cropped screenshot."
+              : res.status === 413
+              ? "Image is too large. Try taking a new screenshot or cropping before uploading."
+              : res.status >= 500
+              ? `Server error (${res.status}). Please try again.`
+              : `Upload failed (${res.status || "network"}).`;
+          setTopError(json?.error ?? fallback);
+        }
       } else {
         const results = json.results ?? [];
         const withLead: Lead[] = [];
@@ -273,6 +322,71 @@ export default function UploadBox({
               onRemoved={removeLead}
             />
           ))}
+        </div>
+      )}
+
+      {capHit && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upgrade-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !upgrading && setCapHit(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 rounded-full bg-[var(--accent-soft)] p-2">
+                <Sparkles className="h-5 w-5 text-[var(--accent)]" />
+              </div>
+              <div className="space-y-1">
+                <h3
+                  id="upgrade-dialog-title"
+                  className="font-semibold text-base"
+                >
+                  Daily upload limit reached
+                </h3>
+                <p className="text-sm text-[var(--muted)]">
+                  You&apos;ve used all {capHit.limit} Starter uploads for today.
+                  Upgrade to Pro for unlimited uploads and keep going.
+                </p>
+              </div>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Pro</span>
+                <span className="font-semibold">$59.99/mo</span>
+              </div>
+              <div className="text-xs text-[var(--muted)]">
+                Unlimited uploads · Unlimited team members
+              </div>
+              <div className="text-xs text-[var(--muted)] mt-1">
+                Prorated: you&apos;ll only be charged the difference
+                (~$30/mo) for the remaining days in this cycle.
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                disabled={upgrading}
+                onClick={() => setCapHit(null)}
+                className="px-4 h-10 rounded-lg border border-[var(--border)] bg-white text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                disabled={upgrading}
+                onClick={upgradeToPro}
+                className="px-4 h-10 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {upgrading && <Loader2 className="h-4 w-4 animate-spin" />}
+                Upgrade to Pro
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
