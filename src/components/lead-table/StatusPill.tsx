@@ -12,12 +12,12 @@ const STATUS_STYLE: Record<LeadStatus, { bg: string; fg: string; dot: string }> 
   Scheduled: {
     bg: "bg-[var(--status-scheduled-bg)]",
     fg: "text-[var(--status-scheduled-fg)]",
-    dot: "#43B02A",
+    dot: "#4f9d25",
   },
   Completed: {
     bg: "bg-[var(--status-completed-bg)]",
     fg: "text-[var(--status-completed-fg)]",
-    dot: "#166534",
+    dot: "#0f3d26",
   },
   Lost: {
     bg: "bg-slate-100",

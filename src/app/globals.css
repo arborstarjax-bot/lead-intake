@@ -15,15 +15,17 @@
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
 
-  /* Brand (LeadFlow greens, sampled from logo) */
-  --accent: #166534;
-  --accent-hover: #14532d;
+  /* Brand (LeadFlow greens, sampled from logo).
+     --accent = the deep pine "Lead" wordmark + L mark; used for primary CTA,
+       focus rings, and body accents.
+     --brand-bright = the leaf/path green ("Flow" + leaf), used for highlights,
+       success chips, and visual flourishes. */
+  --accent: #0f3d26;
+  --accent-hover: #062818;
   --accent-fg: #ffffff;
   --accent-soft: #dcfce7;
-  /* Bright leaf green used for highlights / success chips / primary CTA
-     flourishes. Pairs with --accent as the deeper ring color. */
-  --brand-bright: #43B02A;
-  --brand-bright-hover: #358C21;
+  --brand-bright: #4f9d25;
+  --brand-bright-hover: #3f7f1d;
   --link: #0ea5e9;
 
   /* Semantics */
@@ -50,8 +52,12 @@ body {
   background: var(--bg);
   color: var(--fg);
   -webkit-font-smoothing: antialiased;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+h1, h2, h3, h4 {
+  letter-spacing: -0.01em;
 }
 
 body {
@@ -90,7 +96,7 @@ textarea {
 .field-input:focus {
   background: #fff;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.15);
+  box-shadow: 0 0 0 3px rgba(15, 61, 38, 0.18);
 }
 .field-input.invalid-soft {
   background: var(--warning-soft);

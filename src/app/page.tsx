@@ -15,6 +15,7 @@ import {
 import UploadBox from "@/components/UploadBox";
 import StandaloneLeadCard from "@/components/StandaloneLeadCard";
 import EnableNotifications from "@/components/EnableNotifications";
+import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types";
 
@@ -109,7 +110,8 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
       <header className="flex items-center justify-between gap-2">
-        <h1 className="text-xl sm:text-2xl font-semibold">LeadFlow</h1>
+        <Logo variant="full" size="md" priority />
+
         <div className="flex items-center gap-2 text-xs sm:text-sm">
           <EnableNotifications />
           {googleConnected === false && (

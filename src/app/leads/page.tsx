@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import LeadTable, { type LeadFilter, type LeadCounts } from "@/components/LeadTable";
 import EnableNotifications from "@/components/EnableNotifications";
 import NotificationAcknowledge from "@/components/NotificationAcknowledge";
@@ -76,11 +76,8 @@ function LeadsPageInner() {
     <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5">
       <NotificationAcknowledge />
       <header className="flex items-center justify-between gap-3">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--fg)]"
-        >
-          <ArrowLeft className="h-4 w-4" /> Home
+        <Link href="/" aria-label="Home" className="inline-flex items-center">
+          <Logo variant="mark" size="sm" />
         </Link>
         <h1 className="text-lg sm:text-xl font-semibold">Leads</h1>
         <EnableNotifications />
