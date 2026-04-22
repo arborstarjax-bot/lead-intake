@@ -89,13 +89,23 @@ export async function POST(req: NextRequest) {
         additions.push({ price: tierIds.seat, quantity: extraSeats });
       }
 
-      await stripe().subscriptions.update(workspace.stripe_subscription_id, {
-        items: [...deletions, ...additions],
-        proration_behavior: "create_prorations",
-        // Re-assert the workspace link so future webhooks can always
-        // resolve back to us, even if Stripe drops metadata later.
-        metadata: { workspace_id: workspace.id },
-      });
+      try {
+        await stripe().subscriptions.update(workspace.stripe_subscription_id, {
+          items: [...deletions, ...additions],
+          proration_behavior: "create_prorations",
+          // Re-assert the workspace link so future webhooks can always
+          // resolve back to us, even if Stripe drops metadata later.
+          metadata: { workspace_id: workspace.id },
+        });
+      } catch (err) {
+        console.error("[checkout] stripe.subscriptions.update failed", err);
+        const message =
+          err instanceof Error ? err.message : "unknown stripe error";
+        return NextResponse.json(
+          { error: "plan switch failed", detail: message },
+          { status: 500 }
+        );
+      }
 
       // The customer.subscription.updated webhook will flip the plan in
       // our DB. Redirect to the success page so the UI refreshes.
@@ -115,31 +125,47 @@ export async function POST(req: NextRequest) {
     lineItems.push({ price: tierIds.seat, quantity: extraSeats });
   }
 
-  const session = await stripe().checkout.sessions.create({
-    mode: "subscription",
-    line_items: lineItems,
-    // 14-day trial on first subscription only. Stripe ignores this on
-    // a returning customer, which is exactly the behavior we want.
-    subscription_data: {
-      trial_period_days: 14,
-      metadata: { workspace_id: workspace.id },
-    },
-    customer: workspace.stripe_customer_id ?? undefined,
-    customer_creation: workspace.stripe_customer_id ? undefined : "always",
-    client_reference_id: workspace.id,
-    metadata: { workspace_id: workspace.id, plan: body.plan },
-    success_url: `${appUrl}/billing?status=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}/billing?status=canceled`,
-    allow_promotion_codes: true,
-    billing_address_collection: "auto",
-  });
+  try {
+    const session = await stripe().checkout.sessions.create({
+      mode: "subscription",
+      line_items: lineItems,
+      // 14-day trial on first subscription only. Stripe ignores this on
+      // a returning customer, which is exactly the behavior we want.
+      subscription_data: {
+        trial_period_days: 14,
+        metadata: { workspace_id: workspace.id },
+      },
+      // In subscription mode Stripe always creates a customer — no
+      // customer_creation param needed (it's payment-mode only). Pass
+      // the existing customer when we have one so repeat purchases
+      // stay tied to the same Stripe Customer.
+      customer: workspace.stripe_customer_id ?? undefined,
+      client_reference_id: workspace.id,
+      metadata: { workspace_id: workspace.id, plan: body.plan },
+      success_url: `${appUrl}/billing?status=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/billing?status=canceled`,
+      allow_promotion_codes: true,
+      billing_address_collection: "auto",
+    });
 
-  if (!session.url) {
+    if (!session.url) {
+      return NextResponse.json(
+        { error: "stripe did not return checkout url" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ url: session.url });
+  } catch (err) {
+    // Surface the Stripe error to the logs so mis-configured price IDs or
+    // API misuse are visible immediately. The client still gets a generic
+    // message (we don't want to leak Stripe internals to end users).
+    console.error("[checkout] stripe.checkout.sessions.create failed", err);
+    const message =
+      err instanceof Error ? err.message : "unknown stripe error";
     return NextResponse.json(
-      { error: "stripe did not return checkout url" },
+      { error: "checkout failed", detail: message },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({ url: session.url });
 }

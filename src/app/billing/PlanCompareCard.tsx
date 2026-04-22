@@ -19,11 +19,16 @@ export function PlanCompareCard({ billing }: { billing: BillingState }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ plan }),
       });
-      const data: { url?: string; error?: string } = await res
+      const data: { url?: string; error?: string; detail?: string } = await res
         .json()
         .catch(() => ({ error: "bad response" }));
       if (!res.ok || !data.url) {
-        throw new Error(data.error || `http ${res.status}`);
+        // Prefer the Stripe detail when present so admins see the actual
+        // misconfiguration (e.g. "No such price: ...") instead of just
+        // "checkout failed".
+        const message =
+          data.detail || data.error || `http ${res.status}`;
+        throw new Error(message);
       }
       // Full-page redirect to Stripe. No router.push — we want a hard nav.
       window.location.href = data.url;
