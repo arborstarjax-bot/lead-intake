@@ -330,9 +330,10 @@ export default function RouteMap({
         map.fitBounds(bounds, 64);
       }
     }
-    // NOTE: `selectedLeg` is intentionally omitted from deps — see the
-    // recolor effect below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // NOTE: `selectedLeg` is intentionally omitted from deps — it's read
+    // via `selectedLegRef` inside `getLegColor` so leg clicks don't
+    // trigger a full Directions refetch + marker rebuild. The dedicated
+    // recolor effect below mutates stroke colors in place.
   }, [status, home, stops, mode, ghost, previewStopTime, previewing]);
 
   // Cheap recolor pass. Updates existing polyline stroke colors in place
