@@ -30,7 +30,14 @@ export default async function BillingPage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
-      <PageHeader title="Billing" />
+      <PageHeader
+        title="Billing"
+        rightSlot={
+          <span className="text-xs text-[var(--muted)] truncate max-w-[10rem] hidden sm:inline">
+            {auth.email}
+          </span>
+        }
+      />
 
       {params.status === "success" && <CheckoutSuccessBanner />}
       {params.status === "canceled" && <CheckoutCanceledBanner />}

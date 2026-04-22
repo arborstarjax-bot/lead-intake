@@ -67,7 +67,14 @@ export default async function WorkspacePage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
-      <PageHeader title="Workspace" />
+      <PageHeader
+        title="Workspace"
+        rightSlot={
+          <span className="text-xs text-[var(--muted)] truncate max-w-[10rem] hidden sm:inline">
+            {auth.email}
+          </span>
+        }
+      />
 
       <WorkspaceClient
         workspace={{
