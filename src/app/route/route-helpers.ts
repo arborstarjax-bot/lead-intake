@@ -9,6 +9,7 @@ export type Stop = {
   startTime: string;
   endTime: string;
   driveMinutesFromPrev: number | null;
+  distanceMilesFromPrev: number | null;
   firstName: string | null;
   phoneNumber: string | null;
   salesPerson: string | null;

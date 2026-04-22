@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   X,
   Loader2,
@@ -104,8 +104,13 @@ export default function ScheduleModal({
     }
   }, [lead.id]);
 
+  // Monotonic request ID to discard stale slot responses. See the matching
+  // comment in SchedulePanel for the full rationale — same race, same fix.
+  const slotRequestIdRef = useRef(0);
+
   const loadSlots = useCallback(async () => {
     if (!selectedDay) return;
+    const requestId = ++slotRequestIdRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -120,6 +125,7 @@ export default function ScheduleModal({
         }),
       });
       const json = await res.json();
+      if (requestId !== slotRequestIdRef.current) return;
       if (!res.ok) {
         setError(json.error ?? `Failed (${res.status})`);
         setSlots([]);
@@ -131,9 +137,10 @@ export default function ScheduleModal({
         setHasMore(Boolean(json.hasMore));
       }
     } catch (e) {
+      if (requestId !== slotRequestIdRef.current) return;
       setError((e as Error).message || "Network error");
     } finally {
-      setLoading(false);
+      if (requestId === slotRequestIdRef.current) setLoading(false);
     }
   }, [lead.id, half, selectedDay, offset]);
 
