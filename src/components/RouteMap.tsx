@@ -83,6 +83,17 @@ export default function RouteMap({
   // the return Stop N → Home). Null = nothing selected, all legs default-
   // colored.
   const [selectedLeg, setSelectedLeg] = useState<number | null>(null);
+  // Mirror of `selectedLeg` kept in a ref so async callbacks (notably
+  // `getLegColor` invoked by Directions resolution hundreds of ms after
+  // kick-off) read the latest value instead of a stale render-scope
+  // closure. Without this, a sequence like "select leg 3 → stops change
+  // → reset effect sets selectedLeg=null" could still paint leg 3 amber
+  // when the Directions promise resolves, because the getLegColor
+  // closure captured `selectedLeg=3` at draw-effect start time.
+  const selectedLegRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedLegRef.current = selectedLeg;
+  }, [selectedLeg]);
 
   // One-shot: load Google Maps and instantiate the map inside the container.
   useEffect(() => {
@@ -284,13 +295,18 @@ export default function RouteMap({
         home,
         stops: insertedStops,
         legPolylinesRef,
-        // selectedLeg is read at draw-time only; subsequent changes are
-        // handled by the recolor effect without another Directions call.
-        // The reset-on-stops-change effect above also nulls selection
-        // whenever this effect fires, so `selectedLeg` should be null here
-        // unless the caller intentionally set it after a mount.
+        // Read selection from a ref — Directions resolves asynchronously,
+        // so by the time `getLegColor` is called the render-scope value
+        // may be stale (the reset-selection effect fires in the same
+        // render cycle but its state update is deferred). The ref always
+        // holds the latest committed value.
         getLegColor: (legIdx) =>
-          computeLegColor(legIdx, previewing, previewLegIndex, selectedLeg),
+          computeLegColor(
+            legIdx,
+            previewing,
+            previewLegIndex,
+            selectedLegRef.current
+          ),
         onLegClick: (legIdx) => {
           // Clicking a leg polyline selects it too — matches the expected
           // behavior of "tap a line, it highlights."
@@ -314,9 +330,10 @@ export default function RouteMap({
         map.fitBounds(bounds, 64);
       }
     }
-    // NOTE: `selectedLeg` is intentionally omitted from deps — see the
-    // recolor effect below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // NOTE: `selectedLeg` is intentionally omitted from deps — it's read
+    // via `selectedLegRef` inside `getLegColor` so leg clicks don't
+    // trigger a full Directions refetch + marker rebuild. The dedicated
+    // recolor effect below mutates stroke colors in place.
   }, [status, home, stops, mode, ghost, previewStopTime, previewing]);
 
   // Cheap recolor pass. Updates existing polyline stroke colors in place
