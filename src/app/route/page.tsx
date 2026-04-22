@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
-  ArrowLeft,
   CalendarCheck,
 } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import RouteMap, { type RouteMapMode, type RouteMapStop } from "@/components/RouteMap";
 import {
   addDaysIso,
@@ -183,11 +183,8 @@ function RoutePageInner() {
       style={{ paddingBottom: panelHeight ? panelHeight + 24 : 128 }}
     >
       <header className="flex items-center justify-between gap-3">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--fg)]"
-        >
-          <ArrowLeft className="h-4 w-4" /> Home
+        <Link href="/" aria-label="Home" className="inline-flex items-center">
+          <Logo variant="mark" size="sm" />
         </Link>
         <h1 className="text-lg sm:text-xl font-semibold">Route Map</h1>
         <div className="w-9" />

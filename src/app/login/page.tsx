@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LoginForm } from "./LoginForm";
 import { SignedInNotice } from "./SignedInNotice";
+import { Logo } from "@/components/Logo";
 import { getSessionMembership } from "@/lib/auth";
 import { createSSRClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/safeRedirect";
@@ -30,11 +31,14 @@ export default async function LoginPage({
   return (
     <main className="min-h-dvh flex items-center justify-center px-4 py-12 bg-[var(--bg)]">
       <div className="w-full max-w-sm space-y-6">
-        <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
-          <p className="text-sm text-[var(--muted)]">
-            Sign in to your workspace
-          </p>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <Logo variant="full" size="lg" priority />
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
+            <p className="text-sm text-[var(--muted)]">
+              Sign in to your workspace
+            </p>
+          </div>
         </div>
         {orphanEmail ? (
           <SignedInNotice email={orphanEmail} />

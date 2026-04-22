@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import { getSessionMembership } from "@/lib/auth";
 import {
   getBillingState,
@@ -31,11 +32,8 @@ export default async function BillingPage({ searchParams }: Props) {
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
       <header className="flex items-center justify-between gap-3">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--fg)]"
-        >
-          <ArrowLeft className="h-4 w-4" /> Home
+        <Link href="/" aria-label="Home" className="inline-flex items-center">
+          <Logo variant="mark" size="sm" />
         </Link>
         <h1 className="text-lg sm:text-xl font-semibold">Billing</h1>
         <span className="text-xs text-[var(--muted)]">{auth.email}</span>
