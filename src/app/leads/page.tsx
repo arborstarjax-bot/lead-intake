@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 const TABS: { id: LeadFilter; label: string }[] = [
   { id: "New", label: "New" },
-  { id: "Called / No Response", label: "Called" },
+  { id: "Called / No Response", label: "Needs Followup" },
   { id: "Scheduled", label: "Scheduled" },
   { id: "Completed", label: "Completed" },
   { id: "Lost", label: "Lost" },
