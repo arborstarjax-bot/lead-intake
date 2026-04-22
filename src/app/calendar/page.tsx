@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { LEAD_FLEX_WINDOW_DISPLAY, type Lead } from "@/lib/types";
 
@@ -66,14 +66,8 @@ export default function CalendarPage() {
   }, [leads]);
 
   return (
-    <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5">
-      <header className="flex items-center justify-between gap-3">
-        <Link href="/" aria-label="Home" className="inline-flex items-center">
-          <Logo variant="mark" size="sm" />
-        </Link>
-        <h1 className="text-lg sm:text-xl font-semibold">Calendar</h1>
-        <div className="w-9" />
-      </header>
+    <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-6">
+      <PageHeader title="Calendar" />
 
       <div className="flex items-center justify-center">
         <div className="inline-flex rounded-full border border-[var(--border)] bg-white p-1">

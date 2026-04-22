@@ -22,8 +22,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { Logo } from "@/components/Logo";
+import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
@@ -149,27 +148,26 @@ export default function SettingsPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
-      <header className="flex items-center justify-between gap-3">
-        <Link href="/" aria-label="Home" className="inline-flex items-center">
-          <Logo variant="mark" size="sm" />
-        </Link>
-        <h1 className="text-lg sm:text-xl font-semibold">Settings</h1>
-        {canEdit ? (
-          <span
-            className={cn(
-              "text-xs font-medium",
-              dirty ? "text-amber-600" : "text-[var(--muted)]"
-            )}
-            aria-live="polite"
-          >
-            {dirty ? "Unsaved changes" : "All changes saved"}
-          </span>
-        ) : (
-          <span className="text-xs font-medium text-[var(--muted)]">
-            Read only
-          </span>
-        )}
-      </header>
+      <PageHeader
+        title="Settings"
+        rightSlot={
+          canEdit ? (
+            <span
+              className={cn(
+                "text-xs font-medium whitespace-nowrap",
+                dirty ? "text-amber-600" : "text-[var(--muted)]"
+              )}
+              aria-live="polite"
+            >
+              {dirty ? "Unsaved" : "Saved"}
+            </span>
+          ) : (
+            <span className="text-xs font-medium text-[var(--muted)] whitespace-nowrap">
+              Read only
+            </span>
+          )
+        }
+      />
 
       {!canEdit && role === "user" ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm px-3 py-2">

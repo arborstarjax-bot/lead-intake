@@ -298,7 +298,7 @@ export function SchedulePanel({
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Ranking days…
               </div>
             ) : dayOptionsError ? (
-              <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                 {dayOptionsError}
               </div>
             ) : dayOptions.length === 0 ? (
@@ -344,13 +344,13 @@ export function SchedulePanel({
         )}
 
         {warnings.length > 0 && !loading && (
-          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
             {warnings.join(" · ")}
           </div>
         )}
 
         {error && (
-          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
             {error}
           </div>
         )}
