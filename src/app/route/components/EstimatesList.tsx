@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Check,
   ListOrdered,
@@ -10,11 +10,13 @@ import {
 } from "lucide-react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import {
+  formatClock,
   formatDateLong,
   handleCalendarDisconnected,
   type RouteResponse,
   type Stop,
 } from "../route-helpers";
+import { LEAD_FLEX_WINDOW_DISPLAY } from "@/lib/types";
 import { EstimateRow } from "./EstimateRow";
 import { FlexEstimateRow } from "./FlexEstimateRow";
 
@@ -42,31 +44,41 @@ export function EstimatesList({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-optimize: preview of the TSP-optimal order. When non-null the
-  // list shows the proposed order in amber with a diff summary +
-  // Apply/Cancel bar. Separate state from the manual reorder draft so the
-  // two flows never trip over each other.
+  // Flex-aware Optimize. Timed stops represent customer promises and
+  // never move; the optimizer only proposes concrete times for the
+  // day's flex-window leads. The preview shows one row per proposed
+  // placement with the suggested start time; Apply writes the times
+  // and clears flex_window on each lead.
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
-  const [optimizePreview, setOptimizePreview] = useState<{
-    currentOrder: string[];
-    optimalOrder: string[];
-    currentDriveMinutes: number;
-    optimalDriveMinutes: number;
-    savingsMinutes: number;
-  } | null>(null);
+  type Placement = {
+    leadId: string;
+    label: string;
+    startTime: string;
+    flexWindow: "all_day" | "am" | "pm";
+    insertAfter: string | null;
+    addedDriveMinutes: number;
+  };
+  type OptimizeResponse = {
+    date: string;
+    placements: Placement[];
+    unplaced: {
+      leadId: string;
+      label: string;
+      flexWindow: string;
+      reason: string;
+    }[];
+    addedDriveMinutes: number;
+    nothingToDo: boolean;
+  };
+  const [optimizePreview, setOptimizePreview] =
+    useState<OptimizeResponse | null>(null);
   const confirmDialog = useConfirm();
 
   const reordering = draft !== null;
-  const previewingOptimize = optimizePreview !== null;
-  const previewStopList = useMemo(() => {
-    if (!optimizePreview) return null;
-    const byId = new Map(data.stops.map((s) => [s.id, s]));
-    return optimizePreview.optimalOrder
-      .map((id) => byId.get(id))
-      .filter((s): s is Stop => !!s);
-  }, [data.stops, optimizePreview]);
-  const stops = previewStopList ?? draft ?? data.stops;
+  const previewingOptimize =
+    optimizePreview !== null && optimizePreview.placements.length > 0;
+  const stops = draft ?? data.stops;
   const dirty =
     draft !== null &&
     (draft.length !== data.stops.length ||
@@ -90,15 +102,9 @@ export function EstimatesList({
       const res = await fetch(
         `/api/schedule/optimize-day?date=${encodeURIComponent(data.date)}`
       );
-      const json = await res.json();
+      const json = (await res.json()) as OptimizeResponse & { error?: string };
       if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`);
-      setOptimizePreview({
-        currentOrder: json.currentOrder,
-        optimalOrder: json.optimalOrder,
-        currentDriveMinutes: json.currentDriveMinutes,
-        optimalDriveMinutes: json.optimalDriveMinutes,
-        savingsMinutes: json.savingsMinutes,
-      });
+      setOptimizePreview(json);
     } catch (e) {
       setOptimizeError((e as Error).message || "Failed to optimize");
     } finally {
@@ -112,26 +118,29 @@ export function EstimatesList({
   }
 
   async function applyOptimize() {
-    if (!optimizePreview) return;
+    if (!optimizePreview || optimizePreview.placements.length === 0) return;
     setSaving(true);
     setOptimizeError(null);
     try {
-      const res = await fetch("/api/schedule/reorder", {
+      const res = await fetch("/api/schedule/optimize-day", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date: data.date,
-          orderedLeadIds: optimizePreview.optimalOrder,
+          placements: optimizePreview.placements.map((p) => ({
+            leadId: p.leadId,
+            startTime: p.startTime,
+          })),
         }),
       });
       const json = await res.json();
       if (await handleCalendarDisconnected(res, json, confirmDialog)) return;
       if (!res.ok) throw new Error(json.error ?? `Failed (${res.status})`);
-      const savings = optimizePreview.savingsMinutes;
+      const count = optimizePreview.placements.length;
       onFlash(
-        savings > 0
-          ? `Optimized · saved ~${savings} min of driving`
-          : "Optimized route saved"
+        count === 1
+          ? `Placed 1 flex lead`
+          : `Placed ${count} flex leads`
       );
       setOptimizePreview(null);
       onReload();
@@ -184,10 +193,15 @@ export function EstimatesList({
     }
   }
 
-  const multipleStops = data.stops.length > 1;
-  const showControls = !reordering && !previewingOptimize && multipleStops;
   const flexStops = data.flexStops ?? [];
   const totalCount = data.stops.length + flexStops.length;
+  const hasMultipleTimed = data.stops.length > 1;
+  const hasFlex = flexStops.length > 0;
+  const idle = !reordering && !previewingOptimize;
+  // Reorder only makes sense for ≥2 timed stops; Optimize is flex-only
+  // so it only shows when there's at least one flex lead on the day.
+  const showReorder = idle && hasMultipleTimed;
+  const showOptimize = idle && hasFlex;
 
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
@@ -196,29 +210,29 @@ export function EstimatesList({
           <MapPin className="h-3.5 w-3.5" /> Estimates ({totalCount})
         </div>
         <div className="flex items-center gap-3">
-          {showControls && (
-            <>
-              <button
-                onClick={runOptimize}
-                disabled={optimizing}
-                className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
-                title="Auto-reorder to minimize driving"
-              >
-                {optimizing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Wand2 className="h-3.5 w-3.5" />
-                )}
-                Optimize
-              </button>
-              <button
-                onClick={startReorder}
-                disabled={optimizing}
-                className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
-              >
-                <ListOrdered className="h-3.5 w-3.5" /> Reorder
-              </button>
-            </>
+          {showOptimize && (
+            <button
+              onClick={runOptimize}
+              disabled={optimizing}
+              className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
+              title="Assign times to flex leads by AM/PM and minimum drive"
+            >
+              {optimizing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Wand2 className="h-3.5 w-3.5" />
+              )}
+              Optimize flex
+            </button>
+          )}
+          {showReorder && (
+            <button
+              onClick={startReorder}
+              disabled={optimizing}
+              className="text-xs font-medium text-[var(--accent)] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
+            >
+              <ListOrdered className="h-3.5 w-3.5" /> Reorder
+            </button>
           )}
           {reordering && (
             <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 inline-flex items-center gap-1">
@@ -227,7 +241,7 @@ export function EstimatesList({
           )}
           {previewingOptimize && (
             <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 inline-flex items-center gap-1">
-              <Wand2 className="h-3.5 w-3.5" /> Optimize preview
+              <Wand2 className="h-3.5 w-3.5" /> Flex preview
             </span>
           )}
           {!reordering && !previewingOptimize && (
@@ -244,24 +258,70 @@ export function EstimatesList({
         </div>
       )}
 
+      {optimizePreview &&
+        optimizePreview.nothingToDo &&
+        !reordering && (
+          <div className="mb-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface-2)] text-[var(--muted)] px-3 py-2">
+            No flex leads on this day — nothing to optimize. (Timed stops
+            stay pinned to their customer-promised times.)
+          </div>
+        )}
+
       {previewingOptimize && optimizePreview && (
         <div className="mb-3 text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 space-y-1.5">
-          {optimizePreview.savingsMinutes > 0 ? (
-            <div className="font-semibold">
-              Save ~{optimizePreview.savingsMinutes} min of driving today
-            </div>
-          ) : (
-            <div className="font-semibold">
-              Already close to optimal — no meaningful savings found
+          <div className="font-semibold">
+            {optimizePreview.placements.length === 1
+              ? "1 flex lead ready to place"
+              : `${optimizePreview.placements.length} flex leads ready to place`}
+          </div>
+          <ul className="space-y-0.5">
+            {optimizePreview.placements.map((p) => (
+              <li
+                key={p.leadId}
+                className="text-[11px] text-amber-900 flex items-baseline gap-2"
+              >
+                <span className="tabular-nums font-semibold">
+                  {formatClock(p.startTime)}
+                </span>
+                <span className="truncate">{p.label}</span>
+                <span className="text-[10px] text-amber-700 whitespace-nowrap">
+                  · {LEAD_FLEX_WINDOW_DISPLAY[p.flexWindow]}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {optimizePreview.unplaced.length > 0 && (
+            <div className="mt-1 pt-1 border-t border-amber-200 text-[11px] text-amber-800 space-y-0.5">
+              <div className="font-semibold">Couldn&apos;t place:</div>
+              {optimizePreview.unplaced.map((u) => (
+                <div key={u.leadId} className="truncate">
+                  • {u.label} — {u.reason}
+                </div>
+              ))}
             </div>
           )}
-          <div className="text-[11px] text-amber-800">
-            Current: {optimizePreview.currentDriveMinutes} min driving · Proposed:{" "}
-            {optimizePreview.optimalDriveMinutes} min. Apply will renumber start
-            times from your work-start and resync Google Calendar.
+          <div className="text-[10px] text-amber-700">
+            Apply will set each time and clear the flex window; timed stops stay
+            untouched. Google Calendar will resync automatically.
           </div>
         </div>
       )}
+
+      {optimizePreview &&
+        !optimizePreview.nothingToDo &&
+        optimizePreview.placements.length === 0 &&
+        optimizePreview.unplaced.length > 0 && (
+          <div className="mb-3 text-xs rounded-lg border border-red-200 bg-red-50 text-red-800 px-3 py-2 space-y-0.5">
+            <div className="font-semibold">
+              No flex lead could be placed in a feasible slot.
+            </div>
+            {optimizePreview.unplaced.map((u) => (
+              <div key={u.leadId} className="truncate">
+                • {u.label} — {u.reason}
+              </div>
+            ))}
+          </div>
+        )}
 
       {reordering && (
         <div className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -279,9 +339,10 @@ export function EstimatesList({
               stop={s}
               index={i + 1}
               date={data.date}
-              mode={
-                reordering ? "reorder" : previewingOptimize ? "preview" : "normal"
-              }
+              // Optimize now only retimes flex leads, so timed rows stay
+              // in their normal look during preview — only the flex
+              // section + the preview summary above change.
+              mode={reordering ? "reorder" : "normal"}
               canUp={i > 0}
               canDown={i < stops.length - 1}
               onReorderUp={() => move(i, -1)}
@@ -355,7 +416,7 @@ export function EstimatesList({
         </div>
       )}
 
-      {previewingOptimize && optimizePreview && (
+      {optimizePreview && (previewingOptimize || optimizePreview.unplaced.length > 0 || optimizePreview.nothingToDo) && (
         <div className="mt-3 space-y-2">
           {optimizeError && (
             <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -368,26 +429,30 @@ export function EstimatesList({
               disabled={saving}
               className="rounded-full border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)] px-4 h-10 text-sm font-medium disabled:opacity-60"
             >
-              Cancel
+              {previewingOptimize ? "Cancel" : "Close"}
             </button>
+            {previewingOptimize && (
             <button
               onClick={applyOptimize}
-              disabled={saving || optimizePreview.savingsMinutes === 0}
+              disabled={saving || optimizePreview.placements.length === 0}
               className="flex-1 rounded-full bg-[var(--accent)] text-white h-10 text-sm font-semibold inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
             >
               {saving ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" /> Applying…
                 </>
-              ) : optimizePreview.savingsMinutes > 0 ? (
+              ) : optimizePreview.placements.length > 0 ? (
                 <>
                   <Check className="h-4 w-4" />
-                  Apply optimization
+                  {optimizePreview.placements.length === 1
+                    ? "Place 1 flex lead"
+                    : `Place ${optimizePreview.placements.length} flex leads`}
                 </>
               ) : (
-                <>No improvement</>
+                <>No placements</>
               )}
             </button>
+            )}
           </div>
         </div>
       )}

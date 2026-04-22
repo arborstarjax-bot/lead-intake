@@ -1,55 +1,96 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/lib/auth";
 import { MapsUnavailableError, getDriveMatrix } from "@/lib/maps";
-import { leadAddressString, parseHHMM } from "@/lib/schedule";
+import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
+import { getAccessToken } from "@/lib/google/oauth";
+import {
+  createCalendarEvent,
+  updateCalendarEvent,
+  canSchedule,
+} from "@/lib/google/calendar";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/schedule/optimize-day?date=YYYY-MM-DD
+ * Flex-aware Optimize.
  *
- * Propose the minimum-drive-time visit order for a day's stops using the
- * home address as both start and end point. Returns both the current order
- * (what is booked today) and the optimal order so the UI can show a
- * side-by-side preview. Does NOT mutate — the client posts the optimal
- * order to /api/schedule/reorder to apply.
+ * Premise: timed stops represent a promise to the customer and must not
+ * move. Only flex-window leads (day pinned, time TBD) can be retimed.
+ * This endpoint therefore solves an "insertion" problem, not a TSP:
  *
- * Algorithm:
- *  - n = number of stops. Pull one Distance Matrix for the full
- *    (home + stops) x (home + stops) grid — one HTTP call.
- *  - n ≤ 9 → brute-force all permutations of the middle stops with
- *    home fixed at both ends (cost = 9! = 362,880 comparisons, ~40ms).
- *  - n ≥ 10 → nearest-neighbor seed then 2-opt until no improving swap.
- *    Not optimal in theory but typically within 2% of optimal on routing
- *    problems of this scale; a third-party MIP solver is overkill.
+ *   Given a day's timed itinerary (home → t1 → t2 → ... → home, with
+ *   fixed start times) and N flex leads, pick a start time + insertion
+ *   slot for each flex lead that
+ *     a) respects the flex window (AM = starts before 12:00, PM = at
+ *        or after 12:00, all_day = anywhere within work hours),
+ *     b) fits without bumping a later timed stop past its promised time,
+ *     c) minimizes added driving (greedy cheapest-insertion).
+ *
+ * GET  → preview (placements + summary). No mutation.
+ * POST → apply the previewed placements: set scheduled_time + clear
+ *        flex_window on each lead, resync Google Calendar.
  */
+
+// ─── Response + request schemas ───────────────────────────────────────────
+
+type Placement = {
+  leadId: string;
+  label: string;
+  startTime: string; // "HH:MM"
+  flexWindow: "all_day" | "am" | "pm";
+  /** insertAfter = id of the timed/flex stop the new lead lands after;
+   *  null means the flex lead is the first stop of the day. Purely
+   *  informational for the preview UI. */
+  insertAfter: string | null;
+  /** Extra driving minutes vs. not inserting this lead (drive[prev→flex]
+   *  + drive[flex→next] − drive[prev→next]). Informational only. */
+  addedDriveMinutes: number;
+};
 
 type OptimizeResponse = {
   date: string;
-  /** Lead IDs in the currently-booked order. */
-  currentOrder: string[];
-  /** Lead IDs in the recommended optimal order. */
-  optimalOrder: string[];
-  /** Total driving minutes for the current order including return leg. */
-  currentDriveMinutes: number;
-  /** Total driving minutes for the optimal order including return leg. */
-  optimalDriveMinutes: number;
-  /** currentDriveMinutes - optimalDriveMinutes, floored at 0. */
-  savingsMinutes: number;
-  /** Client label per lead so the preview can name each row. */
-  labels: Record<string, string>;
-  /** True when the optimal order is identical to the current order. */
-  alreadyOptimal: boolean;
+  placements: Placement[];
+  /** Flex leads the optimizer could not place (no valid slot). */
+  unplaced: { leadId: string; label: string; flexWindow: string; reason: string }[];
+  /** Timed stops already on the day — echoed so the UI can render them
+   *  alongside the proposed placements without a second fetch. */
+  timedStops: { leadId: string; label: string; startTime: string }[];
+  /** Total added driving across all placements, in minutes. */
+  addedDriveMinutes: number;
+  /** True when there's nothing to do (no flex leads on this day). */
+  nothingToDo: boolean;
 };
+
+const applyBodySchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    placements: z
+      .array(
+        z.object({
+          leadId: z.string().uuid(),
+          startTime: z.string().regex(/^\d{2}:\d{2}$/),
+        })
+      )
+      .min(1),
+    sync: z.boolean().optional().default(true),
+  })
+  .strict();
+
+// ─── Shared helpers ───────────────────────────────────────────────────────
 
 function validDate(d: string | null): string | null {
   if (!d) return null;
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
+
+const NOON = parseHHMM("12:00");
+
+// ─── GET: preview placements ──────────────────────────────────────────────
 
 export async function GET(req: Request) {
   const iso = validDate(new URL(req.url).searchParams.get("date"));
@@ -71,13 +112,15 @@ export async function GET(req: Request) {
       .select("*")
       .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", iso)
-      .not("scheduled_time", "is", null)
-      .neq("status", "Completed")
-      .order("scheduled_time", { ascending: true }),
+      .neq("status", "Completed"),
   ]);
   if (rowsResp.error) {
-    return NextResponse.json({ error: rowsResp.error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: rowsResp.error.message },
+      { status: 500 }
+    );
   }
+
   const home = homeAddressString(settings);
   if (!home) {
     return NextResponse.json(
@@ -92,55 +135,59 @@ export async function GET(req: Request) {
     );
   }
 
-  const leads = (rowsResp.data ?? []) as Lead[];
-  if (leads.length < 2) {
-    return NextResponse.json(
-      {
-        error:
-          "Need at least 2 stops on this day before optimization has anything to do.",
-      },
-      { status: 400 }
-    );
+  const rows = (rowsResp.data ?? []) as Lead[];
+  const timed: Lead[] = [];
+  const flex: Lead[] = [];
+  for (const l of rows) {
+    if (l.scheduled_time) timed.push(l);
+    else if (l.flex_window) flex.push(l);
+  }
+  timed.sort(
+    (a, b) => parseHHMM(a.scheduled_time!) - parseHHMM(b.scheduled_time!)
+  );
+
+  const leadLabel = (l: Lead, fallback: string): string =>
+    l.client?.trim() ||
+    `${l.first_name ?? ""} ${l.last_name ?? ""}`.trim() ||
+    fallback;
+
+  if (flex.length === 0) {
+    const result: OptimizeResponse = {
+      date: iso,
+      placements: [],
+      unplaced: [],
+      timedStops: timed.map((l) => ({
+        leadId: l.id,
+        label: leadLabel(l, "Scheduled job"),
+        startTime: l.scheduled_time!,
+      })),
+      addedDriveMinutes: 0,
+      nothingToDo: true,
+    };
+    return NextResponse.json(result);
   }
 
-  // Sort by booked start time so the "current order" reflects what the user
-  // actually sees in Timeline, not DB insertion order.
-  const ordered = leads
-    .slice()
-    .sort(
-      (a, b) =>
-        parseHHMM(a.scheduled_time ?? "00:00") -
-        parseHHMM(b.scheduled_time ?? "00:00")
-    );
-
-  // Require every stop to have an address — without that we can't price a leg.
-  const addresses: string[] = [];
-  const labels: Record<string, string> = {};
-  for (const l of ordered) {
-    const addr = leadAddressString(l);
-    const name =
-      l.client?.trim() ||
-      `${l.first_name ?? ""} ${l.last_name ?? ""}`.trim() ||
-      "Scheduled job";
-    labels[l.id] = name;
-    if (!addr) {
+  // Validate addresses upfront so we fail with a useful message rather
+  // than a cryptic Distance-Matrix error.
+  for (const l of [...timed, ...flex]) {
+    if (!leadAddressString(l)) {
+      const name = leadLabel(l, "A lead");
       return NextResponse.json(
         { error: `"${name}" has no address — add one before optimizing.` },
         { status: 400 }
       );
     }
-    addresses.push(addr);
   }
 
-  // Full (home + stops) x (home + stops) matrix in a single Distance Matrix
-  // call. The API returns results in row-major order; `idx(i, j)` picks the
-  // duration from node i to node j. Node 0 = home, nodes 1..n = stops.
-  const n = ordered.length;
-  const nodes = [home, ...addresses];
-  let matrix: number[][];
+  // Build the node list: 0 = home, 1..T = timed, T+1..T+F = flex.
+  const timedAddrs = timed.map((l) => leadAddressString(l)!);
+  const flexAddrs = flex.map((l) => leadAddressString(l)!);
+  const nodes = [home, ...timedAddrs, ...flexAddrs];
+
+  let matrixSec: number[][];
   try {
     const flat = await getDriveMatrix(nodes, nodes);
-    matrix = Array.from({ length: nodes.length }, (_, i) =>
+    matrixSec = Array.from({ length: nodes.length }, (_, i) =>
       Array.from(
         { length: nodes.length },
         (_, j) => flat[i * nodes.length + j].drive_seconds
@@ -156,120 +203,308 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 
-  // Tour cost: home → perm[0] → perm[1] → … → perm[n-1] → home.
-  // perm holds stop indices (1..n) — home (0) is fixed at both ends.
-  function tourCost(perm: number[]): number {
-    let total = matrix[0][perm[0]];
-    for (let i = 0; i < perm.length - 1; i++) {
-      total += matrix[perm[i]][perm[i + 1]];
+  // driveMin(i, j) — integer minutes, minimum 1 so pure-same-address edge
+  // cases still leave room for snap rounding.
+  const driveMin = (i: number, j: number): number =>
+    Math.max(1, Math.round(matrixSec[i][j] / 60));
+
+  const jobMin = settings.default_job_minutes;
+  const workStart = parseHHMM(settings.work_start_time);
+  const workEnd = parseHHMM(settings.work_end_time);
+
+  /** Snap to the nearest 30-minute boundary (rounding UP) so suggested
+   *  start times match the rest of the scheduling UI. */
+  const snap30 = (min: number): number => Math.ceil(min / 30) * 30;
+
+  // Current itinerary (timed stops only). Each entry captures its node
+  // index so we can look up drive times. We'll insert flex stops into
+  // this list one at a time via cheapest-insertion.
+  type Slot =
+    | { kind: "timed"; nodeIdx: number; startMin: number; endMin: number; leadId: string }
+    | { kind: "flex"; nodeIdx: number; startMin: number; endMin: number; leadId: string };
+  const itinerary: Slot[] = timed.map((l, i) => {
+    const start = parseHHMM(l.scheduled_time!);
+    return {
+      kind: "timed",
+      nodeIdx: 1 + i,
+      startMin: start,
+      endMin: start + jobMin,
+      leadId: l.id,
+    };
+  });
+
+  const placements: Placement[] = [];
+  const unplaced: OptimizeResponse["unplaced"] = [];
+
+  // Greedy: place flex leads one at a time. Each iteration re-evaluates
+  // insertion points against the current itinerary (which grows as we
+  // place leads). We don't re-order previously placed leads — keeping
+  // the algorithm predictable is worth the small optimality gap.
+  for (let k = 0; k < flex.length; k++) {
+    const f = flex[k];
+    const fNode = 1 + timed.length + k;
+    const window = f.flex_window as "all_day" | "am" | "pm";
+
+    // Candidate insertion slots: "between prev and next" where prev is
+    // either home or a previously placed stop, and next is either the
+    // immediately following stop or home (at end of day).
+    let bestStart = -1;
+    let bestPos = -1;
+    let bestAdded = Infinity;
+
+    for (let pos = 0; pos <= itinerary.length; pos++) {
+      const prev = pos === 0 ? null : itinerary[pos - 1];
+      const next = pos === itinerary.length ? null : itinerary[pos];
+      const prevNodeIdx = prev ? prev.nodeIdx : 0;
+      const nextNodeIdx = next ? next.nodeIdx : 0;
+      const prevEndMin = prev ? prev.endMin : workStart;
+      const nextStartMin = next ? next.startMin : workEnd;
+
+      const driveIn = driveMin(prevNodeIdx, fNode);
+      const driveOut = driveMin(fNode, nextNodeIdx);
+      const driveBetween = driveMin(prevNodeIdx, nextNodeIdx);
+      const added = driveIn + driveOut - driveBetween;
+
+      const earliest = snap30(prevEndMin + driveIn);
+      // We can't start before the earliest arrival, and must finish +
+      // drive to next stop by its start.
+      const latestFeasible = nextStartMin - driveOut - jobMin;
+      if (earliest > latestFeasible) continue;
+
+      // Window constraint: pick the earliest start that satisfies the
+      // window. If AM and earliest ≥ noon, this slot is invalid for AM.
+      // If PM and latestFeasible < noon, this slot is invalid for PM.
+      let startCandidate = earliest;
+      if (window === "pm" && startCandidate < NOON) {
+        startCandidate = snap30(NOON);
+        if (startCandidate > latestFeasible) continue;
+      }
+      if (window === "am" && startCandidate >= NOON) continue;
+      // We also need the job to sit inside work hours.
+      if (startCandidate + jobMin > workEnd) continue;
+
+      if (added < bestAdded) {
+        bestAdded = added;
+        bestStart = startCandidate;
+        bestPos = pos;
+      }
     }
-    total += matrix[perm[perm.length - 1]][0];
-    return total;
+
+    if (bestPos === -1) {
+      unplaced.push({
+        leadId: f.id,
+        label: leadLabel(f, "Flex job"),
+        flexWindow: window,
+        reason:
+          window === "am"
+            ? "No AM slot fits this address without bumping a timed stop."
+            : window === "pm"
+              ? "No PM slot fits this address without bumping a timed stop."
+              : "No slot fits this address inside your work hours.",
+      });
+      continue;
+    }
+
+    const prev = bestPos === 0 ? null : itinerary[bestPos - 1];
+    itinerary.splice(bestPos, 0, {
+      kind: "flex",
+      nodeIdx: fNode,
+      startMin: bestStart,
+      endMin: bestStart + jobMin,
+      leadId: f.id,
+    });
+    placements.push({
+      leadId: f.id,
+      label: leadLabel(f, "Flex job"),
+      startTime: formatHHMM(bestStart),
+      flexWindow: window,
+      insertAfter: prev ? prev.leadId : null,
+      addedDriveMinutes: bestAdded,
+    });
   }
 
-  const currentPerm = ordered.map((_, i) => i + 1);
-  const currentCost = tourCost(currentPerm);
-
-  let optimalPerm: number[];
-  if (n <= 9) {
-    optimalPerm = bruteForceOptimal(currentPerm, tourCost);
-  } else {
-    optimalPerm = twoOptOptimal(currentPerm, tourCost, matrix);
-  }
-  const optimalCost = tourCost(optimalPerm);
-
-  const currentDriveMinutes = Math.round(currentCost / 60);
-  const optimalDriveMinutes = Math.round(optimalCost / 60);
-  const savingsMinutes = Math.max(0, currentDriveMinutes - optimalDriveMinutes);
-  const alreadyOptimal = currentPerm.every((v, i) => v === optimalPerm[i]);
+  const totalAdded = placements.reduce(
+    (acc, p) => acc + p.addedDriveMinutes,
+    0
+  );
 
   const result: OptimizeResponse = {
     date: iso,
-    currentOrder: currentPerm.map((idx) => ordered[idx - 1].id),
-    optimalOrder: optimalPerm.map((idx) => ordered[idx - 1].id),
-    currentDriveMinutes,
-    optimalDriveMinutes,
-    savingsMinutes,
-    labels,
-    alreadyOptimal,
+    placements,
+    unplaced,
+    timedStops: timed.map((l) => ({
+      leadId: l.id,
+      label: leadLabel(l, "Scheduled job"),
+      startTime: l.scheduled_time!,
+    })),
+    addedDriveMinutes: totalAdded,
+    nothingToDo: false,
   };
   return NextResponse.json(result);
 }
 
-/** Heap's algorithm permutation walk — finds the minimum-cost tour. */
-function bruteForceOptimal(
-  seed: number[],
-  cost: (p: number[]) => number
-): number[] {
-  const perm = seed.slice();
-  let bestPerm = perm.slice();
-  let bestCost = cost(perm);
-  const n = perm.length;
-  const c = new Array<number>(n).fill(0);
-  let i = 0;
-  while (i < n) {
-    if (c[i] < i) {
-      const swap = i % 2 === 0 ? 0 : c[i];
-      [perm[swap], perm[i]] = [perm[i], perm[swap]];
-      const candidate = cost(perm);
-      if (candidate < bestCost) {
-        bestCost = candidate;
-        bestPerm = perm.slice();
-      }
-      c[i]++;
-      i = 0;
-    } else {
-      c[i] = 0;
-      i++;
-    }
-  }
-  return bestPerm;
-}
+// ─── POST: apply placements ───────────────────────────────────────────────
 
-/** Nearest-neighbor seed, then 2-opt until no improving swap. Good enough
- * for n ≥ 10 where brute force is too slow. */
-function twoOptOptimal(
-  seed: number[],
-  cost: (p: number[]) => number,
-  matrix: number[][]
-): number[] {
-  // Nearest neighbor starting from home (index 0).
-  const unvisited = new Set(seed);
-  const nn: number[] = [];
-  let last = 0;
-  while (unvisited.size > 0) {
-    let bestNext = -1;
-    let bestDist = Infinity;
-    for (const candidate of unvisited) {
-      const d = matrix[last][candidate];
-      if (d < bestDist) {
-        bestDist = d;
-        bestNext = candidate;
-      }
-    }
-    nn.push(bestNext);
-    unvisited.delete(bestNext);
-    last = bestNext;
+export async function POST(req: Request) {
+  let parsed;
+  try {
+    parsed = applyBodySchema.parse(await req.json());
+  } catch (e) {
+    const msg =
+      e instanceof z.ZodError
+        ? e.issues.map((i) => i.message).join("; ")
+        : "invalid body";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  let current = nn;
-  let currentCost = cost(current);
-  let improved = true;
-  while (improved) {
-    improved = false;
-    for (let i = 0; i < current.length - 1; i++) {
-      for (let j = i + 1; j < current.length; j++) {
-        const candidate = current.slice();
-        const slice = candidate.slice(i, j + 1).reverse();
-        candidate.splice(i, slice.length, ...slice);
-        const candidateCost = cost(candidate);
-        if (candidateCost < currentCost) {
-          current = candidate;
-          currentCost = candidateCost;
-          improved = true;
-        }
-      }
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
+  const supabase = createAdminClient();
+
+  // Load the leads we're about to update — enforces workspace membership
+  // and confirms every id is (a) on this day and (b) still a flex lead.
+  // If a row has been retimed in another tab since the preview, we bail
+  // rather than overwrite the new time.
+  const ids = parsed.placements.map((p) => p.leadId);
+  const { data: rows, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("workspace_id", auth.workspaceId)
+    .in("id", ids);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  const leadById = new Map<string, Lead>(
+    ((rows ?? []) as Lead[]).map((l) => [l.id, l])
+  );
+  for (const p of parsed.placements) {
+    const l = leadById.get(p.leadId);
+    if (!l) {
+      return NextResponse.json(
+        { error: `Lead ${p.leadId} not found in this workspace.` },
+        { status: 404 }
+      );
+    }
+    if (l.scheduled_day !== parsed.date) {
+      return NextResponse.json(
+        {
+          error:
+            `"${l.client ?? l.id}" is no longer on ${parsed.date}. ` +
+            `Please reopen Optimize to re-compute.`,
+        },
+        { status: 409 }
+      );
+    }
+    if (l.scheduled_time) {
+      return NextResponse.json(
+        {
+          error:
+            `"${l.client ?? l.id}" already has a time set. ` +
+            `Please reopen Optimize to re-compute.`,
+        },
+        { status: 409 }
+      );
+    }
+    if (!l.flex_window) {
+      return NextResponse.json(
+        {
+          error:
+            `"${l.client ?? l.id}" is no longer a flex lead. ` +
+            `Please reopen Optimize to re-compute.`,
+        },
+        { status: 409 }
+      );
     }
   }
-  return current;
+
+  // Calendar sync is best-effort — we always write DB first so a
+  // transient Google failure can't leave DB + Calendar out of sync
+  // in a way that's hard to repair.
+  let token: string | null = null;
+  if (parsed.sync) {
+    try {
+      token = await getAccessToken(auth.userId);
+    } catch {
+      token = null;
+    }
+  }
+
+  type PerLeadResult = {
+    leadId: string;
+    label: string;
+    startTime: string;
+    calendar: "off" | "skipped" | "created" | "updated" | "error";
+    calendarError?: string;
+  };
+  const results: PerLeadResult[] = [];
+
+  for (const p of parsed.placements) {
+    const lead = leadById.get(p.leadId)!;
+    const label =
+      lead.client?.trim() ||
+      `${lead.first_name ?? ""} ${lead.last_name ?? ""}`.trim() ||
+      "Flex job";
+
+    const { error: updErr } = await supabase
+      .from("leads")
+      .update({ scheduled_time: p.startTime, flex_window: null })
+      .eq("id", lead.id);
+    if (updErr) {
+      return NextResponse.json(
+        { error: `Failed to set time for "${label}": ${updErr.message}` },
+        { status: 500 }
+      );
+    }
+
+    const leadNext: Lead = {
+      ...lead,
+      scheduled_time: p.startTime,
+      flex_window: null,
+    };
+    if (!token || !parsed.sync || !canSchedule(leadNext)) {
+      results.push({
+        leadId: lead.id,
+        label,
+        startTime: p.startTime,
+        calendar: parsed.sync ? (token ? "skipped" : "off") : "skipped",
+      });
+      continue;
+    }
+
+    try {
+      const event = lead.calendar_event_id
+        ? await updateCalendarEvent(token, lead.calendar_event_id, leadNext)
+        : await createCalendarEvent(token, leadNext);
+      await supabase
+        .from("leads")
+        .update({
+          calendar_event_id: event.id,
+          calendar_scheduled_day: parsed.date,
+          calendar_scheduled_time: p.startTime,
+        })
+        .eq("id", lead.id);
+      results.push({
+        leadId: lead.id,
+        label,
+        startTime: p.startTime,
+        calendar: lead.calendar_event_id ? "updated" : "created",
+      });
+    } catch (e) {
+      results.push({
+        leadId: lead.id,
+        label,
+        startTime: p.startTime,
+        calendar: "error",
+        calendarError: (e as Error).message,
+      });
+    }
+  }
+
+  return NextResponse.json({
+    date: parsed.date,
+    applied: results.length,
+    calendarConnected: Boolean(token),
+    results,
+  });
 }
