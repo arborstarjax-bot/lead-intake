@@ -20,6 +20,9 @@ const bodySchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "day must be YYYY-MM-DD")
       .optional(),
+    /** Zero-based page into the ranked slot list. The UI bumps this when
+     *  the user clicks "Show other times" to cycle past the initial 3. */
+    offset: z.number().int().min(0).max(20).default(0),
   })
   .strict();
 
@@ -100,13 +103,14 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { slots, warnings } = await suggestSlots({
+    const { slots, warnings, hasMore, totalCount } = await suggestSlots({
       lead,
       settings,
       others: (sameDay ?? []) as Lead[],
       half: parsed.half,
+      offset: parsed.offset,
     });
-    return NextResponse.json({ slots, warnings });
+    return NextResponse.json({ slots, warnings, hasMore, totalCount });
   } catch (e) {
     if (e instanceof MapsUnavailableError) {
       return NextResponse.json(

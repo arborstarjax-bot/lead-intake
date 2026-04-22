@@ -280,6 +280,13 @@ function RoutePageInner() {
           previewSlot={previewSlot}
           onPreview={setPreviewSlot}
           onHeightChange={setPanelHeight}
+          onSelectDay={(day) => {
+            setPreviewSlot(null);
+            setSelectedDay(day);
+            router.replace(`/route?scheduleLead=${scheduleLeadId}&day=${day}`, {
+              scroll: false,
+            });
+          }}
           onBooked={(msg) => {
             showFlash(msg);
             setPreviewSlot(null);

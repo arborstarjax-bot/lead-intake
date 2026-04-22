@@ -64,6 +64,10 @@ export default function ScheduleModal({
   const [slots, setSlots] = useState<Slot[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Page index into the ranked slot list. Bumped by the "Show different
+  // times" button so users can cycle past the initial 3 suggestions.
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   const [weekLoading, setWeekLoading] = useState(false);
   const [weekDays, setWeekDays] = useState<DayPreview[]>([]);
@@ -108,23 +112,36 @@ export default function ScheduleModal({
       const res = await fetch("/api/schedule/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId: lead.id, half, day: selectedDay }),
+        body: JSON.stringify({
+          leadId: lead.id,
+          half,
+          day: selectedDay,
+          offset,
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
         setError(json.error ?? `Failed (${res.status})`);
         setSlots([]);
         setWarnings([]);
+        setHasMore(false);
       } else {
         setSlots(json.slots ?? []);
         setWarnings(json.warnings ?? []);
+        setHasMore(Boolean(json.hasMore));
       }
     } catch (e) {
       setError((e as Error).message || "Network error");
     } finally {
       setLoading(false);
     }
-  }, [lead.id, half, selectedDay]);
+  }, [lead.id, half, selectedDay, offset]);
+
+  // Reset paging whenever context shifts, so switching day/half always
+  // starts from the top 3 rather than showing "page 2 of the new day".
+  useEffect(() => {
+    setOffset(0);
+  }, [selectedDay, half]);
 
   useEffect(() => {
     if (view === "week") loadWeek();
@@ -277,6 +294,9 @@ export default function ScheduleModal({
             warnings={warnings}
             booking={booking}
             onBook={book}
+            hasMore={hasMore}
+            offset={offset}
+            onCycle={() => setOffset((o) => (hasMore ? o + 1 : 0))}
           />
         )}
       </div>
@@ -416,6 +436,9 @@ function DayView({
   warnings,
   booking,
   onBook,
+  hasMore,
+  offset,
+  onCycle,
 }: {
   half: Half;
   setHalf: (h: Half) => void;
@@ -425,6 +448,9 @@ function DayView({
   warnings: string[];
   booking: string | null;
   onBook: (s: Slot) => void;
+  hasMore: boolean;
+  offset: number;
+  onCycle: () => void;
 }) {
   // Rank order is preserved by lowest totalDriveMinutes; highlight the best.
   const bestCost = slots.length
@@ -480,6 +506,15 @@ function DayView({
         )}
         {!loading && warnings.length > 0 && slots.length > 0 && (
           <div className="text-[11px] text-[var(--muted)] px-1">{warnings[0]}</div>
+        )}
+        {!loading && (hasMore || offset > 0) && (
+          <button
+            type="button"
+            onClick={onCycle}
+            className="w-full rounded-xl border border-dashed border-[var(--border)] bg-white px-3 py-2.5 text-xs font-medium text-[var(--fg)] hover:bg-[var(--surface-2)] transition-colors"
+          >
+            {hasMore ? "Show different times" : "Back to first page"}
+          </button>
         )}
       </div>
     </>

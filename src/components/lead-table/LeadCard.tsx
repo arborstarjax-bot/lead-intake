@@ -16,7 +16,11 @@ import {
   AlertTriangle,
   Sparkles,
 } from "lucide-react";
-import type { Lead } from "@/lib/types";
+import {
+  LEAD_FLEX_WINDOW_LABELS,
+  LEAD_FLEX_WINDOWS,
+  type Lead,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { ContactRow } from "./ContactRow";
@@ -233,12 +237,16 @@ export function LeadCard({
             placeholder="Time"
           />
         </div>
-        {(lead.scheduled_day || lead.scheduled_time) && (
+        {(lead.scheduled_day || lead.scheduled_time || lead.flex_window) && (
           <div className="mt-1.5">
             <button
               type="button"
               onClick={() =>
-                onPatch({ scheduled_day: null, scheduled_time: null })
+                onPatch({
+                  scheduled_day: null,
+                  scheduled_time: null,
+                  flex_window: null,
+                })
               }
               className="text-xs text-[var(--muted)] hover:text-[var(--danger)] hover:underline"
             >
@@ -246,6 +254,47 @@ export function LeadCard({
             </button>
           </div>
         )}
+
+        {/* Flex windows — let a lead be grouped onto a day without pinning a
+            specific time. Setting a flex window clears any scheduled_time;
+            choosing a specific time (via AI scheduler) clears the flex
+            window. Both states still use scheduled_day as the anchor. */}
+        <div className="mt-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1">
+            Flex window
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            <FlexWindowChip
+              active={!lead.flex_window}
+              onClick={() =>
+                lead.flex_window && onPatch({ flex_window: null })
+              }
+              label="Specific"
+            />
+            {LEAD_FLEX_WINDOWS.map((w) => (
+              <FlexWindowChip
+                key={w}
+                active={lead.flex_window === w}
+                onClick={() =>
+                  onPatch({
+                    flex_window: lead.flex_window === w ? null : w,
+                    // Flex is "any time" — wipe a pinned time so the route
+                    // optimizer can pick one. The day stays.
+                    scheduled_time:
+                      lead.flex_window === w ? lead.scheduled_time : null,
+                  })
+                }
+                label={LEAD_FLEX_WINDOW_LABELS[w].replace(" Flex", "")}
+              />
+            ))}
+          </div>
+          {lead.flex_window && (
+            <div className="mt-1 text-[11px] text-[var(--muted)]">
+              Any {LEAD_FLEX_WINDOW_LABELS[lead.flex_window].toLowerCase()} slot
+              — route optimizer will assign a time.
+            </div>
+          )}
+        </div>
         <div className="mt-1 flex items-start gap-1 text-[var(--muted)]">
           <User className="h-4 w-4 ml-2 mt-3 shrink-0" />
           <SalespersonPicker
@@ -324,5 +373,30 @@ export function LeadCard({
         </label>
       </div>
     </article>
+  );
+}
+
+function FlexWindowChip({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-9 rounded-lg text-xs font-medium border transition",
+        active
+          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+          : "border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)]"
+      )}
+    >
+      {label}
+    </button>
   );
 }

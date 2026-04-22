@@ -8,6 +8,26 @@ import { requireMembership } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireMembership();
+  if (auth instanceof NextResponse) return auth;
+
+  const { id } = await params;
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("id", id)
+    .eq("workspace_id", auth.workspaceId)
+    .maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ lead: data });
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -90,6 +110,27 @@ export async function PATCH(
     patch.calendar_scheduled_time = null;
   }
 
+  // Clearing the appointment day (or time) on a lead that already has a
+  // Google Calendar event should also tear that event down. Otherwise
+  // pressing "Remove date & time" leaves a phantom event on the calendar
+  // with no UI path back — the resync button disables itself the moment
+  // scheduled_day is null, and the user has no way to clean up.
+  const clearingSchedule =
+    ("scheduled_day" in patch && patch.scheduled_day === null) ||
+    ("scheduled_time" in patch && patch.scheduled_time === null);
+  const unbookingCalendar =
+    !completing && clearingSchedule && existing.calendar_event_id;
+  if (unbookingCalendar) {
+    patch.calendar_event_id = null;
+    patch.calendar_scheduled_day = null;
+    patch.calendar_scheduled_time = null;
+    // Demote the lead back to "Called / No Response" so it reappears in the
+    // pre-booked buckets instead of lingering as "Scheduled" with no time.
+    if (existing.status === "Scheduled" && !("status" in patch)) {
+      patch.status = "Called / No Response";
+    }
+  }
+
   const { data, error } = await supabase
     .from("leads")
     .update(patch)
@@ -101,14 +142,14 @@ export async function PATCH(
 
   // Best-effort Google delete after the DB write using THIS user's token.
   // A workspace member who has not connected their own calendar yet will
-  // silently skip — the lead is still Completed locally.
-  if (completing && existing.calendar_event_id) {
+  // silently skip — the lead is still Completed / unscheduled locally.
+  if ((completing || unbookingCalendar) && existing.calendar_event_id) {
     const token = await getAccessToken(auth.userId);
     if (token) {
       try {
         await deleteCalendarEvent(token, existing.calendar_event_id);
       } catch {
-        // Swallow: the lead is already Completed locally; a stale Google
+        // Swallow: the lead is already updated locally; a stale Google
         // event is recoverable but blocking the status flip isn't.
       }
     }

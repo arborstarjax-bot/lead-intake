@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   ArrowDown,
@@ -48,8 +49,16 @@ export function EstimateRow({
   onFlash?: (msg: string) => void;
 }) {
   const confirmDialog = useConfirm();
+  const router = useRouter();
   const { settings } = useAppSettings();
   const [completing, setCompleting] = useState(false);
+
+  function openReschedule() {
+    // Navigating with ?scheduleLead pops the SchedulePanel for this stop on
+    // the current day. The panel's "Find best day & time" button can then
+    // swap the ghost day for any other day in the horizon.
+    router.push(`/route?scheduleLead=${stop.id}&day=${date}`);
+  }
 
   const telHref = stop.phoneNumber
     ? `tel:${stop.phoneNumber.replace(/[^\d+]/g, "")}`
@@ -160,9 +169,21 @@ export function EstimateRow({
           >
             {index}
           </div>
-          <div className="text-[10px] tabular-nums text-[var(--muted)]">
-            {formatClock(stop.startTime)}
-          </div>
+          {mode === "normal" ? (
+            <button
+              type="button"
+              onClick={openReschedule}
+              title="Reschedule"
+              aria-label={`Reschedule ${stop.label}`}
+              className="text-[10px] tabular-nums text-[var(--muted)] hover:text-[var(--accent)] hover:underline decoration-dotted underline-offset-2"
+            >
+              {formatClock(stop.startTime)}
+            </button>
+          ) : (
+            <div className="text-[10px] tabular-nums text-[var(--muted)]">
+              {formatClock(stop.startTime)}
+            </div>
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <Link

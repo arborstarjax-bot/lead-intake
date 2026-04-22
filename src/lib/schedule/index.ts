@@ -88,12 +88,22 @@ export type SuggestInputs = {
   nowEpochSeconds?: number;
   /** Optional shared memo so the week endpoint can reuse prices across days. */
   drive?: DriveFn;
+  /**
+   * Which page of ranked slots to return. Zero-based — the UI uses this to
+   * cycle through alternate sets of 3 suggestions ("Show me different times").
+   * Each page returns the next 3 best-ranked slots skipping earlier pages.
+   */
+  offset?: number;
 };
 
 export type SuggestResult = {
   slots: SlotSuggestion[];
   /** If we had to short-circuit (no feasible slots, etc.), non-empty. */
   warnings: string[];
+  /** True when more ranked slots exist beyond the current page. */
+  hasMore: boolean;
+  /** Total number of feasible slots on this day (all pages combined). */
+  totalCount: number;
 };
 
 /**
@@ -109,6 +119,7 @@ export type SuggestResult = {
  */
 export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
   const { lead, settings, others, half } = inp;
+  const offset = Math.max(0, inp.offset ?? 0);
   const drive = inp.drive ?? createDriveMemo();
   const warnings: string[] = [];
 
@@ -118,12 +129,16 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
     return {
       slots: [],
       warnings: ["Set your starting address in Settings before using the AI scheduler."],
+      hasMore: false,
+      totalCount: 0,
     };
   }
   if (!destAddr) {
     return {
       slots: [],
       warnings: ["This lead has no address yet — add one to rank by drive time."],
+      hasMore: false,
+      totalCount: 0,
     };
   }
 
@@ -222,27 +237,52 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
 
   candidates.sort((a, b) => a.totalDriveMinutes - b.totalDriveMinutes);
 
-  // Spread picks so we don't surface three adjacent times.
-  const picked: SlotSuggestion[] = [];
-  const minGap = 45;
-  for (const c of candidates) {
-    const cMin = parseHHMM(c.startTime);
-    if (picked.some((p) => Math.abs(parseHHMM(p.startTime) - cMin) < minGap)) continue;
-    picked.push(c);
-    if (picked.length === 3) break;
+  // Build the full ordered set of spread picks across all pages. Using a
+  // shrinking `minGap` when the earlier pages exhaust distinct-enough
+  // candidates lets later pages still surface useful alternatives instead
+  // of "no more slots" after the first 3.
+  const PAGE_SIZE = 3;
+  const allPicked: SlotSuggestion[] = [];
+  const gapSteps = [45, 30, 15, 0];
+  for (const minGap of gapSteps) {
+    for (const c of candidates) {
+      if (allPicked.some((p) => p.startTime === c.startTime)) continue;
+      const cMin = parseHHMM(c.startTime);
+      if (
+        minGap > 0 &&
+        allPicked.some((p) => Math.abs(parseHHMM(p.startTime) - cMin) < minGap)
+      ) {
+        continue;
+      }
+      allPicked.push(c);
+    }
+    if (allPicked.length >= (offset + 1) * PAGE_SIZE + PAGE_SIZE) break;
   }
 
-  if (picked.length === 0) {
+  const pageStart = offset * PAGE_SIZE;
+  const pageEnd = pageStart + PAGE_SIZE;
+  const page = allPicked.slice(pageStart, pageEnd);
+  const hasMore = allPicked.length > pageEnd;
+
+  if (page.length === 0) {
     warnings.push(
-      candidates.length
+      allPicked.length > 0
+        ? "No more distinct slots — go back to the first page."
+        : candidates.length
         ? "All slots were too close together to show three distinct options."
         : "No feasible slots on this day inside working hours — try a different day."
     );
   }
 
-  // Display in chronological order, not ranked order, so morning options feel
-  // like morning options — but preserve rank for optional highlighting.
-  picked.sort((a, b) => parseHHMM(a.startTime) - parseHHMM(b.startTime));
+  // Display in chronological order within the page, not ranked order, so
+  // morning options feel like morning options — but preserve rank for
+  // optional highlighting.
+  page.sort((a, b) => parseHHMM(a.startTime) - parseHHMM(b.startTime));
 
-  return { slots: picked, warnings };
+  return {
+    slots: page,
+    warnings,
+    hasMore,
+    totalCount: allPicked.length,
+  };
 }

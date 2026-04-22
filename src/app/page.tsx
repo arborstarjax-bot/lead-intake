@@ -41,6 +41,7 @@ function buildPendingLead(): Lead {
     sales_person: null,
     scheduled_day: null,
     scheduled_time: null,
+    flex_window: null,
     notes: null,
     screenshot_url: null,
     screenshot_path: null,
