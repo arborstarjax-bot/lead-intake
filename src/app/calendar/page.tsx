@@ -398,15 +398,37 @@ function WeekView({
                   style={{ top: (h - START_HOUR) * HOUR_PX }}
                 />
               ))}
-              {dayLeads.map((l) => (
-                <WeekEventBlock
-                  key={l.id}
-                  lead={l}
-                  startHour={START_HOUR}
-                  endHour={END_HOUR}
-                  hourPx={HOUR_PX}
-                />
-              ))}
+              {(() => {
+                // Separate flex-window leads so they stack vertically at the
+                // top of the column. Without an index, multiple flex chips
+                // pile onto the same coordinates and only the last one is
+                // visible / clickable.
+                const flexLeads = dayLeads.filter((l) => !l.scheduled_time);
+                const timedLeads = dayLeads.filter((l) => l.scheduled_time);
+                return (
+                  <>
+                    {flexLeads.map((l, idx) => (
+                      <WeekEventBlock
+                        key={l.id}
+                        lead={l}
+                        startHour={START_HOUR}
+                        endHour={END_HOUR}
+                        hourPx={HOUR_PX}
+                        flexIndex={idx}
+                      />
+                    ))}
+                    {timedLeads.map((l) => (
+                      <WeekEventBlock
+                        key={l.id}
+                        lead={l}
+                        startHour={START_HOUR}
+                        endHour={END_HOUR}
+                        hourPx={HOUR_PX}
+                      />
+                    ))}
+                  </>
+                );
+              })()}
             </div>
           );
         })}
@@ -420,11 +442,16 @@ function WeekEventBlock({
   startHour,
   endHour,
   hourPx,
+  flexIndex,
 }: {
   lead: Lead;
   startHour: number;
   endHour: number;
   hourPx: number;
+  /** Index within this day's flex-window leads. Used to stack chips
+   *  vertically so multiple flex leads on the same day don't render on
+   *  top of each other. Undefined for timed leads. */
+  flexIndex?: number;
 }) {
   // Default job length when scheduled_time is set but there's no explicit
   // duration column on the lead. 60 min is a safe guess for estimates.
@@ -437,10 +464,14 @@ function WeekEventBlock({
   // day column rather than a positioned block, since we don't know when
   // during the window they'll land.
   if (!time) {
+    const CHIP_H = 20;
+    const CHIP_GAP = 2;
+    const top = 4 + (flexIndex ?? 0) * (CHIP_H + CHIP_GAP);
     return (
       <Link
         href={href}
-        className="absolute left-1 right-1 top-1 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] font-semibold px-1.5 py-0.5 truncate hover:ring-1 hover:ring-[var(--accent)]"
+        className="absolute left-1 right-1 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] font-semibold px-1.5 py-0.5 truncate hover:ring-1 hover:ring-[var(--accent)]"
+        style={{ top, height: CHIP_H }}
         title={`${lead.client ?? "Untitled"} — flex`}
       >
         {lead.client ?? "Untitled"}
