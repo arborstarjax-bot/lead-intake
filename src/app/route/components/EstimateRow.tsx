@@ -108,6 +108,13 @@ export function EstimateRow({
   // future row-level actions (e.g. reschedule-to-tomorrow) will need it.
   void date;
 
+  // The main row: [index/time | name+address+chips | trailing control].
+  // On narrow mobile screens the action buttons previously crammed in
+  // beside the name and wrapped the drive-time pill into the icons. We
+  // now put the full action cluster on its own line below the content,
+  // which keeps the name column wide and prevents overlap. In reorder /
+  // preview modes the trailing control stays inline since it's a single
+  // compact unit.
   return (
     <li className={`py-3 first:pt-0 last:pb-0 ${highlight}`}>
       <div className="flex items-start gap-3">
@@ -155,87 +162,93 @@ export function EstimateRow({
             ) : null}
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {mode === "reorder" ? (
-            <>
-              <button
-                onClick={onReorderUp}
-                disabled={!canUp || reorderBusy}
-                aria-label={`Move ${stop.label} up`}
-                className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)] disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ArrowUp className="h-4 w-4" />
-              </button>
-              <button
-                onClick={onReorderDown}
-                disabled={!canDown || reorderBusy}
-                aria-label={`Move ${stop.label} down`}
-                className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)] disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ArrowDown className="h-4 w-4" />
-              </button>
-            </>
-          ) : mode === "preview" ? (
-            <Link
-              href={`/leads?lead=${stop.id}`}
-              aria-label={`Open ${stop.label}`}
+        {/* Trailing control stays inline only for reorder / preview modes,
+           where it's a tight 1-2 button cluster that won't crush the name. */}
+        {mode === "reorder" && (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={onReorderUp}
+              disabled={!canUp || reorderBusy}
+              aria-label={`Move ${stop.label} up`}
+              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </button>
+            <button
+              onClick={onReorderDown}
+              disabled={!canDown || reorderBusy}
+              aria-label={`Move ${stop.label} down`}
+              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {mode === "preview" && (
+          <Link
+            href={`/leads?lead=${stop.id}`}
+            aria-label={`Open ${stop.label}`}
+            className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        )}
+      </div>
+
+      {/* Action strip sits on its own row on mobile so the name/address
+         column stays full-width above and the buttons never squeeze text
+         into wrapping. On sm+ the row has plenty of width. */}
+      {mode === "normal" && (
+        <div className="mt-2 pl-[52px] flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={handleMarkComplete}
+            disabled={completing}
+            aria-label={`Mark ${stop.label} complete`}
+            title="Mark complete"
+            className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-60"
+          >
+            {completing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
+          </button>
+          {telHref && (
+            <a
+              href={telHref}
+              aria-label={`Call ${stop.label}`}
               className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
             >
-              <ChevronRight className="h-4 w-4" />
-            </Link>
-          ) : (
-            <>
-              <button
-                onClick={handleMarkComplete}
-                disabled={completing}
-                aria-label={`Mark ${stop.label} complete`}
-                title="Mark complete"
-                className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-60"
-              >
-                {completing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-              </button>
-              {telHref && (
-                <a
-                  href={telHref}
-                  aria-label={`Call ${stop.label}`}
-                  className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
-                >
-                  <Phone className="h-4 w-4" />
-                </a>
-              )}
-              {smsHref && (
-                <a
-                  href={smsHref}
-                  aria-label={`Text ${stop.label}`}
-                  className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
-                >
-                  <MessageSquare className="h-4 w-4" />
-                </a>
-              )}
-              <a
-                href={mapsHref}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`Navigate to ${stop.address}`}
-                className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
-              >
-                <Navigation className="h-4 w-4" />
-              </a>
-              <Link
-                href={`/leads?lead=${stop.id}`}
-                aria-label={`Open ${stop.label}`}
-                className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </>
+              <Phone className="h-4 w-4" />
+            </a>
           )}
+          {smsHref && (
+            <a
+              href={smsHref}
+              aria-label={`Text ${stop.label}`}
+              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </a>
+          )}
+          <a
+            href={mapsHref}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Navigate to ${stop.address}`}
+            className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+          >
+            <Navigation className="h-4 w-4" />
+          </a>
+          <Link
+            href={`/leads?lead=${stop.id}`}
+            aria-label={`Open ${stop.label}`}
+            className="ml-auto inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Link>
         </div>
-      </div>
+      )}
     </li>
   );
 }

@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
-  CheckCircle2,
-  ClipboardList,
-  Map as MapIcon,
   Settings as SettingsIcon,
   UploadCloud,
   Pencil,
@@ -59,27 +56,12 @@ function buildPendingLead(): Lead {
 type IntakeTab = "upload" | "manual";
 
 export default function HomePage() {
-  const [counts, setCounts] = useState<{ active: number; completed: number } | null>(null);
   const [tab, setTab] = useState<IntakeTab>("upload");
   // Manual-entry cards live locally until the user types. `pendingIds`
   // tracks which are still un-persisted so we can tell StandaloneLeadCard
   // to POST (instead of PATCH) on the first keystroke.
   const [manualLeads, setManualLeads] = useState<Lead[]>([]);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/leads?view=active").then((r) => r.json()),
-      fetch("/api/leads?view=completed").then((r) => r.json()),
-    ])
-      .then(([a, c]) =>
-        setCounts({
-          active: Array.isArray(a.leads) ? a.leads.length : 0,
-          completed: Array.isArray(c.leads) ? c.leads.length : 0,
-        })
-      )
-      .catch(() => setCounts({ active: 0, completed: 0 }));
-  }, []);
 
   function startManualLead() {
     const stub = buildPendingLead();
@@ -105,7 +87,7 @@ export default function HomePage() {
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
       <header className="flex items-center justify-between gap-2">
         <Link href="/" aria-label="Home" className="inline-flex items-center">
-          <Logo variant="full" size="md" priority />
+          <Logo variant="full" size="lg" priority />
         </Link>
 
         <div className="flex items-center gap-2 text-xs sm:text-sm">
@@ -185,38 +167,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      <nav className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Link
-          href="/leads"
-          className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-white p-4 hover:bg-gray-50 active:bg-gray-100 transition"
-        >
-          <span className="flex items-center gap-3">
-            <ClipboardList className="h-5 w-5 text-[var(--accent)]" />
-            <span className="font-medium">View / Edit Leads</span>
-          </span>
-          <span className="text-sm text-[var(--muted)]">{counts?.active ?? "—"}</span>
-        </Link>
-        <Link
-          href="/leads?view=completed"
-          className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-white p-4 hover:bg-gray-50 active:bg-gray-100 transition"
-        >
-          <span className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-green-600" />
-            <span className="font-medium">Completed Leads</span>
-          </span>
-          <span className="text-sm text-[var(--muted)]">{counts?.completed ?? "—"}</span>
-        </Link>
-        <Link
-          href="/route"
-          className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-white p-4 hover:bg-gray-50 active:bg-gray-100 transition sm:col-span-2"
-        >
-          <span className="flex items-center gap-3">
-            <MapIcon className="h-5 w-5 text-[var(--accent)]" />
-            <span className="font-medium">Route Map</span>
-          </span>
-          <span className="text-xs text-[var(--muted)]">Today + 14 days</span>
-        </Link>
-      </nav>
     </main>
   );
 }
