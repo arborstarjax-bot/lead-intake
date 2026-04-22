@@ -16,6 +16,7 @@ import {
   type Stop,
 } from "../route-helpers";
 import { EstimateRow } from "./EstimateRow";
+import { FlexEstimateRow } from "./FlexEstimateRow";
 
 /**
  * Single list of the day's estimates. Absorbs what used to be the separate
@@ -185,12 +186,14 @@ export function EstimatesList({
 
   const multipleStops = data.stops.length > 1;
   const showControls = !reordering && !previewingOptimize && multipleStops;
+  const flexStops = data.flexStops ?? [];
+  const totalCount = data.stops.length + flexStops.length;
 
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
-          <MapPin className="h-3.5 w-3.5" /> Estimates ({data.stops.length})
+          <MapPin className="h-3.5 w-3.5" /> Estimates ({totalCount})
         </div>
         <div className="flex items-center gap-3">
           {showControls && (
@@ -268,26 +271,54 @@ export function EstimatesList({
         </div>
       )}
 
-      <ul className="divide-y divide-[var(--border)]">
-        {stops.map((s, i) => (
-          <EstimateRow
-            key={s.id}
-            stop={s}
-            index={i + 1}
-            date={data.date}
-            mode={
-              reordering ? "reorder" : previewingOptimize ? "preview" : "normal"
-            }
-            canUp={i > 0}
-            canDown={i < stops.length - 1}
-            onReorderUp={() => move(i, -1)}
-            onReorderDown={() => move(i, 1)}
-            reorderBusy={saving}
-            onReload={onReload}
-            onFlash={onFlash}
-          />
-        ))}
-      </ul>
+      {stops.length > 0 && (
+        <ul className="divide-y divide-[var(--border)]">
+          {stops.map((s, i) => (
+            <EstimateRow
+              key={s.id}
+              stop={s}
+              index={i + 1}
+              date={data.date}
+              mode={
+                reordering ? "reorder" : previewingOptimize ? "preview" : "normal"
+              }
+              canUp={i > 0}
+              canDown={i < stops.length - 1}
+              onReorderUp={() => move(i, -1)}
+              onReorderDown={() => move(i, 1)}
+              reorderBusy={saving}
+              onReload={onReload}
+              onFlash={onFlash}
+            />
+          ))}
+        </ul>
+      )}
+
+      {/* Flex-window leads on this day. Grouped below the timed stops
+          (or alone when the day has no pinned times yet) since they
+          don't participate in the numbered route sequence. Tapping the
+          "Flex — …" label on a row opens the scheduler so the operator
+          can pin a specific time, which then promotes the row into the
+          timed list on reload. Hidden during reorder/optimize preview
+          modes because those flows only reshuffle timed stops. */}
+      {!reordering && !previewingOptimize && flexStops.length > 0 && (
+        <div className={stops.length > 0 ? "mt-4" : ""}>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">
+            Flex · no time assigned
+          </div>
+          <ul className="divide-y divide-[var(--border)]">
+            {flexStops.map((s) => (
+              <FlexEstimateRow
+                key={s.id}
+                stop={s}
+                date={data.date}
+                onReload={onReload}
+                onFlash={onFlash}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
 
       {reordering && (
         <div className="mt-3 space-y-2">

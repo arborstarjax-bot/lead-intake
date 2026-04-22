@@ -6,7 +6,7 @@ import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import { geocodeMany, type LatLng } from "@/lib/geocode";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
 import { todayIsoInBusinessTz } from "@/lib/date";
-import type { Lead } from "@/lib/types";
+import type { Lead, LeadFlexWindow } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +42,26 @@ type MapStop = {
   salesPerson: string | null;
 };
 
+/**
+ * Flex-window leads for the day. They share a scheduled_day with timed
+ * stops but intentionally have no scheduled_time (the route optimizer
+ * will assign one later). Returned as a separate list so the estimates
+ * UI can render them below the timed stops with a "Flex — …" label in
+ * place of a start time, and so the map can render them as un-numbered
+ * pins without participating in drive-leg computation.
+ */
+type FlexStop = {
+  id: string;
+  label: string;
+  address: string;
+  lat: number;
+  lng: number;
+  flexWindow: LeadFlexWindow;
+  firstName: string | null;
+  phoneNumber: string | null;
+  salesPerson: string | null;
+};
+
 type GhostStop = {
   id: string;
   label: string;
@@ -59,6 +79,7 @@ type RouteResponse = {
   date: string;
   home: (LatLng & { address: string }) | null;
   stops: MapStop[];
+  flexStops: FlexStop[];
   /** Stops that couldn't be geocoded — surfaced so the UI can warn. */
   unresolved: { id: string; label: string; address: string }[];
   totalDriveMinutes: number | null;
@@ -86,14 +107,18 @@ export async function GET(req: Request) {
   const supabase = createAdminClient();
   const [settings, rowsResp, ghostResp] = await Promise.all([
     getSettings(auth.workspaceId),
+    // Pull all leads booked onto this day (timed + flex). We split them
+    // after the fetch so flex leads aren't dropped by a NOT NULL filter
+    // on scheduled_time — they still belong to the day, just without a
+    // pinned time. ORDER BY scheduled_time ASC NULLS LAST naturally
+    // groups timed stops first; we still re-partition in JS for clarity.
     supabase
       .from("leads")
       .select("*")
       .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", iso)
-      .not("scheduled_time", "is", null)
       .neq("status", "Completed")
-      .order("scheduled_time", { ascending: true }),
+      .order("scheduled_time", { ascending: true, nullsFirst: false }),
     ghostLeadId
       ? supabase
           .from("leads")
@@ -113,6 +138,14 @@ export async function GET(req: Request) {
   );
   const ghostLead = (ghostResp?.data ?? null) as Lead | null;
 
+  // Partition into timed stops (have a scheduled_time — participate in
+  // drive legs + sit in the numbered sequence) vs flex stops (flex
+  // window only — grouped separately, no leg math, no sequence).
+  const leadLabel = (l: Lead, fallback: string): string =>
+    l.client?.trim() ||
+    `${l.first_name ?? ""} ${l.last_name ?? ""}`.trim() ||
+    fallback;
+
   const stopsInput = leads
     .map((l) => {
       const addr = leadAddressString(l);
@@ -121,13 +154,27 @@ export async function GET(req: Request) {
       const startMin = parseHHMM(time);
       return {
         id: l.id,
-        label:
-          l.client?.trim() ||
-          `${l.first_name ?? ""} ${l.last_name ?? ""}`.trim() ||
-          "Scheduled job",
+        label: leadLabel(l, "Scheduled job"),
         address: addr,
         startMin,
         endMin: startMin + settings.default_job_minutes,
+        firstName: l.first_name ?? null,
+        phoneNumber: l.phone_number ?? null,
+        salesPerson: l.sales_person ?? null,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const flexInput = leads
+    .map((l) => {
+      if (l.scheduled_time || !l.flex_window) return null;
+      const addr = leadAddressString(l);
+      if (!addr) return null;
+      return {
+        id: l.id,
+        label: leadLabel(l, "Flex job"),
+        address: addr,
+        flexWindow: l.flex_window,
         firstName: l.first_name ?? null,
         phoneNumber: l.phone_number ?? null,
         salesPerson: l.sales_person ?? null,
@@ -152,6 +199,7 @@ export async function GET(req: Request) {
   const geocodeInputs = [
     ...(home ? [home] : []),
     ...stopsInput.map((s) => s.address),
+    ...flexInput.map((s) => s.address),
     ...(ghostAddr ? [ghostAddr] : []),
   ];
   let geocodes: Map<string, LatLng | null>;
@@ -165,6 +213,7 @@ export async function GET(req: Request) {
   }
 
   const resolvedStops: MapStop[] = [];
+  const resolvedFlexStops: FlexStop[] = [];
   const unresolved: RouteResponse["unresolved"] = [];
   for (const s of stopsInput) {
     const g = geocodes.get(s.address);
@@ -185,6 +234,24 @@ export async function GET(req: Request) {
       firstName: s.firstName,
       phoneNumber: s.phoneNumber,
       salesPerson: s.salesPerson,
+    });
+  }
+  for (const f of flexInput) {
+    const g = geocodes.get(f.address);
+    if (!g) {
+      unresolved.push({ id: f.id, label: f.label, address: f.address });
+      continue;
+    }
+    resolvedFlexStops.push({
+      id: f.id,
+      label: f.label,
+      address: f.address,
+      lat: g.lat,
+      lng: g.lng,
+      flexWindow: f.flexWindow,
+      firstName: f.firstName,
+      phoneNumber: f.phoneNumber,
+      salesPerson: f.salesPerson,
     });
   }
 
@@ -251,6 +318,7 @@ export async function GET(req: Request) {
     date: iso,
     home: homeLatLng && home ? { ...homeLatLng, address: home } : null,
     stops: resolvedStops,
+    flexStops: resolvedFlexStops,
     unresolved,
     totalDriveMinutes,
     returnDriveMinutes,

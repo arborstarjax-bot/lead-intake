@@ -1,4 +1,5 @@
 import type { useConfirm } from "@/components/ConfirmDialog";
+import type { LeadFlexWindow } from "@/lib/types";
 
 export type Stop = {
   id: string;
@@ -10,6 +11,24 @@ export type Stop = {
   endTime: string;
   driveMinutesFromPrev: number | null;
   distanceMilesFromPrev: number | null;
+  firstName: string | null;
+  phoneNumber: string | null;
+  salesPerson: string | null;
+};
+
+/**
+ * Flex-window lead on the day. Same shape as Stop minus the time/leg
+ * fields — flex stops are grouped separately and don't participate in
+ * the numbered sequence or drive-leg math. The estimates UI renders a
+ * "Flex — All Day / AM / PM" label in place of a start time.
+ */
+export type FlexStop = {
+  id: string;
+  label: string;
+  address: string;
+  lat: number;
+  lng: number;
+  flexWindow: LeadFlexWindow;
   firstName: string | null;
   phoneNumber: string | null;
   salesPerson: string | null;
@@ -29,6 +48,7 @@ export type RouteResponse = {
   date: string;
   home: { lat: number; lng: number; address: string } | null;
   stops: Stop[];
+  flexStops: FlexStop[];
   unresolved: { id: string; label: string; address: string }[];
   totalDriveMinutes: number | null;
   returnDriveMinutes: number | null;
