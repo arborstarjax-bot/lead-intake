@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  LEAD_FLEX_WINDOW_DISPLAY,
   LEAD_FLEX_WINDOW_LABELS,
   LEAD_FLEX_WINDOWS,
   type Lead,
@@ -234,15 +235,29 @@ export function LeadCard({
             className="field-input"
             placeholder="Day"
           />
-          <InlineField
-            value={lead.scheduled_time ?? ""}
-            lead={lead}
-            field="scheduled_time"
-            onPatch={onPatch}
-            type="time"
-            className="field-input"
-            placeholder="Time"
-          />
+          {lead.flex_window ? (
+            // When a flex window is set, the specific time is intentionally
+            // unset — the route optimizer assigns one later. Show the flex
+            // label in the time slot so the card isn't visually "empty" and
+            // the operator can see at a glance which window applies.
+            <div
+              className="field-input flex items-center justify-center text-[13px] font-semibold text-[var(--accent)] bg-[var(--accent-soft)] border-[var(--accent)]/40 select-none"
+              aria-label={`Time: ${LEAD_FLEX_WINDOW_DISPLAY[lead.flex_window]}`}
+              title="Clear the flex window (below) to set a specific time"
+            >
+              {LEAD_FLEX_WINDOW_DISPLAY[lead.flex_window]}
+            </div>
+          ) : (
+            <InlineField
+              value={lead.scheduled_time ?? ""}
+              lead={lead}
+              field="scheduled_time"
+              onPatch={onPatch}
+              type="time"
+              className="field-input"
+              placeholder="Time"
+            />
+          )}
         </div>
         {(lead.scheduled_day || lead.scheduled_time || lead.flex_window) && (
           <div className="mt-1.5">

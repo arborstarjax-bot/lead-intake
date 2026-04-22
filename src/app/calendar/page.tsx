@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
-import type { Lead } from "@/lib/types";
+import { LEAD_FLEX_WINDOW_DISPLAY, type Lead } from "@/lib/types";
 
 type CalendarView = "month" | "week";
 
@@ -467,14 +467,18 @@ function WeekEventBlock({
     const CHIP_H = 20;
     const CHIP_GAP = 2;
     const top = 4 + (flexIndex ?? 0) * (CHIP_H + CHIP_GAP);
+    const flexLabel = lead.flex_window
+      ? LEAD_FLEX_WINDOW_DISPLAY[lead.flex_window]
+      : "Flex";
+    const client = lead.client ?? "Untitled";
     return (
       <Link
         href={href}
         className="absolute left-1 right-1 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] font-semibold px-1.5 py-0.5 truncate hover:ring-1 hover:ring-[var(--accent)]"
         style={{ top, height: CHIP_H }}
-        title={`${lead.client ?? "Untitled"} — flex`}
+        title={`${client} — ${flexLabel}`}
       >
-        {lead.client ?? "Untitled"}
+        {flexLabel} · {client}
       </Link>
     );
   }

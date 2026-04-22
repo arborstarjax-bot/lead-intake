@@ -38,6 +38,19 @@ export const LEAD_FLEX_WINDOW_LABELS: Record<LeadFlexWindow, string> = {
   pm: "PM Flex",
 };
 
+/**
+ * Display label shown in place of a scheduled time when a lead has a
+ * flex window set (e.g. on the lead card, calendar week chip). Kept
+ * distinct from `LEAD_FLEX_WINDOW_LABELS` (which reads as a window
+ * name, like "AM Flex") so the time slot literally reads as a time
+ * substitute: "Flex — All Day", "Flex — AM", "Flex — PM".
+ */
+export const LEAD_FLEX_WINDOW_DISPLAY: Record<LeadFlexWindow, string> = {
+  all_day: "Flex — All Day",
+  am: "Flex — AM",
+  pm: "Flex — PM",
+};
+
 export type Lead = {
   id: string;
   created_at: string;
