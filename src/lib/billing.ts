@@ -70,6 +70,14 @@ export async function getBillingState(
       .eq("workspace_id", workspaceId),
   ]);
 
+  // Surface the underlying Postgres error if the query failed (e.g. missing
+  // column after a partial migration). Previously we only checked .data,
+  // which collapsed any error into a misleading "workspace not found".
+  if (workspaceRes.error) {
+    throw new Error(
+      `getBillingState: workspace lookup failed for ${workspaceId}: ${workspaceRes.error.message}`
+    );
+  }
   const row = workspaceRes.data;
   if (!row) {
     throw new Error(`workspace not found: ${workspaceId}`);
