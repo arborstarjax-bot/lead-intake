@@ -130,7 +130,10 @@ export function SchedulePanel({
   return (
     <div
       ref={panelRef}
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-white shadow-2xl rounded-t-2xl"
+      // Sit above the mobile BottomNav (z-40) so Confirm & book / Cancel
+      // always stay tappable. On md+ the BottomNav is hidden, so the panel
+      // returns to bottom-0.
+      className="fixed inset-x-0 z-50 bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] md:bottom-0 border-t border-[var(--border)] bg-white shadow-2xl rounded-t-2xl"
     >
       <div className="mx-auto max-w-6xl px-4 py-3 space-y-3">
         <div className="flex items-center justify-between gap-2">

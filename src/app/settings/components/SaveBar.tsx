@@ -15,7 +15,10 @@ export function SaveBar({
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-white/95 backdrop-blur",
+        // Sit above the mobile BottomNav (z-40) so Save/Revert always stays
+        // tappable. On md+ the BottomNav is hidden, so we reset to bottom-0.
+        "fixed inset-x-0 z-50 border-t border-[var(--border)] bg-white/95 backdrop-blur",
+        "bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] md:bottom-0",
         "px-4 py-3 sm:px-6"
       )}
     >
