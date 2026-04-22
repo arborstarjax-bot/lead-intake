@@ -39,7 +39,12 @@ export function Logo({
       height={h}
       priority={priority}
       className={className}
-      style={{ width: "auto", height: h, maxWidth: "100%" }}
+      style={{
+        width: "auto",
+        height: "auto",
+        maxWidth: "100%",
+        maxHeight: h,
+      }}
     />
   );
 }
