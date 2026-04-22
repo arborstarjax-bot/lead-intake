@@ -158,7 +158,10 @@ function RoutePageInner() {
   }, [load, selectedDay, scheduleLeadId]);
 
   const totalDrive = data?.totalDriveMinutes ?? null;
-  const stopCount = data?.stops.length ?? 0;
+  // Stop count in the page header includes flex leads so a day with
+  // only flex bookings doesn't read as "No jobs scheduled".
+  const stopCount =
+    (data?.stops.length ?? 0) + (data?.flexStops?.length ?? 0);
 
   // The floating SchedulePanel is `position: fixed` at the bottom, so we
   // reserve matching space under the page content (plus a 24px gap) so the
@@ -268,7 +271,7 @@ function RoutePageInner() {
         />
       )}
 
-      {data && data.stops.length > 0 && (
+      {data && (data.stops.length > 0 || (data.flexStops?.length ?? 0) > 0) && (
         <EstimatesList data={data} onReload={reload} onFlash={showFlash} />
       )}
 
