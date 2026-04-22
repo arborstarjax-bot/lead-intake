@@ -62,8 +62,16 @@ h1, h2, h3, h4 {
 
 body {
   min-height: 100dvh;
-  /* Respect iOS home-indicator / notch so cards don't get clipped. */
-  padding-bottom: env(safe-area-inset-bottom);
+  /* Respect iOS home-indicator / notch so cards don't get clipped.
+     On mobile, also reserve room for the fixed bottom tab bar (see
+     BottomNav.tsx). Desktop breakpoints zero this out since the nav
+     is hidden there. */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
+}
+@media (min-width: 768px) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 
 /* iOS Safari zooms inputs with font-size < 16px on focus. */

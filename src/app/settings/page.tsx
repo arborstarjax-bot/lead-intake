@@ -40,6 +40,7 @@ import { DefaultSalespersonPicker } from "./components/DefaultSalespersonPicker"
 import { SalespeopleEditor } from "./components/SalespeopleEditor";
 import { TemplateField } from "./components/TemplateField";
 import { NumberField } from "./components/NumberField";
+import { IntegrationsPanel } from "./components/IntegrationsPanel";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -176,6 +177,9 @@ export default function SettingsPage() {
           edits on your behalf.
         </div>
       ) : null}
+
+      {/* Integrations (calendar sync + notifications) */}
+      <IntegrationsPanel />
 
       {/* Company info */}
       <Panel

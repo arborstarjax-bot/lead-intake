@@ -4,6 +4,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { SettingsProvider } from "@/components/SettingsProvider";
+import { BottomNav } from "@/components/BottomNav";
 
 const sans = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -48,7 +49,10 @@ export default function RootLayout({
       <body>
         <ToastProvider>
           <ConfirmProvider>
-            <SettingsProvider>{children}</SettingsProvider>
+            <SettingsProvider>
+              {children}
+              <BottomNav />
+            </SettingsProvider>
           </ConfirmProvider>
         </ToastProvider>
         {/* Register service worker on client. */}
