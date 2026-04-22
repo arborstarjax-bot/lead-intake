@@ -29,6 +29,15 @@ export const LEAD_INTAKE_STATUSES = [
 ] as const;
 export type LeadIntakeStatus = (typeof LEAD_INTAKE_STATUSES)[number];
 
+export const LEAD_FLEX_WINDOWS = ["all_day", "am", "pm"] as const;
+export type LeadFlexWindow = (typeof LEAD_FLEX_WINDOWS)[number];
+
+export const LEAD_FLEX_WINDOW_LABELS: Record<LeadFlexWindow, string> = {
+  all_day: "All Day Flex",
+  am: "AM Flex",
+  pm: "PM Flex",
+};
+
 export type Lead = {
   id: string;
   created_at: string;
@@ -47,6 +56,7 @@ export type Lead = {
   sales_person: string | null;
   scheduled_day: string | null;
   scheduled_time: string | null;
+  flex_window: LeadFlexWindow | null;
   notes: string | null;
   screenshot_url: string | null;
   screenshot_path: string | null;
@@ -73,5 +83,6 @@ export const EDITABLE_COLUMNS: (keyof Lead)[] = [
   "sales_person",
   "scheduled_day",
   "scheduled_time",
+  "flex_window",
   "notes",
 ];

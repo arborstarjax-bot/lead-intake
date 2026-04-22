@@ -152,7 +152,14 @@ export async function POST(req: Request) {
   const buffer = settings.travel_buffer_minutes;
 
   // Compact from work_start: home → leg → stop1 → leg → stop2 → …
-  // Each stop starts at max(workStart, prev_end + buffer + drive).
+  // Each stop starts at max(workStart, prev_end + buffer + drive), then
+  // snapped UP to the next 30-minute boundary so route-reordered times
+  // always read as clean clock times (10:00, 10:30, 11:00) rather than
+  // arbitrary drive-time residuals like 10:37.
+  const SLOT_STEP = 30;
+  const snapUp = (min: number) =>
+    Math.ceil(min / SLOT_STEP) * SLOT_STEP;
+
   const newTimes: { id: string; newMin: number }[] = [];
   let prevEnd = workStart;
   let prevAddr = home;
@@ -161,7 +168,8 @@ export async function POST(req: Request) {
       const addr = leadAddressString(lead)!;
       const leg = await drive(prevAddr, addr);
       const driveMin = Math.ceil(leg.drive_seconds / 60);
-      const startMin = Math.max(workStart, prevEnd + buffer + driveMin);
+      const earliest = Math.max(workStart, prevEnd + buffer + driveMin);
+      const startMin = snapUp(earliest);
       newTimes.push({ id: lead.id, newMin: startMin });
       prevEnd = startMin + duration;
       prevAddr = addr;
