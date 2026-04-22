@@ -47,6 +47,10 @@ export default function UploadBox({
   const [capHit, setCapHit] = useState<{ plan: string; limit: number } | null>(
     null
   );
+  const [subRequired, setSubRequired] = useState<{
+    plan: string;
+    message: string;
+  } | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const { toast } = useToast();
 
@@ -111,6 +115,19 @@ export default function UploadBox({
           setCapHit({
             plan: json.plan ?? "starter",
             limit: json.limit ?? 50,
+          });
+        } else if (
+          res.status === 402 &&
+          json?.reason === "subscription_required"
+        ) {
+          // Trial ended, card failed (past_due), or subscription canceled.
+          // Send the user to /billing with a dedicated modal rather than a
+          // generic error banner — the recovery action is always the same.
+          setSubRequired({
+            plan: json.plan ?? "free",
+            message:
+              json.error ??
+              "Your subscription has lapsed. Update your billing to keep uploading.",
           });
         } else {
           const fallback =
@@ -385,6 +402,53 @@ export default function UploadBox({
                 {upgrading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Upgrade to Pro
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {subRequired && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sub-required-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSubRequired(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 rounded-full bg-red-50 p-2">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <div className="space-y-1">
+                <h3
+                  id="sub-required-dialog-title"
+                  className="font-semibold text-base"
+                >
+                  Subscription required
+                </h3>
+                <p className="text-sm text-[var(--muted)]">
+                  {subRequired.message}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setSubRequired(null)}
+                className="px-4 h-10 rounded-lg border border-[var(--border)] bg-white text-sm font-medium hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <Link
+                href="/billing"
+                className="px-4 h-10 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-hover)] inline-flex items-center"
+              >
+                Go to billing
+              </Link>
             </div>
           </div>
         </div>

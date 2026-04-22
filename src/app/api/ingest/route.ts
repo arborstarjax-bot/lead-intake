@@ -5,7 +5,7 @@ import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireMembership } from "@/lib/auth";
 import { checkRateLimit, rateLimitKey } from "@/lib/rateLimit";
-import { PRICING } from "@/lib/billing";
+import { PRICING, getBillingState } from "@/lib/billing";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -29,20 +29,29 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Pro-tier workspaces have unlimited uploads. Everyone else (trial,
-  // starter, free, lapsed) hits the Starter cap. Cheap one-row lookup.
-  const { data: planRow } = await admin
-    .from("workspaces")
-    .select("plan")
-    .eq("id", auth.workspaceId)
-    .maybeSingle();
-  const plan = (planRow?.plan ?? "trial") as
-    | "trial"
-    | "starter"
-    | "pro"
-    | "free";
+  // Billing gate. Blocks lapsed Starter/Pro workspaces (past_due,
+  // canceled), plan='free', and expired trials BEFORE they can burn an
+  // OpenAI call. getBillingState is the single source of truth —
+  // canUsePaidFeatures mirrors the same gate used by /billing UI, and
+  // unlimitedUploads requires plan='pro' AND an active/trialing
+  // subscription, which closes the lapsed-Pro bypass.
+  const billing = await getBillingState(auth.workspaceId);
+  if (!billing.canUsePaidFeatures) {
+    return NextResponse.json(
+      {
+        error:
+          billing.plan === "trial"
+            ? "Your free trial has ended. Subscribe to keep using LeadFlow."
+            : "Your subscription has lapsed. Update your billing to keep uploading.",
+        reason: "subscription_required",
+        plan: billing.plan,
+        status: billing.subscriptionStatus,
+      },
+      { status: 402 }
+    );
+  }
 
-  if (plan !== "pro") {
+  if (!billing.unlimitedUploads) {
     // Count each uploaded file as a separate hit: a batch of 10 screenshots
     // burns 10 OpenAI calls even though it's one request. Keyed by workspace
     // (not user) because the Starter plan sells a workspace-level quota — a
@@ -59,7 +68,7 @@ export async function POST(req: NextRequest) {
         {
           error: `Daily upload limit reached (${INGEST_LIMIT_PER_DAY}/day on Starter). Try again in ~${hours}h or upgrade to Pro for unlimited uploads.`,
           reason: "plan_cap",
-          plan,
+          plan: billing.plan,
           limit: INGEST_LIMIT_PER_DAY,
           retryAfterSeconds: limit.retryAfterSeconds ?? null,
         },
