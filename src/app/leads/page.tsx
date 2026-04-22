@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import LeadTable, { type LeadFilter, type LeadCounts } from "@/components/LeadTable";
-import EnableNotifications from "@/components/EnableNotifications";
 import NotificationAcknowledge from "@/components/NotificationAcknowledge";
 import TodayRoute from "@/components/TodayRoute";
 import { cn } from "@/lib/utils";
@@ -80,7 +79,7 @@ function LeadsPageInner() {
           <Logo variant="mark" size="sm" />
         </Link>
         <h1 className="text-lg sm:text-xl font-semibold">Leads</h1>
-        <EnableNotifications />
+        <div className="w-9" />
       </header>
 
       <nav

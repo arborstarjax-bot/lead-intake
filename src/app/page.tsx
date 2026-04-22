@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import UploadBox from "@/components/UploadBox";
 import StandaloneLeadCard from "@/components/StandaloneLeadCard";
-import EnableNotifications from "@/components/EnableNotifications";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types";
@@ -60,7 +59,6 @@ function buildPendingLead(): Lead {
 type IntakeTab = "upload" | "manual";
 
 export default function HomePage() {
-  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
   const [counts, setCounts] = useState<{ active: number; completed: number } | null>(null);
   const [tab, setTab] = useState<IntakeTab>("upload");
   // Manual-entry cards live locally until the user types. `pendingIds`
@@ -70,10 +68,6 @@ export default function HomePage() {
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch("/api/google/status")
-      .then((r) => r.json())
-      .then((j) => setGoogleConnected(Boolean(j.connected)))
-      .catch(() => setGoogleConnected(false));
     Promise.all([
       fetch("/api/leads?view=active").then((r) => r.json()),
       fetch("/api/leads?view=completed").then((r) => r.json()),
@@ -110,23 +104,11 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
       <header className="flex items-center justify-between gap-2">
-        <Logo variant="full" size="md" priority />
+        <Link href="/" aria-label="Home" className="inline-flex items-center">
+          <Logo variant="full" size="md" priority />
+        </Link>
 
         <div className="flex items-center gap-2 text-xs sm:text-sm">
-          <EnableNotifications />
-          {googleConnected === false && (
-            <a
-              href="/api/google/connect"
-              className="rounded-md border border-[var(--border)] bg-white px-3 py-1.5"
-            >
-              Connect Google Calendar
-            </a>
-          )}
-          {googleConnected && (
-            <span className="hidden sm:inline rounded-md border border-green-200 bg-green-50 text-green-800 px-3 py-1.5">
-              Calendar connected
-            </span>
-          )}
           <Link
             href="/workspace"
             aria-label="Workspace"

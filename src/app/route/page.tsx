@@ -22,7 +22,6 @@ import { EstimatesList } from "./components/EstimatesList";
 import { ModeToggle } from "./components/ModeToggle";
 import { SchedulePanel } from "./components/SchedulePanel";
 import { SchedulingBanner } from "./components/SchedulingBanner";
-import { StopList } from "./components/StopList";
 
 export default function RoutePage() {
   return (
@@ -270,11 +269,7 @@ function RoutePageInner() {
       )}
 
       {data && data.stops.length > 0 && (
-        <EstimatesList stops={data.stops} date={data.date} />
-      )}
-
-      {data && data.stops.length > 0 && (
-        <StopList data={data} onReload={reload} onFlash={showFlash} />
+        <EstimatesList data={data} onReload={reload} onFlash={showFlash} />
       )}
 
       {scheduleLeadId && data?.ghost && (
