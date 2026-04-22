@@ -328,33 +328,41 @@ export function LeadCard({
           />
         </div>
         <div className="mt-2 flex flex-col sm:flex-row gap-2">
-          {/* Add to Route — promotes the lead to "Scheduled" so it drops
-              into the route page for its scheduled_day and deep-links
-              there. Requires a scheduled_day (the route is always day-
-              scoped). A lead with only a flex window + day still counts;
-              the optimizer will place it. */}
-          {lead.status !== "Scheduled" && (
-            <Link
-              href={lead.scheduled_day ? `/route?day=${lead.scheduled_day}` : "#"}
-              onClick={(e) => {
-                if (!lead.scheduled_day) {
-                  e.preventDefault();
-                  return;
-                }
-                onPatch({ status: "Scheduled" });
-              }}
-              aria-disabled={!lead.scheduled_day}
-              className={cn(
-                "inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto transition active:scale-[0.98]",
-                lead.scheduled_day
-                  ? "bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft-hover,var(--accent-soft))] border border-[var(--accent)]/30"
-                  : "bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed pointer-events-none"
-              )}
-            >
-              <Route className="h-4 w-4" />
-              Add to Route
-            </Link>
-          )}
+          {/* Route button. Two modes:
+                 • Add to Route  — when status !== "Scheduled". Patches the
+                   lead to "Scheduled" and deep-links to the route day.
+                 • Update in Route — when status === "Scheduled". Pure
+                   deep-link; no status patch (already scheduled). Useful
+                   after the day or time changes so the operator can jump
+                   straight to the route view and reorder/retime the stop.
+              Requires a scheduled_day in either mode (the route page is
+              day-scoped). */}
+          {(() => {
+            const isScheduled = lead.status === "Scheduled";
+            const disabled = !lead.scheduled_day;
+            return (
+              <Link
+                href={lead.scheduled_day ? `/route?day=${lead.scheduled_day}` : "#"}
+                onClick={(e) => {
+                  if (disabled) {
+                    e.preventDefault();
+                    return;
+                  }
+                  if (!isScheduled) onPatch({ status: "Scheduled" });
+                }}
+                aria-disabled={disabled}
+                className={cn(
+                  "inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto transition active:scale-[0.98]",
+                  disabled
+                    ? "bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed pointer-events-none"
+                    : "bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft-hover,var(--accent-soft))] border border-[var(--accent)]/30"
+                )}
+              >
+                <Route className="h-4 w-4" />
+                {isScheduled ? "Update in Route" : "Add to Route"}
+              </Link>
+            );
+          })()}
           {scheduledInSync ? (
             <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--success-soft)] text-[var(--success)] px-3 h-11 text-sm font-medium w-full justify-center sm:w-auto">
               <CalendarCheck className="h-4 w-4" />

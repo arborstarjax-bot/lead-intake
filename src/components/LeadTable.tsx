@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import type { Lead, LeadStatus } from "@/lib/types";
-import { EDITABLE_COLUMNS } from "@/lib/types";
+import { EDITABLE_COLUMNS, LEAD_STATUS_LABELS } from "@/lib/types";
 import { useToast } from "@/components/Toast";
 import { LeadCard } from "./lead-table/LeadCard";
 
@@ -265,7 +265,7 @@ export default function LeadTable({
             ? "No leads yet. Upload a screenshot on the home page."
             : filter === "Completed"
             ? "No completed leads yet."
-            : `No leads in "${filter}" yet.`}
+            : `No leads in "${LEAD_STATUS_LABELS[filter]}" yet.`}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
