@@ -82,5 +82,18 @@ export async function POST(req: NextRequest) {
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Seed the activity timeline with an intake event. Errors here don't
+  // fail the lead-create request — a missing timeline row is a strictly
+  // cosmetic degradation.
+  try {
+    await supabase.from("lead_activities").insert({
+      workspace_id: auth.workspaceId,
+      lead_id: data.id,
+      type: "lead_intake",
+      details: { source: base.intake_source },
+    });
+  } catch {
+    // Non-blocking.
+  }
   return NextResponse.json({ lead: data });
 }

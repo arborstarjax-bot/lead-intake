@@ -4,10 +4,15 @@ import { cn } from "@/lib/utils";
 export function ActionIconLink({
   href,
   title,
+  onClick,
   children,
 }: {
   href: string | undefined;
   title: string;
+  /** Optional side-effect fired on click AFTER the no-href guard. Runs
+   *  even for disabled links (so callers can still react to taps), but
+   *  we only fire navigation when `href` is set. */
+  onClick?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -17,7 +22,11 @@ export function ActionIconLink({
       aria-label={title}
       title={title}
       onClick={(e) => {
-        if (!href) e.preventDefault();
+        if (!href) {
+          e.preventDefault();
+          return;
+        }
+        onClick?.();
       }}
       className={cn(
         "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition",

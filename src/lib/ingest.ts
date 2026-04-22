@@ -121,6 +121,17 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
     .single();
   if (insertErr) throw insertErr;
 
+  try {
+    await admin.from("lead_activities").insert({
+      workspace_id: args.workspaceId,
+      lead_id: inserted.id,
+      type: "lead_intake",
+      details: { source: args.source, intake_status: intakeStatus },
+    });
+  } catch {
+    // Activity log is best-effort; a failure here must not break intake.
+  }
+
   return {
     lead_id: inserted.id,
     intake_status: inserted.intake_status,
