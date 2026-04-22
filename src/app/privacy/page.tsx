@@ -1,6 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 import Link from "next/link";
 import type { Metadata } from "next";
+import { PageHeader } from "@/components/PageHeader";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · LeadFlow",
@@ -16,8 +17,9 @@ const LAST_UPDATED = "April 21, 2026";
  */
 export default function PrivacyPage() {
   return (
-    <main className="min-h-dvh bg-[var(--bg)] py-10 px-4">
-      <article className="mx-auto max-w-2xl space-y-5 rounded-2xl bg-white border border-[var(--border)] p-6 sm:p-8 text-[15px] leading-relaxed">
+    <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-5">
+      <PageHeader />
+      <article className="space-y-5 rounded-2xl bg-white border border-[var(--border)] p-6 sm:p-8 text-[15px] leading-relaxed">
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold">Privacy Policy</h1>
           <p className="text-xs text-[var(--muted)]">

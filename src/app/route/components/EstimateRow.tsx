@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -16,7 +16,9 @@ import {
   User,
 } from "lucide-react";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { formatClock, type Stop } from "../route-helpers";
+import { useAppSettings } from "@/components/SettingsProvider";
+import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
+import { formatClock, formatDateLong, type Stop } from "../route-helpers";
 
 type Mode = "normal" | "reorder" | "preview";
 
@@ -46,14 +48,44 @@ export function EstimateRow({
   onFlash?: (msg: string) => void;
 }) {
   const confirmDialog = useConfirm();
+  const { settings } = useAppSettings();
   const [completing, setCompleting] = useState(false);
 
   const telHref = stop.phoneNumber
     ? `tel:${stop.phoneNumber.replace(/[^\d+]/g, "")}`
     : null;
-  const smsHref = stop.phoneNumber
-    ? `sms:${stop.phoneNumber.replace(/[^\d+]/g, "")}`
-    : null;
+  // Populate the SMS body with the user's configured appointment-confirmation
+  // template so tapping Text from the route list opens Messages with the
+  // message already drafted — previously this was a bare `sms:` link with
+  // no body, which looked like a bug in the route timeline.
+  const smsHref = useMemo(() => {
+    if (!stop.phoneNumber) return null;
+    const digits = stop.phoneNumber.replace(/[^\d+]/g, "");
+    const body = renderTemplate(smsConfirmTemplate(settings), {
+      firstName: stop.firstName?.trim() || "there",
+      lastName: "",
+      client: stop.label,
+      salesPerson:
+        stop.salesPerson?.trim() ||
+        settings.default_salesperson?.trim() ||
+        settings.salespeople?.[0]?.trim() ||
+        "",
+      companyName: (settings.company_name ?? "").trim(),
+      companyPhone: (settings.company_phone ?? "").trim(),
+      companyEmail: (settings.company_email ?? "").trim(),
+      day: formatDateLong(date),
+      time: formatClock(stop.startTime),
+    });
+    return `sms:${digits}?body=${encodeURIComponent(body)}`;
+  }, [
+    stop.phoneNumber,
+    stop.firstName,
+    stop.label,
+    stop.salesPerson,
+    stop.startTime,
+    date,
+    settings,
+  ]);
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     stop.address
   )}`;

@@ -213,7 +213,7 @@ export function LeadCard({
 
       {/* Appointment */}
       <Section label="Appointment" icon={<Clock className="h-4 w-4" />}>
-        <div className="grid grid-cols-2 gap-1">
+        <div className="grid grid-cols-2 gap-2">
           <InlineField
             value={lead.scheduled_day ?? ""}
             lead={lead}
@@ -233,6 +233,19 @@ export function LeadCard({
             placeholder="Time"
           />
         </div>
+        {(lead.scheduled_day || lead.scheduled_time) && (
+          <div className="mt-1.5">
+            <button
+              type="button"
+              onClick={() =>
+                onPatch({ scheduled_day: null, scheduled_time: null })
+              }
+              className="text-xs text-[var(--muted)] hover:text-[var(--danger)] hover:underline"
+            >
+              Remove date &amp; time
+            </button>
+          </div>
+        )}
         <div className="mt-1 flex items-start gap-1 text-[var(--muted)]">
           <User className="h-4 w-4 ml-2 mt-3 shrink-0" />
           <SalespersonPicker
@@ -276,17 +289,20 @@ export function LeadCard({
         </div>
       </Section>
 
-      {/* Notes */}
-      <Section label="Notes" icon={<StickyNote className="h-4 w-4" />}>
-        <InlineField
-          value={lead.notes ?? ""}
-          placeholder="Add notes…"
-          lead={lead}
-          field="notes"
-          onPatch={onPatch}
-          type="textarea"
-          className="field-input resize-y min-h-[80px]"
-        />
+      {/* Customer Notes — read-only display. The value is populated from the
+          original screenshot extraction (or server-side edits) and is
+          intentionally non-editable here to avoid the jumpy cursor caused by
+          debounced autosave rewriting the textarea mid-type. */}
+      <Section label="Customer Notes" icon={<StickyNote className="h-4 w-4" />}>
+        {lead.notes && lead.notes.trim() ? (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm whitespace-pre-wrap break-words min-h-[44px]">
+            {lead.notes}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-[var(--border)] bg-white px-3 py-2.5 text-sm text-[var(--subtle)] min-h-[44px]">
+            No notes from this lead.
+          </div>
+        )}
       </Section>
 
       {/* Footer */}
