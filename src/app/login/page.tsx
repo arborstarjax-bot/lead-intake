@@ -29,16 +29,14 @@ export default async function LoginPage({
   const orphanEmail = userRes.user?.email ?? null;
 
   return (
-    <main className="min-h-dvh flex items-center justify-center px-4 py-12 bg-[var(--bg)]">
+    <main className="min-h-dvh flex flex-col items-center justify-center gap-6 px-4 py-12 bg-[var(--bg)]">
+      <Logo variant="full" size="xl" priority />
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <Logo variant="full" size="lg" priority />
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
-            <p className="text-sm text-[var(--muted)]">
-              Sign in to your workspace
-            </p>
-          </div>
+        <div className="space-y-1 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
+          <p className="text-sm text-[var(--muted)]">
+            Sign in to your workspace
+          </p>
         </div>
         {orphanEmail ? (
           <SignedInNotice email={orphanEmail} />

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { login } from "./actions";
 import { safeNext } from "@/lib/safeRedirect";
 
@@ -47,9 +48,17 @@ export function LoginForm({
         />
       </label>
       <label className="block space-y-1">
-        <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-          Password
-        </span>
+        <div className="flex items-baseline justify-between">
+          <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
+            Password
+          </span>
+          <Link
+            href="/forgot-password"
+            className="text-xs text-[var(--accent)] font-medium"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <input
           name="password"
           type="password"
