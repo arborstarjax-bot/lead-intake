@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { ContactRow } from "./ContactRow";
 import { InlineField } from "./InlineField";
+import { LifecycleTimeline } from "./LifecycleTimeline";
 import { SalespersonPicker } from "./SalespersonPicker";
 import { Section } from "./Section";
 import { StatusPill } from "./StatusPill";
@@ -48,6 +49,11 @@ export function LeadCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { settings } = useAppSettings();
+  // Bumped after a call/text is logged so the timeline (if expanded)
+  // refetches and shows the new row. LifecycleTimeline itself also
+  // refetches on `lead.status` change via its internal deps; this handles
+  // the purely-contact-action case where status doesn't move.
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -165,6 +171,7 @@ export function LeadCard({
           field="phone_number"
           onPatch={onPatch}
           settings={settings}
+          onActivityLogged={() => setActivityRefreshKey((k) => k + 1)}
         />
         <ContactRow
           icon={<Mail className="h-4 w-4" />}
@@ -352,6 +359,13 @@ export function LeadCard({
             No notes from this lead.
           </div>
         )}
+        {/* Lifecycle timeline — collapsed by default. Lazy-loads on first
+            open and re-fetches whenever a call/text is logged (via the
+            activity refresh key) or the lead's status changes. */}
+        <LifecycleTimeline
+          leadId={lead.id}
+          refreshKey={activityRefreshKey + statusFingerprint(lead.status)}
+        />
       </Section>
 
       {/* Footer */}
@@ -374,6 +388,19 @@ export function LeadCard({
       </div>
     </article>
   );
+}
+
+/** Tiny hash so a status change bumps the timeline's refresh key. Any
+ *  stable mapping from the status string to a number works — we just need
+ *  LifecycleTimeline's effect to re-fire when status moves. */
+function statusFingerprint(status: string): number {
+  let h = 0;
+  for (let i = 0; i < status.length; i++) {
+    h = (h * 31 + status.charCodeAt(i)) >>> 0;
+  }
+  // Multiply by 1000 so it doesn't collide with the activity refresh key's
+  // small integer space.
+  return h * 1000;
 }
 
 function FlexWindowChip({

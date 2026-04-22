@@ -68,6 +68,31 @@ export type Lead = {
   intake_status: LeadIntakeStatus;
 };
 
+export const LEAD_ACTIVITY_TYPES = [
+  "lead_intake",
+  "lead_scheduled",
+  "lead_completed",
+  "customer_called",
+  "customer_texted",
+] as const;
+export type LeadActivityType = (typeof LEAD_ACTIVITY_TYPES)[number];
+
+export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
+  lead_intake: "Lead intake",
+  lead_scheduled: "Lead scheduled",
+  lead_completed: "Lead completed",
+  customer_called: "Customer called",
+  customer_texted: "Customer texted",
+};
+
+export type LeadActivity = {
+  id: string;
+  lead_id: string;
+  type: LeadActivityType;
+  details: Record<string, unknown> | null;
+  created_at: string;
+};
+
 export const EDITABLE_COLUMNS: (keyof Lead)[] = [
   "date",
   "first_name",

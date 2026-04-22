@@ -143,6 +143,32 @@ export async function PATCH(
   // Best-effort Google delete after the DB write using THIS user's token.
   // A workspace member who has not connected their own calendar yet will
   // silently skip — the lead is still Completed / unscheduled locally.
+  // Log lifecycle transitions. Fire-and-forget (errors swallowed) so an
+  // activity-log failure never blocks the actual lead update. Status
+  // changes drive the only auto-logged events — `lead_intake` is logged
+  // at row creation (see /api/leads POST and the backfill in the
+  // migration), so we don't need to log that here.
+  if (
+    typeof patch.status === "string" &&
+    patch.status !== existing.status
+  ) {
+    let activityType: "lead_scheduled" | "lead_completed" | null = null;
+    if (patch.status === "Scheduled") activityType = "lead_scheduled";
+    else if (patch.status === "Completed") activityType = "lead_completed";
+    if (activityType) {
+      try {
+        await supabase.from("lead_activities").insert({
+          workspace_id: auth.workspaceId,
+          lead_id: id,
+          type: activityType,
+          details: { from: existing.status, to: patch.status },
+        });
+      } catch {
+        // Non-blocking.
+      }
+    }
+  }
+
   if ((completing || unbookingCalendar) && existing.calendar_event_id) {
     const token = await getAccessToken(auth.userId);
     if (token) {
