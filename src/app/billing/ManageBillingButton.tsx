@@ -4,7 +4,13 @@ import { useState } from "react";
 import { Loader2, ExternalLink } from "lucide-react";
 import { useToast } from "@/components/Toast";
 
-export function ManageBillingButton() {
+export function ManageBillingButton({
+  label = "Manage billing",
+  variant = "neutral",
+}: {
+  label?: string;
+  variant?: "neutral" | "primary";
+} = {}) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -32,19 +38,24 @@ export function ManageBillingButton() {
     }
   }
 
+  const primary =
+    "inline-flex items-center gap-2 rounded-lg bg-red-600 text-white px-3 h-9 text-sm font-medium hover:bg-red-700 disabled:opacity-50";
+  const neutral =
+    "inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 h-9 text-sm font-medium hover:bg-gray-50 disabled:opacity-50";
+
   return (
     <button
       type="button"
       onClick={openPortal}
       disabled={loading}
-      className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 h-9 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+      className={variant === "primary" ? primary : neutral}
     >
       {loading ? (
         <Loader2 className="h-4 w-4 animate-spin" />
       ) : (
         <ExternalLink className="h-4 w-4" />
       )}
-      Manage billing
+      {label}
     </button>
   );
 }

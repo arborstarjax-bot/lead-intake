@@ -48,7 +48,13 @@ export default async function BillingPage({ searchParams }: Props) {
         <TrialEndingBanner billing={billing} isAdmin={isAdmin} />
       )}
 
-      {billing.plan === "free" && <LapsedBanner billing={billing} />}
+      {billing.subscriptionStatus === "past_due" && (
+        <PastDueBanner billing={billing} isAdmin={isAdmin} />
+      )}
+
+      {billing.plan === "free" && (
+        <LapsedBanner billing={billing} isAdmin={isAdmin} />
+      )}
 
       <CurrentPlanCard
         billing={billing}
@@ -212,7 +218,43 @@ function TrialEndingBanner({
   );
 }
 
-function LapsedBanner({ billing }: { billing: BillingState }) {
+function PastDueBanner({
+  billing,
+  isAdmin,
+}: {
+  billing: BillingState;
+  isAdmin: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-red-300 bg-red-50 text-red-900 p-4 flex flex-col sm:flex-row sm:items-start gap-3">
+      <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+      <div className="text-sm flex-1 space-y-1">
+        <div className="font-semibold">Payment failed</div>
+        <div className="opacity-90">
+          {isAdmin
+            ? "Your last charge didn't go through. Update your payment method to avoid losing access."
+            : "Ask a workspace admin to update the payment method to avoid losing access."}
+        </div>
+      </div>
+      {isAdmin && billing.stripeCustomerId && (
+        <div className="shrink-0 sm:self-center">
+          <ManageBillingButton
+            label="Update payment method"
+            variant="primary"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LapsedBanner({
+  billing,
+  isAdmin,
+}: {
+  billing: BillingState;
+  isAdmin: boolean;
+}) {
   const deadline = billing.dataRetentionDeadline;
   const daysLeft = deadline
     ? Math.max(
@@ -221,11 +263,11 @@ function LapsedBanner({ billing }: { billing: BillingState }) {
       )
     : null;
   return (
-    <div className="rounded-xl border border-red-300 bg-red-50 text-red-900 p-4 flex items-start gap-3">
+    <div className="rounded-xl border border-red-300 bg-red-50 text-red-900 p-4 flex flex-col sm:flex-row sm:items-start gap-3">
       <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
-      <div className="text-sm">
+      <div className="text-sm flex-1 space-y-1">
         <div className="font-semibold">Subscription canceled</div>
-        <div className="mt-1 opacity-90">
+        <div className="opacity-90">
           Your workspace is read-only.
           {daysLeft !== null && (
             <>
@@ -235,6 +277,11 @@ function LapsedBanner({ billing }: { billing: BillingState }) {
             </>
           )}
         </div>
+        {isAdmin && (
+          <div className="opacity-90">
+            Pick a plan below to reactivate immediately.
+          </div>
+        )}
       </div>
     </div>
   );
