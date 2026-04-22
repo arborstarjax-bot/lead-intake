@@ -38,9 +38,10 @@ const tabs: Tab[] = [
   },
 ];
 
-// Pages where the chrome shouldn't appear: auth, legal, and any endpoint
-// where a persistent nav would be out of place. Returning `true` hides.
-const HIDDEN_PREFIXES = ["/login", "/signup", "/privacy", "/terms", "/u/"];
+// Pages where the chrome shouldn't appear: auth and endpoint-style URLs
+// where a persistent nav would be out of place. Legal pages (privacy /
+// terms) keep the nav so the tab bar stays consistent across the app.
+const HIDDEN_PREFIXES = ["/login", "/signup", "/forgot-password", "/reset-password", "/u/"];
 
 /**
  * Mobile-only bottom tab bar. Renders a fixed 5-tab strip anchored to the
