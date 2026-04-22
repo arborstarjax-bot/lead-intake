@@ -20,6 +20,20 @@ function baseUrl(req: NextRequest): string {
   return `${proto}://${host}`;
 }
 
+/**
+ * Statuses where Stripe considers the subscription "live" and we should
+ * modify it in place rather than spinning up a new one. `canceled` and
+ * `incomplete_expired` are terminal — a new subscription is appropriate.
+ */
+const LIVE_STATUSES = new Set([
+  "active",
+  "trialing",
+  "past_due",
+  "unpaid",
+  "incomplete",
+  "paused",
+]);
+
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin();
   if (auth instanceof NextResponse) return auth;
@@ -32,7 +46,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient();
   const { data: workspace, error: wErr } = await admin
     .from("workspaces")
-    .select("id, name, stripe_customer_id")
+    .select("id, name, stripe_customer_id, stripe_subscription_id")
     .eq("id", auth.workspaceId)
     .maybeSingle();
   if (wErr || !workspace) {
@@ -51,14 +65,55 @@ export async function POST(req: NextRequest) {
   // Base = 1 seat included. Seat addon covers (seats - 1).
   const extraSeats = Math.max(0, seats - 1);
 
+  const appUrl = baseUrl(req);
+
+  // If the workspace already has a live Stripe subscription, switch
+  // plans IN PLACE. Creating a new Checkout Session would result in a
+  // second parallel subscription and double-billing.
+  if (workspace.stripe_subscription_id) {
+    const existing = await stripe()
+      .subscriptions.retrieve(workspace.stripe_subscription_id)
+      .catch(() => null);
+
+    if (existing && LIVE_STATUSES.has(existing.status)) {
+      // Swap all items to the new tier. Stripe will prorate automatically
+      // using the customer's default prorate behavior ("create_prorations").
+      const deletions = existing.items.data.map((item) => ({
+        id: item.id,
+        deleted: true as const,
+      }));
+      const additions: Array<{ price: string; quantity: number }> = [
+        { price: tierIds.base, quantity: 1 },
+      ];
+      if (extraSeats > 0) {
+        additions.push({ price: tierIds.seat, quantity: extraSeats });
+      }
+
+      await stripe().subscriptions.update(workspace.stripe_subscription_id, {
+        items: [...deletions, ...additions],
+        proration_behavior: "create_prorations",
+        // Re-assert the workspace link so future webhooks can always
+        // resolve back to us, even if Stripe drops metadata later.
+        metadata: { workspace_id: workspace.id },
+      });
+
+      // The customer.subscription.updated webhook will flip the plan in
+      // our DB. Redirect to the success page so the UI refreshes.
+      return NextResponse.json({
+        url: `${appUrl}/billing?status=success`,
+      });
+    }
+    // Falls through to new checkout when the existing subscription is
+    // terminal (canceled / incomplete_expired) — Stripe won't let us
+    // resurrect those, we have to start fresh.
+  }
+
   const lineItems: Array<{ price: string; quantity: number }> = [
     { price: tierIds.base, quantity: 1 },
   ];
   if (extraSeats > 0) {
     lineItems.push({ price: tierIds.seat, quantity: extraSeats });
   }
-
-  const appUrl = baseUrl(req);
 
   const session = await stripe().checkout.sessions.create({
     mode: "subscription",
