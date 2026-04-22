@@ -13,6 +13,22 @@ export const LEAD_STATUSES = [
 export const LOST_AFTER_DAYS = 30;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
+/**
+ * Human-friendly labels for each status. Keep the underlying enum
+ * value (stored in the DB) unchanged so we don't need a migration,
+ * but use these labels everywhere the status is shown to the user.
+ * "Called / No Response" renders as "Needs Followup" — the previous
+ * label read like a lifecycle step rather than an action the user
+ * should take on the lead.
+ */
+export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
+  New: "New",
+  "Called / No Response": "Needs Followup",
+  Scheduled: "Scheduled",
+  Completed: "Completed",
+  Lost: "Lost",
+};
+
 export const LEAD_INTAKE_SOURCES = [
   "web_upload",
   "quick_link",

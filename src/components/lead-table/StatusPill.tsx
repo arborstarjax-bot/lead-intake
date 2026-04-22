@@ -1,5 +1,5 @@
 import type { LeadStatus } from "@/lib/types";
-import { LEAD_STATUSES } from "@/lib/types";
+import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLE: Record<LeadStatus, { bg: string; fg: string; dot: string }> = {
@@ -53,7 +53,7 @@ export function StatusPill({
       >
         {LEAD_STATUSES.map((s) => (
           <option key={s} value={s}>
-            {s}
+            {LEAD_STATUS_LABELS[s]}
           </option>
         ))}
       </select>
