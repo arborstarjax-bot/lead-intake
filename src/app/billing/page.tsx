@@ -92,10 +92,9 @@ function CurrentPlanCard({
   billing: BillingState;
   workspaceName: string;
 }) {
-  const isPaid = billing.plan === "starter" || billing.plan === "pro";
   const price =
-    isPaid && (billing.plan === "starter" || billing.plan === "pro")
-      ? monthlyPrice(billing.plan, billing.seatCount)
+    billing.plan === "starter" || billing.plan === "pro"
+      ? monthlyPrice(billing.plan)
       : null;
 
   return (
@@ -148,15 +147,10 @@ function CurrentPlanCard({
           <div className="col-span-2">
             <dt className="text-[var(--muted)]">Monthly charge</dt>
             <dd className="font-medium">
-              ${price.toFixed(2)}
-              {billing.seatCount > 1 && (
-                <span className="text-[var(--muted)] font-normal">
-                  {" "}
-                  (${PRICING[billing.plan as "starter" | "pro"].base.toFixed(2)} +{" "}
-                  {billing.seatCount - 1} × $
-                  {PRICING[billing.plan as "starter" | "pro"].perSeat.toFixed(2)})
-                </span>
-              )}
+              ${price.toFixed(2)}{" "}
+              <span className="text-[var(--muted)] font-normal">
+                flat — all users included
+              </span>
             </dd>
           </div>
         )}

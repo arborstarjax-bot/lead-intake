@@ -53,17 +53,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "workspace not found" }, { status: 404 });
   }
 
-  // Seat count: every member (admin + user) is a paid seat.
-  const { count: seatCount } = await admin
-    .from("workspace_members")
-    .select("user_id", { count: "exact", head: true })
-    .eq("workspace_id", workspace.id);
-  const seats = Math.max(1, seatCount ?? 1);
-
+  // Flat-per-workspace pricing: one line item, quantity 1. Team size
+  // doesn't affect the bill.
   const ids = priceIds();
   const tierIds = ids[body.plan];
-  // Base = 1 seat included. Seat addon covers (seats - 1).
-  const extraSeats = Math.max(0, seats - 1);
 
   const appUrl = baseUrl(req);
 
@@ -85,9 +78,6 @@ export async function POST(req: NextRequest) {
       const additions: Array<{ price: string; quantity: number }> = [
         { price: tierIds.base, quantity: 1 },
       ];
-      if (extraSeats > 0) {
-        additions.push({ price: tierIds.seat, quantity: extraSeats });
-      }
 
       try {
         await stripe().subscriptions.update(workspace.stripe_subscription_id, {
@@ -121,9 +111,6 @@ export async function POST(req: NextRequest) {
   const lineItems: Array<{ price: string; quantity: number }> = [
     { price: tierIds.base, quantity: 1 },
   ];
-  if (extraSeats > 0) {
-    lineItems.push({ price: tierIds.seat, quantity: extraSeats });
-  }
 
   try {
     const session = await stripe().checkout.sessions.create({

@@ -57,11 +57,10 @@ export function PlanCompareCard({ billing }: { billing: BillingState }) {
         <PlanTile
           name="Starter"
           price="$29.99/mo"
-          seatAddon="$9.99 per additional user"
+          tagline="Flat — all users included"
           features={[
-            "30 uploads / day (shared across workspace)",
-            "1 seat included",
-            "Unlimited members (add seats as needed)",
+            "50 uploads / day (shared across workspace)",
+            "Unlimited team members",
             "Calendar + SMS automation",
           ]}
           current={currentPlan === "starter"}
@@ -73,11 +72,10 @@ export function PlanCompareCard({ billing }: { billing: BillingState }) {
         <PlanTile
           name="Pro"
           price="$59.99/mo"
-          seatAddon="$9.99 per additional user"
+          tagline="Flat — all users included"
           features={[
             "Unlimited uploads",
-            "1 seat included",
-            "Unlimited members (add seats as needed)",
+            "Unlimited team members",
             "Everything in Starter",
           ]}
           highlight
@@ -100,7 +98,7 @@ export function PlanCompareCard({ billing }: { billing: BillingState }) {
 function PlanTile({
   name,
   price,
-  seatAddon,
+  tagline,
   features,
   highlight,
   current,
@@ -111,7 +109,7 @@ function PlanTile({
 }: {
   name: string;
   price: string;
-  seatAddon: string;
+  tagline: string;
   features: string[];
   highlight?: boolean;
   current: boolean;
@@ -137,7 +135,7 @@ function PlanTile({
             )}
           </div>
           <div className="text-lg font-semibold mt-0.5">{price}</div>
-          <div className="text-xs text-[var(--muted)]">{seatAddon}</div>
+          <div className="text-xs text-[var(--muted)]">{tagline}</div>
         </div>
         {current && (
           <span className="text-xs font-medium px-2 py-1 rounded-full bg-[var(--accent)] text-[var(--accent-fg)]">
