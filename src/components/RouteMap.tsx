@@ -66,6 +66,16 @@ export default function RouteMap({
   const markersRef = useRef<google.maps.Marker[]>([]);
   const legPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  // Monotonic draw id. Incremented before every Directions request. The
+  // async draw bails out if its id is no longer current, which prevents
+  // stale polylines from a previous `stops`/`ghost` render landing on the
+  // map after the next render has already torn down `legPolylinesRef`.
+  const drawIdRef = useRef(0);
+  // Preview metadata shared between the main (draw) effect and the cheap
+  // recolor effect. Keeping it in a ref means recolor doesn't need to
+  // recompute `insertedStops` and we don't add `ghost`/`previewStopTime`
+  // to the recolor effect's dep array.
+  const previewLegIndexRef = useRef(-1);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Selected leg index. A leg[i] is the polyline landing on stop i+1 (so
@@ -124,11 +134,34 @@ export default function RouteMap({
     setSelectedLeg(null);
   }, [stops, ghost, previewStopTime]);
 
-  // Re-render overlays whenever stops/home/mode/ghost/selection change.
+  // Compute the intended stroke color for a given leg index. Pure
+  // function of the current render's selection + preview state; used by
+  // both the initial draw and the cheap recolor effect.
+  const computeLegColor = (
+    legIdx: number,
+    previewingNow: boolean,
+    previewLegIndex: number,
+    selected: number | null
+  ): string => {
+    if (previewingNow) {
+      return legIdx === previewLegIndex ? HIGHLIGHT_COLOR : DIMMED_COLOR;
+    }
+    if (selected == null) return ROUTE_COLOR;
+    return legIdx === selected ? HIGHLIGHT_COLOR : DIMMED_COLOR;
+  };
+
+  // Re-render overlays whenever stops/home/mode/ghost change. Notably
+  // NOT dependent on `selectedLeg` — leg clicks should be cheap recolors,
+  // not full Directions API round-trips. Selection is applied in a
+  // separate effect below.
   useEffect(() => {
     if (status !== "ready" || !mapRef.current) return;
     const google = window.google;
     const map = mapRef.current;
+
+    // Bump the draw id so any in-flight `drawPerLegDirections` call from
+    // a previous render bails out when it resolves.
+    const drawId = ++drawIdRef.current;
 
     // Tear down previous overlays.
     for (const m of markersRef.current) m.setMap(null);
@@ -244,28 +277,33 @@ export default function RouteMap({
         previewing && ghost
           ? insertedStops.findIndex((s) => s.id === ghost.id)
           : -1;
+      previewLegIndexRef.current = previewLegIndex;
       drawPerLegDirections({
         google,
         map,
         home,
         stops: insertedStops,
         legPolylinesRef,
-        getLegColor: (legIdx) => {
-          if (previewing) {
-            return legIdx === previewLegIndex ? HIGHLIGHT_COLOR : DIMMED_COLOR;
-          }
-          if (selectedLeg == null) return ROUTE_COLOR;
-          return legIdx === selectedLeg ? HIGHLIGHT_COLOR : DIMMED_COLOR;
-        },
+        // selectedLeg is read at draw-time only; subsequent changes are
+        // handled by the recolor effect without another Directions call.
+        // The reset-on-stops-change effect above also nulls selection
+        // whenever this effect fires, so `selectedLeg` should be null here
+        // unless the caller intentionally set it after a mount.
+        getLegColor: (legIdx) =>
+          computeLegColor(legIdx, previewing, previewLegIndex, selectedLeg),
         onLegClick: (legIdx) => {
           // Clicking a leg polyline selects it too — matches the expected
           // behavior of "tap a line, it highlights."
           if (!previewing) setSelectedLeg(legIdx);
         },
+        drawId,
+        isCurrent: () => drawIdRef.current === drawId,
       }).catch(() => {
         // Directions can fail (quota, no route, etc.). Markers are already
         // on the map; fall through to pins-only.
       });
+    } else {
+      previewLegIndexRef.current = -1;
     }
 
     if (anyPoint) {
@@ -276,7 +314,31 @@ export default function RouteMap({
         map.fitBounds(bounds, 64);
       }
     }
-  }, [status, home, stops, mode, ghost, previewStopTime, previewing, selectedLeg]);
+    // NOTE: `selectedLeg` is intentionally omitted from deps — see the
+    // recolor effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, home, stops, mode, ghost, previewStopTime, previewing]);
+
+  // Cheap recolor pass. Updates existing polyline stroke colors in place
+  // when `selectedLeg` changes — no Directions API call, no marker rebuild,
+  // no viewport reset. This is what was previously happening on every
+  // click before this effect was split out.
+  useEffect(() => {
+    if (status !== "ready") return;
+    const polylines = legPolylinesRef.current;
+    for (let i = 0; i < polylines.length; i++) {
+      const color = computeLegColor(
+        i,
+        previewing,
+        previewLegIndexRef.current,
+        selectedLeg
+      );
+      polylines[i].setOptions({ strokeColor: color });
+    }
+    // `previewing` is a dep so flipping into/out of preview mode also
+    // recolors correctly; `previewLegIndexRef` is a ref so it doesn't
+    // need to be declared here.
+  }, [selectedLeg, previewing, status]);
 
   return (
     <div className="relative w-full h-[60vh] min-h-[320px] rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-2)]">
@@ -320,6 +382,8 @@ async function drawPerLegDirections({
   legPolylinesRef,
   getLegColor,
   onLegClick,
+  drawId,
+  isCurrent,
 }: {
   google: typeof window.google;
   map: google.maps.Map;
@@ -328,7 +392,13 @@ async function drawPerLegDirections({
   legPolylinesRef: React.MutableRefObject<google.maps.Polyline[]>;
   getLegColor: (legIdx: number) => string;
   onLegClick: (legIdx: number) => void;
+  /** Monotonic id captured when this call was kicked off; used with
+   *  `isCurrent` to drop stale results so overlapping Directions requests
+   *  can't push polylines into a ref that has already been torn down. */
+  drawId: number;
+  isCurrent: () => boolean;
 }) {
+  void drawId;
   if (stops.length === 0) return;
 
   const service = new google.maps.DirectionsService();
@@ -358,6 +428,11 @@ async function drawPerLegDirections({
     optimizeWaypoints: false,
     travelMode: google.maps.TravelMode.DRIVING,
   });
+
+  // If the component re-rendered with new stops/ghost while this request
+  // was in flight, legPolylinesRef has already been torn down and reset.
+  // Bail out so we don't push stale polylines onto the map.
+  if (!isCurrent()) return;
 
   const route = result.routes[0];
   if (!route) return;
