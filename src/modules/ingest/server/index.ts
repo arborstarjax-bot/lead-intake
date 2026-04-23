@@ -11,6 +11,14 @@
 // paired with the DB-backed atomic counter at the API route boundary;
 // keeping them co-located in the server sub-barrel keeps the public
 // surface tidy.
+//
+// `import "server-only"` at the top matches the convention of every
+// other server sub-barrel in the codebase — it's the guard that turns
+// an accidental client-side import into a loud build failure rather
+// than a silent bundle bloat (rateLimit.ts / ai/extract.ts would
+// otherwise bundle cleanly into a client chunk).
+
+import "server-only";
 
 export {
   ingestScreenshot,
