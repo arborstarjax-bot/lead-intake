@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
         file: blob,
         fileName,
         source: "web_upload",
+        defaultSalesperson: auth.email,
       });
       results.push({ fileName, originalFileName: file.name, ...res });
     } catch (e) {

@@ -75,6 +75,13 @@ export async function POST(req: NextRequest) {
   if (!base.client) {
     base.client = displayName(base.first_name, base.last_name) || null;
   }
+  // Default the salesperson to whoever is creating the lead so the
+  // /leads filter dropdown can group by author without requiring the
+  // user to type a name every time. Only defaults when the caller didn't
+  // supply one — explicit "" (user cleared it) is preserved as null.
+  if (!("sales_person" in base) && auth.email) {
+    base.sales_person = auth.email;
+  }
 
   const { data, error } = await supabase
     .from("leads")

@@ -6,7 +6,10 @@ import { Plus, Search } from "lucide-react";
 import type { Lead, LeadStatus } from "@/lib/types";
 import { EDITABLE_COLUMNS, LEAD_STATUS_LABELS } from "@/lib/types";
 import { useToast } from "@/components/Toast";
+import { useAppSettings } from "@/components/SettingsProvider";
 import { LeadCard } from "./lead-table/LeadCard";
+
+const UNASSIGNED = "__unassigned__";
 
 export { LeadCard } from "./lead-table/LeadCard";
 
@@ -26,9 +29,13 @@ export default function LeadTable({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const { settings } = useAppSettings();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Salesperson filter: "" = all, UNASSIGNED = leads with no salesperson,
+  // any other string = exact (case-insensitive) match against sales_person.
+  const [salespersonFilter, setSalespersonFilter] = useState<string>("");
   // Leads the user just deleted. Held for the undo window so we can re-insert
   // them in place if they tap Undo before the background DELETE fires.
   const pendingDeletes = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -73,17 +80,50 @@ export default function LeadTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Build the salesperson filter options from the union of (a) any
+  // salesperson currently assigned to a lead and (b) the configured
+  // roster. Keeps the dropdown stable even when no lead is assigned to a
+  // given person yet, and grows naturally as new names appear on leads.
+  const salespersonOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const l of leads) {
+      const name = (l.sales_person ?? "").trim();
+      if (!name) continue;
+      byKey.set(name.toLowerCase(), name);
+    }
+    for (const name of settings.salespeople ?? []) {
+      const n = name.trim();
+      if (!n) continue;
+      if (!byKey.has(n.toLowerCase())) byKey.set(n.toLowerCase(), n);
+    }
+    return Array.from(byKey.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    );
+  }, [leads, settings.salespeople]);
+
+  const hasUnassigned = useMemo(
+    () => leads.some((l) => !(l.sales_person ?? "").trim()),
+    [leads]
+  );
+
   const filtered = useMemo(() => {
     const byStatus = filter === "All" ? leads : leads.filter((l) => l.status === filter);
+    const byPerson = salespersonFilter
+      ? byStatus.filter((l) => {
+          const p = (l.sales_person ?? "").trim();
+          if (salespersonFilter === UNASSIGNED) return p === "";
+          return p.toLowerCase() === salespersonFilter.toLowerCase();
+        })
+      : byStatus;
     const q = search.trim().toLowerCase();
-    if (!q) return byStatus;
-    return byStatus.filter((l) =>
+    if (!q) return byPerson;
+    return byPerson.filter((l) =>
       EDITABLE_COLUMNS.some((k) => {
         const v = l[k];
         return typeof v === "string" && v.toLowerCase().includes(q);
       })
     );
-  }, [leads, search, filter]);
+  }, [leads, search, filter, salespersonFilter]);
 
   async function savePatch(id: string, patch: Partial<Lead>): Promise<boolean> {
     const res = await fetch(`/api/leads/${id}`, {
@@ -231,8 +271,8 @@ export default function LeadTable({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[12rem]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--subtle)]" />
           <input
             value={search}
@@ -241,6 +281,22 @@ export default function LeadTable({
             className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-9 pr-3 py-2.5 text-[15px] shadow-sm focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_rgba(5,150,105,0.15)]"
           />
         </div>
+        <select
+          aria-label="Filter by salesperson"
+          value={salespersonFilter}
+          onChange={(e) => setSalespersonFilter(e.target.value)}
+          className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-medium shadow-sm focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_rgba(5,150,105,0.15)] max-w-[12rem]"
+        >
+          <option value="">All salespeople</option>
+          {salespersonOptions.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+          {hasUnassigned && (
+            <option value={UNASSIGNED}>(Unassigned)</option>
+          )}
+        </select>
         <button
           onClick={onAddRow}
           className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5 text-sm font-medium shadow-sm hover:bg-[var(--surface-2)] active:scale-[0.98] transition"
