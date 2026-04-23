@@ -5,7 +5,7 @@ import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireMembership } from "@/lib/auth";
 import { checkRateLimit, rateLimitKey, refundRateLimit } from "@/lib/rateLimit";
-import { PRICING, getBillingState, getUploadsInLastDay } from "@/lib/billing";
+import { PRICING, getBillingState } from "@/lib/billing";
 import { getSettings } from "@/lib/settings";
 import type { Lead } from "@/lib/types";
 
@@ -52,6 +52,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Track whether we reserved a quota slot so we can refund on error.
+  let reservedCount = 0;
+
   if (!billing.unlimitedUploads) {
     // Count each uploaded file as a separate hit: a batch of 10 screenshots
     // burns 10 OpenAI calls even though it's one request. Keyed by workspace
@@ -62,11 +65,12 @@ export async function POST(req: NextRequest) {
     //   1. In-memory sliding window (fast pre-filter, per Vercel instance).
     //      Handles runaway retries from a single warm instance without
     //      touching the DB.
-    //   2. DB-backed count on the `leads` table (authoritative).
-    //      Required because the in-memory limiter is per-process — two
-    //      Vercel instances handling concurrent requests can each grant
-    //      up to 50 uploads, doubling real consumption. `getUploadsInLastDay`
-    //      is the same source of truth used by the /billing meter.
+    //   2. Atomic DB counter via reserve_ingest_quota RPC (authoritative,
+    //      cross-instance safe). The RPC's UPDATE is gated on
+    //      `count + n <= max_per_day` so two concurrent Vercel instances
+    //      serialize through Postgres row-level locks — the second sees
+    //      the first's incremented count and rejects instead of both
+    //      passing a stale SELECT.
     const rlKey = rateLimitKey(["ingest", auth.workspaceId]);
     const limit = checkRateLimit({
       key: rlKey,
@@ -95,19 +99,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // DB-backed authoritative check. Counts `intake_source='web_upload'`
-    // rows in the last 24h for this workspace. If the combined count
-    // (existing + this batch) would exceed the cap, reject. Accepts the
-    // first upload that *crosses* the cap as a 1-file edge (e.g. user
-    // at 49 uploads 1 file → ok; uploads 2 files → refuse).
-    const usedToday = await getUploadsInLastDay(auth.workspaceId);
-    if (usedToday + files.length > INGEST_LIMIT_PER_DAY) {
-      const remaining = Math.max(0, INGEST_LIMIT_PER_DAY - usedToday);
-      // Refund the in-memory slots we just claimed. Without this, each
-      // rejected-by-DB request still consumes quota in the per-process
-      // sliding window, and a caller bumping against the DB cap would
-      // eventually be throttled below it by the in-memory limiter
-      // alone — which is meant to be load-shedding, not a second cap.
+    // Atomic reservation. Postgres increments the counter iff the new
+    // total stays under the cap; cross-instance races can't both succeed.
+    const { data: rlRows, error: rlErr } = await admin.rpc("reserve_ingest_quota", {
+      ws: auth.workspaceId,
+      n: files.length,
+      max_per_day: INGEST_LIMIT_PER_DAY,
+    });
+    if (rlErr) {
+      // Don't silently open the floodgates on an RPC error. Refund the
+      // in-memory slot, surface a 500 so the client retries.
+      refundRateLimit({ key: rlKey, cost: files.length });
+      return NextResponse.json(
+        { error: "Rate limiter unavailable — try again.", reason: "rate_limit_error" },
+        { status: 500 }
+      );
+    }
+    const row = Array.isArray(rlRows) ? rlRows[0] : rlRows;
+    const used = Number(row?.used ?? 0);
+    const remaining = Number(row?.remaining ?? 0);
+    if (!row?.ok) {
       refundRateLimit({ key: rlKey, cost: files.length });
       return NextResponse.json(
         {
@@ -118,7 +129,7 @@ export async function POST(req: NextRequest) {
           reason: "plan_cap",
           plan: billing.plan,
           limit: INGEST_LIMIT_PER_DAY,
-          used: usedToday,
+          used,
           remaining,
         },
         {
@@ -130,6 +141,7 @@ export async function POST(req: NextRequest) {
         }
       );
     }
+    reservedCount = files.length;
   }
 
   const results: Array<{
@@ -165,6 +177,26 @@ export async function POST(req: NextRequest) {
       results.push({ fileName, originalFileName: file.name, ...res });
     } catch (e) {
       errors.push({ fileName: file.name, error: (e as Error).message });
+    }
+  }
+
+  // Refund reserved quota for files that never made it to a lead row. A
+  // failed OpenAI extraction shouldn't count against the 50/day Starter
+  // cap — the workspace got no value from that call. The reservation was
+  // taken up-front against the worst case (every file lands), so we only
+  // owe a refund when `errors.length > 0`. Scope: the exact file errors
+  // captured above (not transient network hiccups elsewhere in the
+  // handler), since a partially-consumed reservation is still valid for
+  // the `results` leads.
+  if (reservedCount > 0 && errors.length > 0) {
+    try {
+      await admin.rpc("refund_ingest_quota", {
+        ws: auth.workspaceId,
+        n: errors.length,
+      });
+    } catch {
+      // Best-effort. A failed refund only leaks a tiny amount of quota
+      // against the caller — never blocks the user or corrupts state.
     }
   }
 
