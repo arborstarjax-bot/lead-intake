@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth";
-import { LEAD_ACTIVITY_TYPES } from "@/lib/types";
+import { LEAD_ACTIVITY_TYPES } from "@/modules/leads/model";
 
 export const runtime = "nodejs";
 

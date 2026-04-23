@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
-import { LEAD_FLEX_WINDOW_DISPLAY, type Lead } from "@/lib/types";
+import { LEAD_FLEX_WINDOW_DISPLAY, type Lead } from "@/modules/leads/model";
 import {
   salespersonColor,
   normalizeSalespersonKey,

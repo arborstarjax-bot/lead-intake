@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import LeadTable, { type LeadFilter, type LeadCounts } from "@/components/LeadTable";
+import { LeadTable, type LeadFilter, type LeadCounts } from "@/modules/leads";
 import NotificationAcknowledge from "@/components/NotificationAcknowledge";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";

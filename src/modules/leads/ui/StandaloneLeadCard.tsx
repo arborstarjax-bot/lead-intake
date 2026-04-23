@@ -2,11 +2,11 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LeadCard } from "@/components/LeadTable";
+import { LeadCard } from "@/modules/leads";
 import { useToast } from "@/components/Toast";
 import { fetchWithOfflineQueue } from "@/modules/offline";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 
 /**
  * Renders a single LeadCard outside the /leads table (e.g. right after

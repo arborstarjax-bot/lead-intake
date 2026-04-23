@@ -1,4 +1,4 @@
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 import { calendarEventTitle, formatPhone } from "@/modules/shared/format";
 
 type GoogleEvent = {

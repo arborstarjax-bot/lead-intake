@@ -5,7 +5,7 @@ import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth";
 import { suggestSlots, leadAddressString } from "@/lib/schedule";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 import {
   isoInBusinessTz,
   dayOfWeekInBusinessTz,

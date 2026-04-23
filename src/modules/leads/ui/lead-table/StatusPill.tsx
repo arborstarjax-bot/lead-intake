@@ -1,5 +1,5 @@
-import type { LeadStatus } from "@/lib/types";
-import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/types";
+import type { LeadStatus } from "@/modules/leads/model";
+import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLE: Record<LeadStatus, { bg: string; fg: string; dot: string }> = {

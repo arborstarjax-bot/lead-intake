@@ -5,7 +5,7 @@ import { getSettings } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth";
 import { suggestSlots } from "@/lib/schedule";
 import { MapsUnavailableError } from "@/lib/maps";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 import { todayIsoInBusinessTz } from "@/modules/shared/date";
 
 export const runtime = "nodejs";

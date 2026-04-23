@@ -16,7 +16,7 @@ import {
   type RouteResponse,
   type Stop,
 } from "../route-helpers";
-import { LEAD_FLEX_WINDOW_DISPLAY } from "@/lib/types";
+import { LEAD_FLEX_WINDOW_DISPLAY } from "@/modules/leads/model";
 import { EstimateRow } from "./EstimateRow";
 import { FlexEstimateRow } from "./FlexEstimateRow";
 

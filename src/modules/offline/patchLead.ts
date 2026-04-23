@@ -1,5 +1,5 @@
 import { fetchWithOfflineQueue } from "./queue";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 
 /**
  * Wrap a PATCH against /api/leads/{id} with an optimistic-concurrency

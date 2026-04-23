@@ -3,7 +3,7 @@ import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
 import { todayIsoInBusinessTz } from "@/modules/shared/date";
 
