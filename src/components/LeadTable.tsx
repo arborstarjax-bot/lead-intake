@@ -127,10 +127,17 @@ export default function LeadTable({
   }, [leads, search, filter, salespersonFilter]);
 
   async function savePatch(id: string, patch: Partial<Lead>): Promise<boolean> {
+    // Send the row's current `updated_at` so the server can reject
+    // stale writes. If someone else edited the lead between our load
+    // and this save, the API returns 409 with the latest row and we
+    // reconcile instead of clobbering their edit.
+    const current = leads.find((l) => l.id === id);
+    const body: Partial<Lead> & { expected_updated_at?: string } = { ...patch };
+    if (current?.updated_at) body.expected_updated_at = current.updated_at;
     const res = await fetchWithOfflineQueue(`/api/leads/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
+      body: JSON.stringify(body),
       label: `Edit lead ${id.slice(0, 6)}`,
     });
     // Offline queue path: request didn't reach the server but is stashed
@@ -185,6 +192,35 @@ export default function LeadTable({
         onScheduleChange?.();
       }
       return true;
+    }
+    // Stale-write rejection. Someone else edited this lead between our
+    // load and this save; the server returned the latest row. Drop our
+    // in-flight edit in favor of the server's state and nudge the user
+    // to reapply if they still want their change.
+    if (res.status === 409 && json.reason === "stale_write" && json.lead) {
+      const updated: Lead = json.lead;
+      setLeads((prev) => {
+        const counts: LeadCounts = {
+          All: 0,
+          New: 0,
+          "Called / No Response": 0,
+          Scheduled: 0,
+          Completed: 0,
+          Lost: 0,
+        };
+        const next = prev.map((l) => (l.id === id ? updated : l));
+        counts.All = next.length;
+        for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
+        onCounts?.(counts);
+        return next;
+      });
+      toast({
+        kind: "error",
+        message:
+          "Someone else edited this lead. Showing the latest — reapply your change if you still need it.",
+        duration: 6000,
+      });
+      return false;
     }
     toast({ kind: "error", message: json.error ?? "Save failed" });
     return false;
