@@ -272,6 +272,7 @@ function RoutePageInner() {
         <SchedulePanel
           leadId={scheduleLeadId}
           leadLabel={data.ghost.label}
+          leadUpdatedAt={data.ghost.updatedAt}
           selectedDay={selectedDay}
           previewSlot={previewSlot}
           onPreview={setPreviewSlot}

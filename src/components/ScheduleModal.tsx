@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
+import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
 
 type Half = "all" | "morning" | "afternoon";
 
@@ -177,13 +178,15 @@ export default function ScheduleModal({
         scheduled_time: slot.startTime,
         scheduled_day: selectedDay,
       };
-      const patchRes = await fetch(`/api/leads/${lead.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patchBody),
-      });
+      const patchRes = await patchLead(
+        lead.id,
+        patchBody as Partial<Lead>,
+        { updated_at: lead.updated_at }
+      );
       const patchJson = await patchRes.json();
-      if (!patchRes.ok) throw new Error(patchJson.error ?? "Failed to set time");
+      if (!patchRes.ok) {
+        throw new Error(formatLeadPatchError(patchRes, patchJson, "Failed to set time"));
+      }
 
       const calRes = await fetch(`/api/leads/${lead.id}/calendar`, { method: "POST" });
       const calJson = await calRes.json();

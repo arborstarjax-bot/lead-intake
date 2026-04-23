@@ -15,6 +15,7 @@ import {
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
+import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
 import { LEAD_FLEX_WINDOW_DISPLAY } from "@/lib/types";
 import { formatDateLong, type FlexStop } from "../route-helpers";
 
@@ -98,14 +99,15 @@ export function FlexEstimateRow({
     if (!ok) return;
     setCompleting(true);
     try {
-      const res = await fetch(`/api/leads/${stop.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Completed" }),
-      });
+      const res = await patchLead(
+        stop.id,
+        { status: "Completed" },
+        { updated_at: stop.updatedAt }
+      );
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        onFlash(json.error ?? `Failed to mark complete (${res.status})`);
+        onFlash(formatLeadPatchError(res, json, `Failed to mark complete (${res.status})`));
+        if (res.status === 409) onReload();
         return;
       }
       onFlash(`Marked "${stop.label}" complete`);
