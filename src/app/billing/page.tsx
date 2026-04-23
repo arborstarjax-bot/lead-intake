@@ -9,7 +9,7 @@ import {
   planLabel,
   PRICING,
   type BillingState,
-} from "@/lib/billing";
+} from "@/modules/billing";
 import { PlanCompareCard } from "./PlanCompareCard";
 import { ManageBillingButton } from "./ManageBillingButton";
 

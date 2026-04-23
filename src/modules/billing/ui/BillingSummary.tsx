@@ -4,7 +4,7 @@ import {
   PRICING,
   planLabel,
   type BillingState,
-} from "@/lib/billing";
+} from "@/modules/billing";
 
 type Props = {
   billing: BillingState;
