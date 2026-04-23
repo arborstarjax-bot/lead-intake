@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getAccessToken } from "@/lib/google/oauth";
 import {
@@ -10,6 +11,24 @@ import {
 import { requireMembership } from "@/lib/auth";
 
 export const runtime = "nodejs";
+
+/**
+ * Sentinel prefix on leads.calendar_event_id while a create is in
+ * flight. Two users tapping "Add to Calendar" at the same time both
+ * see calendar_event_id=null; without this, both call
+ * createCalendarEvent and only the last-saved id is remembered,
+ * leaking an orphan event on Google's side with no DB pointer.
+ *
+ * The claim is a conditional update: exactly one writer wins the race
+ * by flipping null → "pending:<uuid>" via `.is("calendar_event_id", null)`.
+ * The loser sees the claim and bails with 409. The winner calls
+ * Google, then swaps the sentinel for the real event id.
+ */
+const PENDING_PREFIX = "pending:";
+
+function isPendingClaim(id: string | null | undefined): boolean {
+  return typeof id === "string" && id.startsWith(PENDING_PREFIX);
+}
 
 export async function POST(
   _req: NextRequest,
@@ -33,6 +52,15 @@ export async function POST(
     return NextResponse.json(
       { error: "Lead needs a scheduled day (YYYY-MM-DD) before calendaring." },
       { status: 400 }
+    );
+  }
+
+  // Another tab / user is mid-create. Bail out so we don't double-book.
+  // The caller can retry after the other create finishes.
+  if (isPendingClaim(lead.calendar_event_id)) {
+    return NextResponse.json(
+      { error: "A calendar sync is already in progress for this lead. Try again in a moment." },
+      { status: 409 }
     );
   }
 
@@ -68,9 +96,60 @@ export async function POST(
       lead.status === "Completed" ? lead.status : "Scheduled";
     const leadForEvent = { ...lead, status: nextStatus };
 
-    const event = lead.calendar_event_id
-      ? await updateCalendarEvent(token, lead.calendar_event_id, leadForEvent)
-      : await createCalendarEvent(token, leadForEvent);
+    let event: { id: string; htmlLink?: string };
+    let claimToken: string | null = null;
+
+    if (lead.calendar_event_id) {
+      // Row already has a real event id — straightforward update.
+      event = await updateCalendarEvent(token, lead.calendar_event_id, leadForEvent);
+    } else {
+      // Claim creation rights atomically. `.is("calendar_event_id", null)`
+      // gates the UPDATE on the row still being unclaimed; RETURNING id
+      // via `.select` tells us whether we won the race.
+      claimToken = `${PENDING_PREFIX}${randomUUID()}`;
+      const { data: claimed } = await supabase
+        .from("leads")
+        .update({ calendar_event_id: claimToken })
+        .eq("id", id)
+        .eq("workspace_id", auth.workspaceId)
+        .is("calendar_event_id", null)
+        .select("id")
+        .maybeSingle();
+
+      if (!claimed) {
+        // Someone else got the claim first. Re-read and either surface
+        // their real event id (as if this call were a no-op) or report
+        // that they're still mid-create.
+        const { data: fresh } = await supabase
+          .from("leads")
+          .select("calendar_event_id")
+          .eq("id", id)
+          .eq("workspace_id", auth.workspaceId)
+          .single();
+        if (fresh?.calendar_event_id && !isPendingClaim(fresh.calendar_event_id)) {
+          return NextResponse.json({ eventId: fresh.calendar_event_id, already: true });
+        }
+        return NextResponse.json(
+          { error: "A calendar sync is already in progress for this lead. Try again in a moment." },
+          { status: 409 }
+        );
+      }
+
+      try {
+        event = await createCalendarEvent(token, leadForEvent);
+      } catch (e) {
+        // Release the claim so a retry isn't permanently blocked by a
+        // stale sentinel. Scope the release to rows that still hold our
+        // own token — no risk of clobbering a concurrent success.
+        await supabase
+          .from("leads")
+          .update({ calendar_event_id: null })
+          .eq("id", id)
+          .eq("workspace_id", auth.workspaceId)
+          .eq("calendar_event_id", claimToken);
+        throw e;
+      }
+    }
 
     await supabase
       .from("leads")
@@ -113,7 +192,9 @@ export async function DELETE(
     .single();
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (lead.calendar_event_id) {
+  // Skip the Google call for pending-claim sentinels — those aren't real
+  // event ids and deleteCalendarEvent would 404.
+  if (lead.calendar_event_id && !isPendingClaim(lead.calendar_event_id)) {
     const token = await getAccessToken(auth.userId);
     if (token) {
       try {
