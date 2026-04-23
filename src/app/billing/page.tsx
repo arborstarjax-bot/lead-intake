@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { getSessionMembership } from "@/lib/auth";
 import {
   getBillingState,
+  getUploadsInLastDay,
   monthlyPrice,
   planLabel,
   PRICING,
@@ -22,8 +23,9 @@ export default async function BillingPage({ searchParams }: Props) {
   const auth = await getSessionMembership();
   if (!auth) redirect("/login?next=/billing");
 
-  const [billing, params] = await Promise.all([
+  const [billing, uploadsToday, params] = await Promise.all([
     getBillingState(auth.workspaceId),
+    getUploadsInLastDay(auth.workspaceId),
     searchParams,
   ]);
   const isAdmin = auth.role === "admin";
@@ -58,6 +60,7 @@ export default async function BillingPage({ searchParams }: Props) {
         billing={billing}
         workspaceName={auth.workspaceName}
         isAdmin={isAdmin}
+        uploadsToday={uploadsToday}
       />
 
       {!isAdmin && (
@@ -98,10 +101,12 @@ function CurrentPlanCard({
   billing,
   workspaceName,
   isAdmin,
+  uploadsToday,
 }: {
   billing: BillingState;
   workspaceName: string;
   isAdmin: boolean;
+  uploadsToday: number;
 }) {
   const price =
     billing.plan === "starter" || billing.plan === "pro"
@@ -133,13 +138,13 @@ function CurrentPlanCard({
           <dd className="font-medium">{billing.seatCount}</dd>
         </div>
         <div>
-          <dt className="text-[var(--muted)]">Uploads / day</dt>
-          <dd className="font-medium">
+          <dt className="text-[var(--muted)]">Uploads today</dt>
+          <dd className="font-medium tabular-nums">
             {/* Display the plan's nominal capability, not the access
                 gate — a past_due Pro workspace is still a Pro plan. */}
             {billing.plan === "pro"
-              ? "Unlimited"
-              : `${PRICING.starter.uploadsPerDay} / workspace`}
+              ? `${uploadsToday} · unlimited`
+              : `${uploadsToday} / ${PRICING.starter.uploadsPerDay}`}
           </dd>
         </div>
 
