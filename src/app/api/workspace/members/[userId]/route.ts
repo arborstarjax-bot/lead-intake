@@ -20,11 +20,16 @@ async function wouldOrphanWorkspace(
   workspaceId: string,
   targetUserId: string
 ): Promise<boolean> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("workspace_members")
     .select("user_id")
     .eq("workspace_id", workspaceId)
     .eq("role", "admin");
+  // Propagate DB errors instead of falling back to `data ?? []` — an
+  // empty list would otherwise look like "zero admins remain" and the
+  // caller would mask a transient DB failure as a misleading 409
+  // "Can't demote the last admin" error.
+  if (error) throw error;
   const adminIds = (data ?? []).map((r) => r.user_id);
   const remaining = adminIds.filter((id) => id !== targetUserId);
   return remaining.length === 0;
@@ -57,7 +62,15 @@ export async function PATCH(
   // Two admins racing to demote each other would otherwise both succeed
   // and leave the workspace with zero admins — recoverable only via SQL.
   if (parsed.data.role === "user") {
-    const orphan = await wouldOrphanWorkspace(admin, auth.workspaceId, userId);
+    let orphan: boolean;
+    try {
+      orphan = await wouldOrphanWorkspace(admin, auth.workspaceId, userId);
+    } catch (e) {
+      return NextResponse.json(
+        { error: (e as Error).message || "admin check failed" },
+        { status: 500 }
+      );
+    }
     if (orphan) {
       return NextResponse.json(
         {
@@ -100,7 +113,15 @@ export async function DELETE(
 
   // Refuse to kick the last remaining admin. Same rationale as the
   // demote guard — a workspace with zero admins can't self-repair.
-  const orphan = await wouldOrphanWorkspace(admin, auth.workspaceId, userId);
+  let orphan: boolean;
+  try {
+    orphan = await wouldOrphanWorkspace(admin, auth.workspaceId, userId);
+  } catch (e) {
+    return NextResponse.json(
+      { error: (e as Error).message || "admin check failed" },
+      { status: 500 }
+    );
+  }
   if (orphan) {
     return NextResponse.json(
       {
