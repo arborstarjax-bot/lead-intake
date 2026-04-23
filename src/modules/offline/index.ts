@@ -22,3 +22,4 @@ export {
 export { patchLead, formatLeadPatchError } from "./patchLead";
 
 export { OfflineQueueReplayer } from "./ui/OfflineQueueReplayer";
+export { OfflineBanner } from "./ui/OfflineBanner";
