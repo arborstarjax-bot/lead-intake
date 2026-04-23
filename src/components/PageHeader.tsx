@@ -46,14 +46,14 @@ export function PageHeader({
             <Link
               href="/workspace"
               aria-label="Workspace"
-              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
+              className="inline-flex items-center justify-center h-11 w-11 rounded-md border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
             >
               <Users className="h-4 w-4" />
             </Link>
             <Link
               href="/settings"
               aria-label="Settings"
-              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
+              className="inline-flex items-center justify-center h-11 w-11 rounded-md border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
             >
               <SettingsIcon className="h-4 w-4" />
             </Link>
