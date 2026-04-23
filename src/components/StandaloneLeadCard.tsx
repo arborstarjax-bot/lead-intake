@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LeadCard } from "@/components/LeadTable";
 import { useToast } from "@/components/Toast";
+import { fetchWithOfflineQueue } from "@/lib/offline-queue";
 import type { Lead } from "@/lib/types";
 
 /**
@@ -72,11 +73,18 @@ export default function StandaloneLeadCard({
     patch: Partial<Lead>,
     prev: Lead
   ): Promise<void> {
-    const res = await fetch(`/api/leads/${id}`, {
+    const res = await fetchWithOfflineQueue(`/api/leads/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
+      label: `Edit lead ${id.slice(0, 6)}`,
     });
+    if (res.headers.get("x-offline-queued") === "1") {
+      // Keep the optimistic state from the caller — the replayer will
+      // sync when the tab regains network.
+      toast({ kind: "info", message: "Saved offline — will sync when online" });
+      return;
+    }
     const json = await res.json();
     if (res.ok && json.lead) {
       setLead(json.lead as Lead);

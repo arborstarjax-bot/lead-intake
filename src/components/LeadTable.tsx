@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import type { Lead, LeadStatus } from "@/lib/types";
 import { EDITABLE_COLUMNS, LEAD_STATUS_LABELS } from "@/lib/types";
+import { fetchWithOfflineQueue } from "@/lib/offline-queue";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { LeadCard } from "./lead-table/LeadCard";
@@ -126,11 +127,38 @@ export default function LeadTable({
   }, [leads, search, filter, salespersonFilter]);
 
   async function savePatch(id: string, patch: Partial<Lead>): Promise<boolean> {
-    const res = await fetch(`/api/leads/${id}`, {
+    const res = await fetchWithOfflineQueue(`/api/leads/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
+      label: `Edit lead ${id.slice(0, 6)}`,
     });
+    // Offline queue path: request didn't reach the server but is stashed
+    // for replay. Optimistically merge the patch into local state so the
+    // UI reflects the user's intent — OfflineQueueReplayer will
+    // router.refresh() once the write actually lands.
+    if (res.headers.get("x-offline-queued") === "1") {
+      setLeads((prev) => {
+        const counts: LeadCounts = {
+          All: 0,
+          New: 0,
+          "Called / No Response": 0,
+          Scheduled: 0,
+          Completed: 0,
+          Lost: 0,
+        };
+        const next = prev.map((l) => (l.id === id ? { ...l, ...patch } : l));
+        counts.All = next.length;
+        for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
+        onCounts?.(counts);
+        return next;
+      });
+      if ("scheduled_time" in patch || "scheduled_day" in patch) {
+        onScheduleChange?.();
+      }
+      toast({ kind: "info", message: "Saved offline — will sync when online" });
+      return true;
+    }
     const json = await res.json();
     if (res.ok && json.lead) {
       // Update the lead in-place; the `filtered` memo re-tabs it automatically
