@@ -1,8 +1,8 @@
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { extractLeadFromImage } from "@/lib/ai/extract";
-import { findDuplicates, isSaveable } from "@/lib/dedupe";
+import { findDuplicates, isSaveable } from "@/modules/leads";
 import { displayName } from "@/modules/shared/format";
-import type { Lead, LeadIntakeSource } from "@/lib/types";
+import type { Lead, LeadIntakeSource } from "@/modules/leads/model";
 
 type IngestArgs = {
   workspaceId: string;

@@ -8,7 +8,7 @@ import {
   normalizeZip,
 } from "@/modules/shared/format";
 import { getSettings } from "@/lib/settings";
-import { LOST_AFTER_DAYS } from "@/lib/types";
+import { LOST_AFTER_DAYS } from "@/modules/leads/model";
 import { requireMembership } from "@/modules/auth";
 
 export const runtime = "nodejs";

@@ -23,7 +23,7 @@ import {
   LEAD_FLEX_WINDOW_LABELS,
   LEAD_FLEX_WINDOWS,
   type Lead,
-} from "@/lib/types";
+} from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { ContactRow } from "./ContactRow";

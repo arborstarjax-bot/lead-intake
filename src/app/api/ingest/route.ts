@@ -7,7 +7,7 @@ import { requireMembership } from "@/modules/auth";
 import { checkRateLimit, rateLimitKey, refundRateLimit } from "@/lib/rateLimit";
 import { PRICING, getBillingState } from "@/lib/billing";
 import { getSettings } from "@/lib/settings";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

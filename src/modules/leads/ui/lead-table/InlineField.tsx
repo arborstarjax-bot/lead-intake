@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 import { formatPhone } from "@/modules/shared/format";
 import { cn } from "@/lib/utils";
 import type { FieldDef } from "./lead-table-helpers";

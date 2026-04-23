@@ -10,10 +10,10 @@ import {
   Users,
 } from "lucide-react";
 import UploadBox from "@/components/UploadBox";
-import StandaloneLeadCard from "@/components/StandaloneLeadCard";
+import { StandaloneLeadCard } from "@/modules/leads";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 
 /**
  * Build a placeholder Lead that lives only in React state. The POST to

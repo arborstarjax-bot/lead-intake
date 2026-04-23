@@ -13,7 +13,7 @@ import {
   realCalendarEventId,
   updateCalendarEvent,
 } from "@/lib/google/calendar";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

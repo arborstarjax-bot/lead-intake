@@ -2,7 +2,7 @@ import "server-only";
 import type { AppSettings } from "@/lib/settings";
 import { homeAddressString } from "@/lib/settings";
 import { createDriveMemo } from "@/lib/maps";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 
 /** Drive-time callback used internally by suggestSlots. Stable signature so
  * the week endpoint can share a single memo across many day calls and avoid

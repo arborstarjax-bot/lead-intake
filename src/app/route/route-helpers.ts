@@ -1,5 +1,5 @@
 import type { useConfirm } from "@/components/ConfirmDialog";
-import type { LeadFlexWindow } from "@/lib/types";
+import type { LeadFlexWindow } from "@/modules/leads/model";
 
 export type Stop = {
   id: string;

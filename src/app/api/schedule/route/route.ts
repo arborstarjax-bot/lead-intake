@@ -6,7 +6,7 @@ import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import { geocodeMany, type LatLng } from "@/lib/geocode";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
 import { todayIsoInBusinessTz } from "@/modules/shared/date";
-import type { Lead, LeadFlexWindow } from "@/lib/types";
+import type { Lead, LeadFlexWindow } from "@/modules/leads/model";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

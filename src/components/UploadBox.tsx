@@ -5,9 +5,9 @@ import Link from "next/link";
 import { UploadCloud, Loader2, Plus, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale";
-import StandaloneLeadCard from "@/components/StandaloneLeadCard";
+import { StandaloneLeadCard } from "@/modules/leads";
 import { useToast } from "@/components/Toast";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 
 type ApiOk = {
   results?: {

@@ -1,6 +1,6 @@
 import type React from "react";
 import { MessageSquare, Truck } from "lucide-react";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 import type { ClientAppSettings } from "@/lib/client-settings";
 import { ActionIconLink } from "./ActionIconLink";
 import { InlineField } from "./InlineField";

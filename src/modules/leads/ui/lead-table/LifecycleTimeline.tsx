@@ -7,7 +7,7 @@ import {
   LEAD_ACTIVITY_LABELS,
   type LeadActivity,
   type LeadActivityType,
-} from "@/lib/types";
+} from "@/modules/leads/model";
 
 /**
  * Collapsible per-lead lifecycle + activity timeline. Fetches lazily on

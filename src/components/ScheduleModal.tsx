@@ -12,7 +12,7 @@ import {
   ExternalLink,
   Check,
 } from "lucide-react";
-import type { Lead } from "@/lib/types";
+import type { Lead } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
