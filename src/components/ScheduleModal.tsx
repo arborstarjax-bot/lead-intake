@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
-import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
+import { formatLeadPatchError, patchLead } from "@/modules/offline";
 
 type Half = "all" | "morning" | "afternoon";
 

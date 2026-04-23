@@ -5,7 +5,7 @@ import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { BottomNav } from "@/components/BottomNav";
-import { OfflineQueueReplayer } from "@/components/OfflineQueueReplayer";
+import { OfflineQueueReplayer } from "@/modules/offline";
 
 const sans = Plus_Jakarta_Sans({
   subsets: ["latin"],

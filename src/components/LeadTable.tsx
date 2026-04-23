@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import type { Lead, LeadStatus } from "@/lib/types";
 import { EDITABLE_COLUMNS, LEAD_STATUS_LABELS } from "@/lib/types";
-import { fetchWithOfflineQueue } from "@/lib/offline-queue";
+import { fetchWithOfflineQueue } from "@/modules/offline";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { LeadCard } from "./lead-table/LeadCard";
