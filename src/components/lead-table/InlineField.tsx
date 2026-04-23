@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lead } from "@/lib/types";
-import { formatPhone } from "@/lib/format";
+import { formatPhone } from "@/modules/shared/format";
 import { cn } from "@/lib/utils";
 import type { FieldDef } from "./lead-table-helpers";
 

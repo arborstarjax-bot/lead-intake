@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient, createSSRClient } from "@/lib/supabase/server";
+import { createAdminClient, createSSRClient } from "@/modules/shared/supabase/server";
 
 /**
  * Lets a signed-in user with no workspace membership join an existing

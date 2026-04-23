@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { SignupForm } from "./SignupForm";
 import { Logo } from "@/components/Logo";
 import { getSessionMembership } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 
 export const dynamic = "force-dynamic";
 

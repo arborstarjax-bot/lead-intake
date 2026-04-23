@@ -1,5 +1,5 @@
 import type { Lead } from "@/lib/types";
-import { normalizeEmail, normalizePhone } from "@/lib/format";
+import { normalizeEmail, normalizePhone } from "@/modules/shared/format";
 
 export type DuplicateMatch = {
   lead: Pick<Lead, "id" | "first_name" | "last_name" | "phone_number" | "email" | "address" | "status">;

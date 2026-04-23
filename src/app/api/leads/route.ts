@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import {
   displayName,
   normalizeEmail,
   normalizePhone,
   normalizeState,
   normalizeZip,
-} from "@/lib/format";
+} from "@/modules/shared/format";
 import { getSettings } from "@/lib/settings";
 import { LOST_AFTER_DAYS } from "@/lib/types";
 import { requireMembership } from "@/lib/auth";

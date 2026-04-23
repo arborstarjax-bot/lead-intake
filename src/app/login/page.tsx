@@ -4,7 +4,7 @@ import { LoginForm } from "./LoginForm";
 import { SignedInNotice } from "./SignedInNotice";
 import { Logo } from "@/components/Logo";
 import { getSessionMembership } from "@/lib/auth";
-import { createSSRClient } from "@/lib/supabase/server";
+import { createSSRClient } from "@/modules/shared/supabase/server";
 import { safeNext } from "@/lib/safeRedirect";
 
 export const dynamic = "force-dynamic";

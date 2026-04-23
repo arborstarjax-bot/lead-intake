@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ingestScreenshot } from "@/lib/ingest";
 import { maybeConvertHeic } from "@/lib/convert-heic";
 import { sendNewLeadPush } from "@/lib/push";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/lib/auth";
 import { checkRateLimit, rateLimitKey, refundRateLimit } from "@/lib/rateLimit";
 import { PRICING, getBillingState } from "@/lib/billing";

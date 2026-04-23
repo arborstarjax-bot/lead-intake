@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 
 type PushRow = {
   id: string;

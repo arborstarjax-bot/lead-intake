@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/modules/shared/supabase/client";
 
 export function ForgotPasswordForm() {
   const [pending, startTransition] = useTransition();

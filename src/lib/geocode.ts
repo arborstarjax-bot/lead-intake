@@ -1,6 +1,6 @@
 import "server-only";
 import { requireEnv } from "@/lib/utils";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { MapsUnavailableError } from "@/lib/maps";
 
 /**

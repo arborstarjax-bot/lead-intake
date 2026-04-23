@@ -4,7 +4,7 @@ import {
   normalizePhone,
   normalizeState,
   normalizeZip,
-} from "@/lib/format";
+} from "@/modules/shared/format";
 
 /**
  * Structured extraction result. Confidence is 0..1 per field; a field is

@@ -1,6 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { createSSRClient, createAdminClient } from "@/lib/supabase/server";
+import { createSSRClient, createAdminClient } from "@/modules/shared/supabase/server";
 
 export type WorkspaceMembership = {
   userId: string;
