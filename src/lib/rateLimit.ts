@@ -91,3 +91,31 @@ export function checkRateLimit({
 export function rateLimitKey(parts: (string | null | undefined)[]): string {
   return parts.map((p) => p ?? "_").join(":");
 }
+
+/**
+ * Undo the most-recent `cost` hits previously recorded against `key`.
+ *
+ * Intended for two-stage rate checks: an API route may pass an
+ * in-memory limit but fail a subsequent authoritative check (e.g. a
+ * DB-backed quota). Without a refund, those slots stay "consumed" for
+ * a request the server never actually served, eventually starving the
+ * legitimate caller out of their real quota.
+ *
+ * Removes timestamps from the tail of the bucket — `checkRateLimit`
+ * pushes to the tail on accept, so refunding from the tail precisely
+ * reverses the last accepted call.
+ */
+export function refundRateLimit({
+  key,
+  cost = 1,
+}: {
+  key: string;
+  cost?: number;
+}): void {
+  const bucket = BUCKETS.get(key);
+  if (!bucket) return;
+  const n = Math.max(1, Math.floor(cost));
+  bucket.timestamps.splice(-n);
+  if (bucket.timestamps.length === 0) BUCKETS.delete(key);
+  else BUCKETS.set(key, bucket);
+}
