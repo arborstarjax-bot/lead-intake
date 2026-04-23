@@ -39,6 +39,7 @@ export function SchedulePanel({
   onHeightChange,
   onBooked,
   onSelectDay,
+  onReload,
 }: {
   leadId: string;
   leadLabel: string;
@@ -53,6 +54,10 @@ export function SchedulePanel({
   onBooked: (msg: string) => void;
   /** Called when the user picks a different day from "Find best day". */
   onSelectDay: (day: string) => void;
+  /** Re-fetch the route data. Invoked when confirm returns a 409
+   *  stale_write so the parent supplies a fresh `leadUpdatedAt` and
+   *  the panel's next Confirm & book isn't doomed to re-409. */
+  onReload?: () => void;
 }) {
   // Report the panel's rendered height to the parent so it can reserve
   // matching bottom padding and keep the Timeline visible above the fixed
@@ -236,6 +241,10 @@ export function SchedulePanel({
       );
       const patchJson = await patchRes.json();
       if (!patchRes.ok) {
+        // On stale_write, re-fetch the route so the parent supplies a
+        // fresh leadUpdatedAt — otherwise the next Confirm click re-sends
+        // the same stale expected_updated_at and re-409s indefinitely.
+        if (patchRes.status === 409) onReload?.();
         throw new Error(formatLeadPatchError(patchRes, patchJson, "Failed to set time"));
       }
       const calRes = await fetch(`/api/leads/${leadId}/calendar`, { method: "POST" });

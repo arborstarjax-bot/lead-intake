@@ -277,6 +277,7 @@ function RoutePageInner() {
           previewSlot={previewSlot}
           onPreview={setPreviewSlot}
           onHeightChange={setPanelHeight}
+          onReload={reload}
           onSelectDay={(day) => {
             setPreviewSlot(null);
             setSelectedDay(day);
