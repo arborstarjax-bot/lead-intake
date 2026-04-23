@@ -181,24 +181,46 @@ export function monthlyPrice(plan: "starter" | "pro"): number {
 }
 
 /**
- * Count screenshot-ingested leads for a workspace in the last 24 hours.
- * Used to drive the usage meter on /workspace and /billing.
+ * Upload count for the current daily rate-limit bucket. Used to drive
+ * the /workspace + /billing usage meter so the displayed "N / 50"
+ * exactly matches what the ingest gate will enforce on the next upload.
  *
- * We count DB rows rather than the in-memory rate limiter because the
- * limiter is per-process and gets cleared when a Vercel function cold
- * starts — the DB is the only durable source of truth. Rows produced by
- * the ingest path always have intake_source='web_upload'; manual creates
- * use 'manual' and don't count toward the upload cap.
+ * Source: `rate_limit_counters` row for `(workspace_id, today)`, where
+ * `today` is today's date in America/New_York (matches the gate's
+ * bucket). The counter is maintained by the `reserve_ingest_quota` /
+ * `refund_ingest_quota` RPCs so it reflects attempts minus refunded
+ * failures — which is the authoritative measure of OpenAI spend for
+ * the day.
  *
- * Returns 0 on error (e.g. table missing) — we never want a billing
- * dashboard probe to throw and blank out the page.
+ * Falls back to row count on the legacy path when the counter table
+ * isn't present (pre-migration) so the meter never blanks out.
  */
 export async function getUploadsInLastDay(
   workspaceId: string
 ): Promise<number> {
   const admin = createAdminClient();
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   try {
+    // Bucket by America/New_York so "50/day" resets at local midnight,
+    // matching the reserve_ingest_quota RPC.
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const bucketDate = fmt.format(new Date()); // YYYY-MM-DD
+    const { data, error } = await admin
+      .from("rate_limit_counters")
+      .select("count")
+      .eq("workspace_id", workspaceId)
+      .eq("bucket_date", bucketDate)
+      .maybeSingle();
+    if (!error && data) return Number(data.count ?? 0);
+  } catch {
+    // Fall through to legacy path.
+  }
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count, error } = await admin
       .from("leads")
       .select("id", { count: "exact", head: true })
