@@ -62,10 +62,13 @@ h1, h2, h3, h4 {
 
 body {
   min-height: 100dvh;
-  /* Respect iOS home-indicator / notch so cards don't get clipped.
-     On mobile, also reserve room for the fixed bottom tab bar (see
-     BottomNav.tsx). Desktop breakpoints zero this out since the nav
-     is hidden there. */
+  /* Respect iOS notch / Dynamic Island at the top, and the home
+     indicator + fixed bottom tab bar at the bottom (see BottomNav.tsx).
+     Pages rendered inside a Capacitor / WKWebView shell with
+     `viewportFit: "cover"` would otherwise slide under the status bar.
+     Desktop breakpoints zero out the bottom nav reserve since the nav
+     is hidden there; safe-area insets are already 0 on desktop. */
+  padding-top: env(safe-area-inset-top);
   padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
 }
 @media (min-width: 768px) {
