@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
 import {
   formatClock,
   formatDateLong,
@@ -31,6 +32,7 @@ type DayOption = {
 export function SchedulePanel({
   leadId,
   leadLabel,
+  leadUpdatedAt,
   selectedDay,
   previewSlot,
   onPreview,
@@ -40,6 +42,10 @@ export function SchedulePanel({
 }: {
   leadId: string;
   leadLabel: string;
+  /** Ghost lead's `updated_at` at fetch time. Forwarded on the confirm
+   *  PATCH so the server returns 409 if another writer moved the lead
+   *  while the panel was open. */
+  leadUpdatedAt: string | null;
   selectedDay: string;
   previewSlot: Slot | null;
   onPreview: (slot: Slot | null) => void;
@@ -217,20 +223,20 @@ export function SchedulePanel({
     setBooking(true);
     setError(null);
     try {
-      const patchRes = await fetch(`/api/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const patchRes = await patchLead(
+        leadId,
+        {
           scheduled_time: previewSlot.startTime,
           scheduled_day: selectedDay,
           // Booking a specific time clears any pending flex window so the
           // route map treats it as a pinned appointment again.
           flex_window: null,
-        }),
-      });
+        },
+        { updated_at: leadUpdatedAt }
+      );
       const patchJson = await patchRes.json();
       if (!patchRes.ok) {
-        throw new Error(patchJson.error ?? "Failed to set time");
+        throw new Error(formatLeadPatchError(patchRes, patchJson, "Failed to set time"));
       }
       const calRes = await fetch(`/api/leads/${leadId}/calendar`, { method: "POST" });
       const calJson = await calRes.json();

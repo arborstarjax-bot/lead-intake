@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LeadCard } from "@/components/LeadTable";
 import { useToast } from "@/components/Toast";
-import { fetchWithOfflineQueue } from "@/lib/offline-queue";
+import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
 import type { Lead } from "@/lib/types";
 
 /**
@@ -73,10 +73,8 @@ export default function StandaloneLeadCard({
     patch: Partial<Lead>,
     prev: Lead
   ): Promise<void> {
-    const res = await fetchWithOfflineQueue(`/api/leads/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
+    const res = await patchLead(id, patch, prev, {
+      offlineQueue: true,
       label: `Edit lead ${id.slice(0, 6)}`,
     });
     if (res.headers.get("x-offline-queued") === "1") {
@@ -88,10 +86,17 @@ export default function StandaloneLeadCard({
     const json = await res.json();
     if (res.ok && json.lead) {
       setLead(json.lead as Lead);
-    } else {
-      setLead(prev);
-      toast({ kind: "error", message: json.error ?? "Save failed" });
+      return;
     }
+    // Stale-write rejection: server returned the latest row, drop our
+    // in-flight edit in favor of it and tell the user to retry.
+    if (res.status === 409 && json.reason === "stale_write" && json.lead) {
+      setLead(json.lead as Lead);
+      toast({ kind: "error", message: formatLeadPatchError(res, json), duration: 6000 });
+      return;
+    }
+    setLead(prev);
+    toast({ kind: "error", message: formatLeadPatchError(res, json) });
   }
 
   async function savePatch(patch: Partial<Lead>) {

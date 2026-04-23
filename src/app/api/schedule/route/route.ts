@@ -40,6 +40,10 @@ type MapStop = {
   firstName: string | null;
   phoneNumber: string | null;
   salesPerson: string | null;
+  /** Row's `updated_at` at fetch time. The client includes it as
+   *  `expected_updated_at` on follow-up PATCHes so the server can reject
+   *  concurrent writes with 409 instead of silently overwriting. */
+  updatedAt: string | null;
 };
 
 /**
@@ -60,6 +64,8 @@ type FlexStop = {
   firstName: string | null;
   phoneNumber: string | null;
   salesPerson: string | null;
+  /** See MapStop.updatedAt. */
+  updatedAt: string | null;
 };
 
 type GhostStop = {
@@ -73,6 +79,9 @@ type GhostStop = {
   desiredDay: string | null;
   /** Current scheduled_time, if any — so rescheduling pre-selects a half. */
   currentTime: string | null;
+  /** See MapStop.updatedAt. Lets the SchedulePanel include the guard on
+   *  the PATCH it fires when the user confirms a slot. */
+  updatedAt: string | null;
 };
 
 type RouteResponse = {
@@ -161,6 +170,7 @@ export async function GET(req: Request) {
         firstName: l.first_name ?? null,
         phoneNumber: l.phone_number ?? null,
         salesPerson: l.sales_person ?? null,
+        updatedAt: l.updated_at ?? null,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -178,6 +188,7 @@ export async function GET(req: Request) {
         firstName: l.first_name ?? null,
         phoneNumber: l.phone_number ?? null,
         salesPerson: l.sales_person ?? null,
+        updatedAt: l.updated_at ?? null,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -234,6 +245,7 @@ export async function GET(req: Request) {
       firstName: s.firstName,
       phoneNumber: s.phoneNumber,
       salesPerson: s.salesPerson,
+      updatedAt: s.updatedAt,
     });
   }
   for (const f of flexInput) {
@@ -252,6 +264,7 @@ export async function GET(req: Request) {
       firstName: f.firstName,
       phoneNumber: f.phoneNumber,
       salesPerson: f.salesPerson,
+      updatedAt: f.updatedAt,
     });
   }
 
@@ -309,6 +322,7 @@ export async function GET(req: Request) {
           lng: g.lng,
           desiredDay: ghostLead.scheduled_day ?? null,
           currentTime: ghostLead.scheduled_time ?? null,
+          updatedAt: ghostLead.updated_at ?? null,
         };
       }
     }

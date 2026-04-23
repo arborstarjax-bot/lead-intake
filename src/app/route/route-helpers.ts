@@ -14,6 +14,10 @@ export type Stop = {
   firstName: string | null;
   phoneNumber: string | null;
   salesPerson: string | null;
+  /** Lead `updated_at` at fetch time. Included on follow-up PATCHes as
+   *  `expected_updated_at` so the server rejects with 409 on concurrent
+   *  writes instead of silently overwriting. */
+  updatedAt: string | null;
 };
 
 /**
@@ -32,6 +36,8 @@ export type FlexStop = {
   firstName: string | null;
   phoneNumber: string | null;
   salesPerson: string | null;
+  /** See Stop.updatedAt. */
+  updatedAt: string | null;
 };
 
 export type Ghost = {
@@ -42,6 +48,8 @@ export type Ghost = {
   lng: number;
   desiredDay: string | null;
   currentTime: string | null;
+  /** See Stop.updatedAt. */
+  updatedAt: string | null;
 };
 
 export type RouteResponse = {
