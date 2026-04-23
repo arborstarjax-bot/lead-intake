@@ -28,7 +28,7 @@ export function normalizeEmail(raw: string | null | undefined): string | null {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) ? trimmed : null;
 }
 
-/** Normalize a US state to 2-letter abbreviation. */
+/** Normalize a US state (or DC) to 2-letter abbreviation. */
 const STATE_MAP: Record<string, string> = {
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
   colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA",
@@ -42,13 +42,21 @@ const STATE_MAP: Record<string, string> = {
   "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT",
   virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI",
   wyoming: "WY",
+  // DC isn't a state but USPS treats it like one and addresses inside
+  // the beltway frequently read "Washington, DC" — previously these
+  // returned null and the address would drop state entirely.
+  "district of columbia": "DC", "washington dc": "DC", "washington d.c.": "DC",
+  "washington, dc": "DC", "washington, d.c.": "DC",
 };
 
 export function normalizeState(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const v = raw.trim();
   if (/^[A-Za-z]{2}$/.test(v)) return v.toUpperCase();
-  return STATE_MAP[v.toLowerCase()] ?? null;
+  // D.C. with periods — strip them so "D.C." and "DC" both resolve.
+  const compact = v.replace(/\./g, "").toLowerCase();
+  if (compact === "dc") return "DC";
+  return STATE_MAP[v.toLowerCase()] ?? STATE_MAP[compact] ?? null;
 }
 
 /** Normalize a 5- or 9-digit US zip. */
