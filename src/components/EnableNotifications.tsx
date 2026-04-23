@@ -4,7 +4,7 @@ import { Bell, BellOff, BellRing } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { isIosShellWindow } from "@/lib/ios-shell";
+import { getNativePlatform, isIosShellWindow } from "@/lib/ios-shell";
 
 type Status = "unsupported" | "denied" | "prompt" | "subscribing" | "subscribed";
 
@@ -75,7 +75,13 @@ export default function EnableNotifications() {
     setStatus("subscribing");
 
     if (isNative) {
-      await enableNative({ onError: toast, onStatus: setStatus });
+      // Branch on the actual Capacitor platform — isIosShellWindow()
+      // matches both iOS and Android shells, so the POST body's
+      // `platform` must come from Capacitor.getPlatform() to avoid
+      // storing Android FCM tokens as iOS subscriptions (which would
+      // fail silently when the APNs fan-out ships).
+      const platform = getNativePlatform() ?? "ios";
+      await enableNative({ platform, onError: toast, onStatus: setStatus });
       return;
     }
 
@@ -205,9 +211,11 @@ async function probeNativeStatus(): Promise<Status> {
 }
 
 async function enableNative({
+  platform,
   onError,
   onStatus,
 }: {
+  platform: "ios" | "android";
   onError: (t: {
     kind: "error" | "success" | "info";
     message: string;
@@ -244,7 +252,7 @@ async function enableNative({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              platform: "ios",
+              platform,
               device_token: token.value,
             }),
           });

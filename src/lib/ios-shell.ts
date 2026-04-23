@@ -41,6 +41,7 @@ export function isIosShellUserAgent(
 type CapacitorWindow = {
   Capacitor?: {
     isNativePlatform?: () => boolean;
+    getPlatform?: () => string;
   };
 };
 
@@ -54,4 +55,31 @@ export function isIosShellWindow(): boolean {
     return isIosShellUserAgent(navigator.userAgent);
   }
   return false;
+}
+
+/**
+ * Runtime native platform probe. Reads `Capacitor.getPlatform()` which
+ * returns `"ios"`, `"android"`, or `"web"`. Callers who need to branch
+ * by actual native platform (e.g. POST /api/push/subscribe with the
+ * correct platform field so APNs/FCM routing doesn't cross wires) use
+ * this instead of isIosShellWindow(), which returns true for any
+ * Capacitor shell.
+ *
+ * Returns `null` if we're not in a Capacitor shell at all.
+ */
+export function getNativePlatform(): "ios" | "android" | null {
+  if (typeof window === "undefined") return null;
+  const cap = (window as unknown as CapacitorWindow).Capacitor;
+  const p =
+    cap && typeof cap.getPlatform === "function" ? cap.getPlatform() : null;
+  if (p === "ios" || p === "android") return p;
+  // UA fallback for pre-bridge-load calls. The shell's WKWebView UA
+  // marker is `LeadFlowiOS/*` so we can disambiguate even without
+  // window.Capacitor populated yet; Android would be LeadFlowAndroid
+  // if / when it ships, but that's not live today.
+  if (typeof navigator !== "undefined" && navigator.userAgent) {
+    if (/LeadFlowiOS/i.test(navigator.userAgent)) return "ios";
+    if (/LeadFlowAndroid/i.test(navigator.userAgent)) return "android";
+  }
+  return null;
 }
