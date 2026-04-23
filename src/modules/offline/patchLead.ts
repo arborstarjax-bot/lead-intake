@@ -1,4 +1,4 @@
-import { fetchWithOfflineQueue } from "@/lib/offline-queue";
+import { fetchWithOfflineQueue } from "./queue";
 import type { Lead } from "@/lib/types";
 
 /**

@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LeadCard } from "@/components/LeadTable";
 import { useToast } from "@/components/Toast";
-import { fetchWithOfflineQueue } from "@/lib/offline-queue";
-import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
+import { fetchWithOfflineQueue } from "@/modules/offline";
+import { formatLeadPatchError, patchLead } from "@/modules/offline";
 import type { Lead } from "@/lib/types";
 
 /**

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
+import { formatLeadPatchError, patchLead } from "@/modules/offline";
 import {
   formatClock,
   formatDateLong,

@@ -15,7 +15,7 @@ import {
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
-import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
+import { formatLeadPatchError, patchLead } from "@/modules/offline";
 import { LEAD_FLEX_WINDOW_DISPLAY } from "@/lib/types";
 import { formatDateLong, type FlexStop } from "../route-helpers";
 

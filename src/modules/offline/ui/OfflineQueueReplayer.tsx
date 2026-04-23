@@ -6,7 +6,7 @@ import {
   pendingCount,
   replayQueue,
   type ReplaySummary,
-} from "@/lib/offline-queue";
+} from "../queue";
 import { useToast } from "@/components/Toast";
 
 /**
