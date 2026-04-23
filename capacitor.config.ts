@@ -28,9 +28,17 @@ const config: CapacitorConfig = {
     // Use the brand green so the splash / status bar match the PWA.
     backgroundColor: "#166534",
     contentInset: "always",
+    // Appended to the WKWebView user-agent. The web bundle's
+    // `isIosShellUserAgent` / `getNativePlatform` helpers
+    // (src/lib/ios-shell.ts) look for this marker to detect that
+    // we're running inside the native shell. Bump the version
+    // segment when shipping a new App Store build so web-side
+    // analytics / conditional logic can tell versions apart.
+    appendUserAgent: "LeadFlowiOS/1.0",
   },
   android: {
     backgroundColor: "#166534",
+    appendUserAgent: "LeadFlowAndroid/1.0",
   },
   plugins: {
     PushNotifications: {
