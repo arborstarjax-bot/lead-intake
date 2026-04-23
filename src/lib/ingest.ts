@@ -161,10 +161,20 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
     // pre-dates ours — otherwise two simultaneous inserts would both
     // demote each other and the user sees no "ready" row at all.
     const ourCreatedAt = inserted.created_at;
+    const ourId = inserted.id;
     const earlierHardMatch = raceDuplicates.some((m) => {
       if (m.reason !== "phone" && m.reason !== "email") return false;
       const match = afterList.find((r) => r.id === m.lead.id);
-      return match ? match.created_at < ourCreatedAt : false;
+      if (!match) return false;
+      if (match.created_at < ourCreatedAt) return true;
+      // Two inserts committed within the same microsecond have identical
+      // created_at and neither was strictly "earlier" — without a
+      // tiebreaker both rows stayed `ready` and the user saw a duplicate
+      // pair. Fall back to id (uuid-lex order) so exactly one side
+      // demotes itself; the other stays ready and surfaces as the
+      // canonical lead.
+      if (match.created_at === ourCreatedAt && match.id < ourId) return true;
+      return false;
     });
     if (earlierHardMatch) {
       // Demote in DB first; only mutate the response state if the

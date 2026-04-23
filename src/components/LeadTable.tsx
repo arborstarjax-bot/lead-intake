@@ -76,8 +76,40 @@ export default function LeadTable({
 
   useEffect(() => {
     refresh();
-    const t = setInterval(() => refresh({ silent: true }), 15_000);
-    return () => clearInterval(t);
+    // Pause polling while the tab is backgrounded so we don't waste
+    // mobile data and API quota on silent refreshes the user can't
+    // see. When the tab becomes visible again we do one immediate
+    // refresh so whatever changed during the idle window is caught up
+    // without waiting out the 15s interval.
+    let t: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (t) return;
+      t = setInterval(() => refresh({ silent: true }), 15_000);
+    };
+    const stop = () => {
+      if (!t) return;
+      clearInterval(t);
+      t = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh({ silent: true });
+        start();
+      } else {
+        stop();
+      }
+    };
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      // Mounted while hidden — don't start the interval until we come
+      // back to the foreground.
+    } else {
+      start();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

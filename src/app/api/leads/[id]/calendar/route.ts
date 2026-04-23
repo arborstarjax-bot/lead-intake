@@ -227,10 +227,14 @@ export async function DELETE(
     }
   }
 
+  // Only demote Scheduled leads to Called / No Response on unbook; other
+  // statuses (New, Called / No Response, Completed, Lost) stay as-is.
+  // Previously every non-Completed/Lost status was forced to Called / No
+  // Response, which wrongly told the user they had called a brand-new
+  // lead whose calendar event happened to get cleaned up (e.g. during a
+  // concurrent PATCH invalidating a pending claim sentinel).
   const nextStatus =
-    lead.status === "Completed" || lead.status === "Lost"
-      ? lead.status
-      : "Called / No Response";
+    lead.status === "Scheduled" ? "Called / No Response" : lead.status;
 
   const { data: updated, error } = await supabase
     .from("leads")
