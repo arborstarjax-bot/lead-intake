@@ -5,6 +5,7 @@ import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { BottomNav } from "@/components/BottomNav";
+import { CapacitorLinkHandler } from "@/components/CapacitorLinkHandler";
 import { OfflineQueueReplayer } from "@/modules/offline";
 
 const sans = Plus_Jakarta_Sans({
@@ -53,6 +54,7 @@ export default function RootLayout({
             <SettingsProvider>
               {children}
               <BottomNav />
+              <CapacitorLinkHandler />
               <OfflineQueueReplayer />
             </SettingsProvider>
           </ConfirmProvider>
