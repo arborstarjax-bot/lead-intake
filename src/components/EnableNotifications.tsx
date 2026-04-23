@@ -3,6 +3,7 @@
 import { Bell, BellOff, BellRing } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Status = "unsupported" | "denied" | "prompt" | "subscribing" | "subscribed";
 
@@ -18,6 +19,7 @@ function urlBase64ToUint8Array(base64: string): ArrayBuffer {
 
 export default function EnableNotifications() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [status, setStatus] = useState<Status>("prompt");
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
@@ -44,6 +46,20 @@ export default function EnableNotifications() {
 
   async function enable() {
     if (!publicKey) return;
+    // Apple HIG + App Store review guidance: don't show the native
+    // permission prompt cold. Explain the value first, let the user
+    // opt in, THEN trigger the OS prompt. A "No" at this stage leaves
+    // `Notification.permission` at "default" so we can ask again
+    // later; a "No" at the OS prompt is permanent and can only be
+    // reversed in system settings.
+    const ok = await confirm({
+      title: "Turn on lead alerts?",
+      message:
+        "We'll send a quick notification each time a new lead is uploaded so you can call them before your competitors. You can turn this off any time in Settings.",
+      confirmLabel: "Turn on",
+      cancelLabel: "Not now",
+    });
+    if (!ok) return;
     setStatus("subscribing");
     try {
       const perm = await Notification.requestPermission();
