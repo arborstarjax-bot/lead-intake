@@ -66,6 +66,15 @@ export function isApnsConfigured(): boolean {
 // ---------------------------------------------------------------------------
 
 const TOKEN_TTL_MS = 50 * 60 * 1000;
+/**
+ * Hard ceiling per APNs request. Vercel functions run with maxDuration=60s
+ * in this repo, sendNewLeadPush is awaited inline by /api/ingest, and
+ * serverless freeze/thaw can leave a silently-dead HTTP/2 session behind
+ * that we'd otherwise block on for TCP-keepalive minutes. 10s is
+ * comfortably above APNs' normal latency (sub-second) while leaving
+ * plenty of headroom inside the function budget for web push + DB writes.
+ */
+const APNS_SEND_TIMEOUT_MS = 10_000;
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 function b64url(input: string | Buffer): string {
@@ -199,7 +208,41 @@ export async function sendApnsPush(
     const req = s.request(headers);
     let status = -1;
     let responseBody = "";
+    let settled = false;
+    const settle = (result: ApnsSendResult) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    const tearDownSession = () => {
+      if (session) {
+        try {
+          session.close();
+        } catch {
+          // session.close throws if already closing — swallow.
+        }
+        session = null;
+      }
+    };
     req.setEncoding("utf8");
+    // Bound every request to APNS_SEND_TIMEOUT_MS (default 10s) so a
+    // silently-dead HTTP/2 session — common after a Vercel serverless
+    // freeze/thaw where the module-level `session` survives but the
+    // underlying socket is gone — can't block sendNewLeadPush, which
+    // /api/ingest awaits before returning the upload response. Setting
+    // the timeout on the request emits a 'timeout' event and gives us
+    // a chance to resolve as a TransportError instead of hanging until
+    // OS-level TCP keepalive notices (can take minutes).
+    req.setTimeout(APNS_SEND_TIMEOUT_MS, () => {
+      req.close(0x8 /* CANCEL */);
+      tearDownSession();
+      settle({
+        ok: false,
+        status: -1,
+        reason: "Timeout",
+        shouldPrune: false,
+      });
+    });
     req.on("response", (h) => {
       const raw = h[":status"];
       if (typeof raw === "number") status = raw;
@@ -209,7 +252,7 @@ export async function sendApnsPush(
       responseBody += chunk;
     });
     req.on("end", () => {
-      if (status === 200) return resolve({ ok: true });
+      if (status === 200) return settle({ ok: true });
       let reason = "Unknown";
       try {
         const parsed = JSON.parse(responseBody);
@@ -224,19 +267,12 @@ export async function sendApnsPush(
         cachedToken = null;
       }
       const shouldPrune = status === 410 || PRUNEABLE_REASONS.has(reason);
-      resolve({ ok: false, status, reason, shouldPrune });
+      settle({ ok: false, status, reason, shouldPrune });
     });
     req.on("error", () => {
       // Tear down the session so the next send reconnects.
-      if (session) {
-        try {
-          session.close();
-        } catch {
-          // session.close throws if already closing — swallow.
-        }
-        session = null;
-      }
-      resolve({
+      tearDownSession();
+      settle({
         ok: false,
         status: -1,
         reason: "TransportError",
