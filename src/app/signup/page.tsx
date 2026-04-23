@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SignupForm } from "./SignupForm";
 import { Logo } from "@/components/Logo";
-import { getSessionMembership } from "@/lib/auth";
+import { getSessionMembership } from "@/modules/auth";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 
 export const dynamic = "force-dynamic";

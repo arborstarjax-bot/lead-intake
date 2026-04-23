@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import { getSessionMembership } from "@/lib/auth";
+import { getSessionMembership } from "@/modules/auth";
 import {
   getBillingState,
   getUploadsInLastDay,
