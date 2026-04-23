@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { displayName } from "@/lib/format";
+import {
+  displayName,
+  normalizeEmail,
+  normalizePhone,
+  normalizeState,
+  normalizeZip,
+} from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { LOST_AFTER_DAYS } from "@/lib/types";
 import { requireMembership } from "@/lib/auth";
@@ -76,6 +82,19 @@ export async function POST(req: NextRequest) {
   if (!base.client) {
     base.client = displayName(base.first_name, base.last_name) || null;
   }
+  // Normalize contact fields on the way in so storage is consistent with
+  // PATCH. Mirrors the logic in /api/leads/[id]. Falls back to the raw
+  // input if normalization returns null (e.g. fewer than 10 phone digits)
+  // so users don't silently lose what they typed.
+  if ("phone_number" in base)
+    base.phone_number =
+      normalizePhone(base.phone_number as string | null) ?? base.phone_number;
+  if ("email" in base)
+    base.email = normalizeEmail(base.email as string | null) ?? base.email;
+  if ("state" in base)
+    base.state = normalizeState(base.state as string | null) ?? base.state;
+  if ("zip" in base)
+    base.zip = normalizeZip(base.zip as string | null) ?? base.zip;
   // Default the salesperson to the workspace's configured
   // default_salesperson (a human display name), NOT the creator's email.
   // `sales_person` is rendered into customer-facing SMS/email templates
