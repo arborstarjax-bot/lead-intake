@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForTokens, saveTokens } from "@/lib/google/oauth";
-import { getSessionMembership } from "@/lib/auth";
+import { getSessionMembership } from "@/modules/auth";
 
 export const runtime = "nodejs";
 

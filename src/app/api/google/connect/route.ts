@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { googleAuthUrl } from "@/lib/google/oauth";
-import { requireMembership } from "@/lib/auth";
+import { requireMembership } from "@/modules/auth";
 import { randomBytes } from "node:crypto";
 
 export const runtime = "nodejs";

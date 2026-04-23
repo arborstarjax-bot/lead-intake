@@ -10,7 +10,7 @@ import {
   isPendingCalendarClaim,
   updateCalendarEvent,
 } from "@/lib/google/calendar";
-import { requireMembership } from "@/lib/auth";
+import { requireMembership } from "@/modules/auth";
 
 export const runtime = "nodejs";
 

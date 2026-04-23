@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSettings, updateSettings, type AppSettingsPatch } from "@/lib/settings";
-import { requireMembership, requireAdmin } from "@/lib/auth";
+import { requireMembership, requireAdmin } from "@/modules/auth";
 
 export const dynamic = "force-dynamic";
 

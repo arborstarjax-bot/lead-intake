@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
-import { requireMembership } from "@/lib/auth";
+import { requireMembership } from "@/modules/auth";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import {
   parseHHMM,

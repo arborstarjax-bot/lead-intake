@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getAccessToken } from "@/lib/google/oauth";
-import { requireMembership } from "@/lib/auth";
+import { requireMembership } from "@/modules/auth";
 import {
   canSchedule,
   createCalendarEvent,

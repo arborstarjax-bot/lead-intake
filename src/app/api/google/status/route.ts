@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isGoogleConnected } from "@/lib/google/oauth";
-import { requireMembership } from "@/lib/auth";
+import { requireMembership } from "@/modules/auth";
 
 export const runtime = "nodejs";
 

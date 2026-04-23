@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { acknowledgeSubscription } from "@/lib/push";
-import { requireMembership } from "@/lib/auth";
+import { requireMembership } from "@/modules/auth";
 
 export const runtime = "nodejs";
 
