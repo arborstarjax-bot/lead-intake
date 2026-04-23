@@ -98,8 +98,12 @@ export async function POST(req: NextRequest) {
   // `sales_person` is rendered into customer-facing SMS/email templates
   // via the {salesPerson} placeholder — default it to the workspace's
   // configured display name, never the creator's email.
+  // Use `||` (not `??`) so an empty-string default_salesperson falls
+  // through to null; otherwise we'd write "" into sales_person and the
+  // template fallback chain (which keys off truthiness) would miss it.
+  // Keeps ingest consistent with the POST /api/leads truthiness check.
   const settings = await getSettings(auth.workspaceId);
-  const fallbackSalesperson = settings.default_salesperson ?? null;
+  const fallbackSalesperson = settings.default_salesperson || null;
 
   for (const file of files) {
     try {
