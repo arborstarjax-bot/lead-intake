@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe, inferPlanFromSubscription } from "@/lib/stripe";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import type { SubscriptionStatus, WorkspacePlan } from "@/lib/billing";
 
 export const runtime = "nodejs";

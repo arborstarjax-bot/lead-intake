@@ -1,6 +1,6 @@
 "use server";
 
-import { createSSRClient } from "@/lib/supabase/server";
+import { createSSRClient } from "@/modules/shared/supabase/server";
 
 export async function login(form: FormData): Promise<{ error?: string }> {
   const email = String(form.get("email") ?? "").trim().toLowerCase();

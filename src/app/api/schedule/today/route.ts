@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/lib/auth";
 import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
-import { todayIsoInBusinessTz } from "@/lib/date";
+import { todayIsoInBusinessTz } from "@/modules/shared/date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { signScreenshotUrl } from "@/lib/ingest";
 import { requireMembership } from "@/lib/auth";
 

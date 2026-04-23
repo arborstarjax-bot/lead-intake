@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { EDITABLE_COLUMNS, LEAD_STATUSES } from "@/lib/types";
-import { displayName, normalizeEmail, normalizePhone, normalizeState, normalizeZip } from "@/lib/format";
+import { displayName, normalizeEmail, normalizePhone, normalizeState, normalizeZip } from "@/modules/shared/format";
 import { getAccessToken } from "@/lib/google/oauth";
 import {
   deleteCalendarEvent,

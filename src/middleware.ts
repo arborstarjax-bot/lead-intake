@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
+import { updateSession } from "@/modules/shared/supabase/middleware";
 
 // Routes that don't require authentication:
 // - Auth pages themselves

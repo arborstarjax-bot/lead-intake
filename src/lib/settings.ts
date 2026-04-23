@@ -1,5 +1,5 @@
 import "server-only";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 
 export type AppSettings = {
   workspace_id: string;

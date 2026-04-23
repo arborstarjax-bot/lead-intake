@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { stripe, priceIds } from "@/lib/stripe";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

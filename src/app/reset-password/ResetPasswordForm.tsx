@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/modules/shared/supabase/client";
 
 type Phase = "verifying" | "ready" | "invalid" | "done";
 

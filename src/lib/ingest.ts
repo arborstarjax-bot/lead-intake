@@ -1,7 +1,7 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { extractLeadFromImage } from "@/lib/ai/extract";
 import { findDuplicates, isSaveable } from "@/lib/dedupe";
-import { displayName } from "@/lib/format";
+import { displayName } from "@/modules/shared/format";
 import type { Lead, LeadIntakeSource } from "@/lib/types";
 
 type IngestArgs = {

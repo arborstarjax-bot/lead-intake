@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings } from "@/lib/settings";
 import { requireMembership } from "@/lib/auth";
 import { suggestSlots } from "@/lib/schedule";
 import { MapsUnavailableError } from "@/lib/maps";
 import type { Lead } from "@/lib/types";
-import { todayIsoInBusinessTz } from "@/lib/date";
+import { todayIsoInBusinessTz } from "@/modules/shared/date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

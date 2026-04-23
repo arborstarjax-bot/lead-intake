@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/lib/auth";
 import { suggestSlots, leadAddressString } from "@/lib/schedule";
@@ -10,7 +10,7 @@ import {
   isoInBusinessTz,
   dayOfWeekInBusinessTz,
   upcomingBusinessTzDays,
-} from "@/lib/date";
+} from "@/modules/shared/date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

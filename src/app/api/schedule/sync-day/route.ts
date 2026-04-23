@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getAccessToken } from "@/lib/google/oauth";
 import { requireMembership } from "@/lib/auth";
 import {

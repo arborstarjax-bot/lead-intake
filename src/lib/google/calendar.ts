@@ -1,5 +1,5 @@
 import type { Lead } from "@/lib/types";
-import { calendarEventTitle, formatPhone } from "@/lib/format";
+import { calendarEventTitle, formatPhone } from "@/modules/shared/format";
 
 type GoogleEvent = {
   id: string;

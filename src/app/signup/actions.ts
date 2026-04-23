@@ -1,6 +1,6 @@
 "use server";
 
-import { createSSRClient, createAdminClient } from "@/lib/supabase/server";
+import { createSSRClient, createAdminClient } from "@/modules/shared/supabase/server";
 import { generateJoinCode } from "@/lib/auth";
 
 type SignupResult = { error?: string; notice?: string };
