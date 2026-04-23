@@ -3,12 +3,12 @@ import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth";
-import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
+import { MapsUnavailableError, createDriveMemo } from "@/modules/routing";
 import {
   parseHHMM,
   formatHHMM,
   leadAddressString,
-} from "@/lib/schedule";
+} from "@/modules/schedule";
 import { getAccessToken } from "@/lib/google/oauth";
 import {
   canSchedule,

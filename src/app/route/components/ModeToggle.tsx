@@ -1,6 +1,6 @@
 "use client";
 
-import type { RouteMapMode } from "@/components/RouteMap";
+import type { RouteMapMode } from "@/modules/routing";
 import { cn } from "@/lib/utils";
 
 export function ModeToggle({

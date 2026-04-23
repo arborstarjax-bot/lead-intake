@@ -7,7 +7,7 @@ import {
   CalendarCheck,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import RouteMap, { type RouteMapMode, type RouteMapStop } from "@/components/RouteMap";
+import { RouteMap, type RouteMapMode, type RouteMapStop } from "@/modules/routing";
 import {
   addDaysIso,
   formatDateLong,
