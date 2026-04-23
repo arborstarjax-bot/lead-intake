@@ -208,6 +208,14 @@ function queuedResponse(id: number): Response {
 export type ReplaySummary = {
   replayed: number;
   dropped: number;
+  /**
+   * Count of writes dropped because the server rejected them with
+   * 409 stale_write — a newer edit landed while we were offline and
+   * our queued PATCH would have clobbered it. Separated from `dropped`
+   * so the UI can surface a targeted message ("X offline edits were
+   * overwritten by newer changes") instead of a generic failure.
+   */
+  droppedStale: number;
   remaining: number;
   stoppedOnError: boolean;
   /**
@@ -221,24 +229,96 @@ export type ReplaySummary = {
 
 const MAX_ATTEMPTS_PER_CLIENT_ERROR = 3;
 
+/**
+ * Extract the lead id from a PATCH URL of the form `/api/leads/{id}`.
+ * Returns null for URLs that don't match so a future endpoint using
+ * this queue (e.g. `/api/leads/[id]/calendar`) doesn't get cross-keyed
+ * into the same row. Tolerant to query strings just in case.
+ */
+function leadIdFromUrl(url: string): string | null {
+  try {
+    const pathname = url.startsWith("http")
+      ? new URL(url).pathname
+      : url.split("?")[0] ?? url;
+    const m = pathname.match(/^\/api\/leads\/([^/]+)$/);
+    return m?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rewrite the JSON body of a queued write with a fresh
+ * `expected_updated_at`. Returns the original body unchanged if the
+ * body doesn't parse or doesn't already carry an expected_updated_at
+ * — we only want to rewrite guards that were present in the original
+ * write, not opt a legacy caller into the check retroactively.
+ */
+function rewriteExpectedUpdatedAt(body: string, nextUpdatedAt: string): string {
+  try {
+    const parsed = JSON.parse(body);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.expected_updated_at === "string"
+    ) {
+      return JSON.stringify({ ...parsed, expected_updated_at: nextUpdatedAt });
+    }
+  } catch {
+    // Non-JSON body — leave as-is.
+  }
+  return body;
+}
+
 export async function replayQueue(): Promise<ReplaySummary> {
   const pending = await listPending();
   pending.sort((a, b) => a.id - b.id);
 
   let replayed = 0;
   let dropped = 0;
+  let droppedStale = 0;
   let stoppedOnError = false;
   let authRequired = false;
 
+  // Cascade the server-returned `updated_at` from each successful replay
+  // into any subsequent queued writes targeting the same lead. Without
+  // this, a user who makes N offline edits to one lead has all N writes
+  // holding the same pre-offline snapshot — the first replay bumps the
+  // server's updated_at and every follow-up is then mistakenly rejected
+  // as stale even though it's the same user's own sequential edit.
+  const latestUpdatedAtByLead = new Map<string, string>();
+
   for (const row of pending) {
+    const leadId = leadIdFromUrl(row.url);
+    const cached = leadId ? latestUpdatedAtByLead.get(leadId) : null;
+    // Cascade rewrite only applies when we actually have a body to
+    // carry the guard; DELETEs are bodyless and idempotent so the
+    // rewrite is meaningless for them.
+    const bodyToSend =
+      row.body !== null && cached
+        ? rewriteExpectedUpdatedAt(row.body, cached)
+        : row.body;
     try {
       const init: RequestInit = { method: row.method };
-      if (row.body !== null && row.body !== undefined) {
+      if (bodyToSend !== null && bodyToSend !== undefined) {
         init.headers = { "content-type": "application/json" };
-        init.body = row.body;
+        init.body = bodyToSend;
       }
       const res = await fetch(row.url, init);
       if (res.ok) {
+        if (leadId) {
+          try {
+            const clone = res.clone();
+            const json = await clone.json();
+            const nextUpdatedAt: unknown = json?.lead?.updated_at;
+            if (typeof nextUpdatedAt === "string") {
+              latestUpdatedAtByLead.set(leadId, nextUpdatedAt);
+            }
+          } catch {
+            // Response wasn't JSON / couldn't read; fall back to the
+            // cached value (if any) for subsequent writes.
+          }
+        }
         await removeWrite(row.id);
         replayed += 1;
       } else if (res.status === 401) {
@@ -254,6 +334,32 @@ export async function replayQueue(): Promise<ReplaySummary> {
         // (another actor, or a duplicate replay). Treat as success.
         await removeWrite(row.id);
         replayed += 1;
+      } else if (res.status === 409) {
+        // Optimistic-concurrency rejection. The row moved on while we
+        // were offline (updated_at advanced since our snapshot), so
+        // retrying with the same body would keep failing — drop
+        // immediately and tally separately so the user sees the
+        // meaningful "newer edit won" message.
+        let isStale = false;
+        try {
+          const clone = res.clone();
+          const json = await clone.json();
+          if (json?.reason === "stale_write") isStale = true;
+        } catch {
+          // Body wasn't JSON / already consumed — fall through and treat
+          // as a normal 4xx.
+        }
+        if (isStale) {
+          await removeWrite(row.id);
+          droppedStale += 1;
+        } else if ((row.attempts ?? 0) + 1 >= MAX_ATTEMPTS_PER_CLIENT_ERROR) {
+          await removeWrite(row.id);
+          dropped += 1;
+        } else {
+          await bumpAttempts(row.id);
+          stoppedOnError = true;
+          break;
+        }
       } else if (res.status >= 400 && res.status < 500) {
         if ((row.attempts ?? 0) + 1 >= MAX_ATTEMPTS_PER_CLIENT_ERROR) {
           await removeWrite(row.id);
@@ -276,7 +382,7 @@ export async function replayQueue(): Promise<ReplaySummary> {
   }
 
   const remaining = (await listPending()).length;
-  return { replayed, dropped, remaining, stoppedOnError, authRequired };
+  return { replayed, dropped, droppedStale, remaining, stoppedOnError, authRequired };
 }
 
 export async function pendingCount(): Promise<number> {

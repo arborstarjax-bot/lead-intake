@@ -87,6 +87,22 @@ export function OfflineQueueReplayer() {
               : `${summary.dropped} offline changes failed and were dropped`,
         });
       }
+      // Stale-write drops get their own toast so the user understands
+      // *why* the edit was lost — a teammate's newer edit won, their
+      // offline change didn't "fail" in a generic sense. Also refresh
+      // so the latest server state is on screen before the user decides
+      // whether to reapply anything.
+      if (summary.droppedStale > 0) {
+        toast({
+          kind: "error",
+          message:
+            summary.droppedStale === 1
+              ? "1 offline edit was overwritten by a newer change"
+              : `${summary.droppedStale} offline edits were overwritten by newer changes`,
+          duration: 7000,
+        });
+        router.refresh();
+      }
       if (summary.authRequired) {
         // Distinct from the "dropped" toast: the queue is intact, it
         // just needs a signed-in session to drain. Previously 401s
