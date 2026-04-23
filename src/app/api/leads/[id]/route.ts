@@ -43,7 +43,9 @@ export async function PATCH(
   // workspace" from the caller's perspective — surface as 404.
   const { data: existing } = await supabase
     .from("leads")
-    .select("id, workspace_id, status, calendar_event_id, first_name, last_name, client")
+    .select(
+      "id, workspace_id, status, calendar_event_id, first_name, last_name, client, updated_at"
+    )
     .eq("id", id)
     .maybeSingle();
   if (!existing || existing.workspace_id !== auth.workspaceId) {
@@ -51,6 +53,18 @@ export async function PATCH(
   }
 
   const body = await req.json().catch(() => ({}));
+  // Optional optimistic-concurrency guard. When the caller sends the
+  // `updated_at` they observed on the row, we use it as a WHERE-clause
+  // filter on the UPDATE. If the server's `updated_at` has moved
+  // since (i.e. someone else wrote to this lead), the UPDATE matches
+  // zero rows and we respond 409 so the client can reconcile instead
+  // of blindly overwriting the other user's edit. Opt-in because many
+  // callers (background jobs, one-shot scripts, the /api/ingest
+  // follow-up writes) don't hold a prior snapshot.
+  const expectedUpdatedAt =
+    typeof body.expected_updated_at === "string"
+      ? body.expected_updated_at
+      : null;
   const patch: Record<string, unknown> = {};
   for (const k of EDITABLE_COLUMNS) {
     if (k in body) patch[k] = body[k];
@@ -145,14 +159,38 @@ export async function PATCH(
     }
   }
 
-  const { data, error } = await supabase
+  let updateQuery = supabase
     .from("leads")
     .update(patch)
     .eq("id", id)
-    .eq("workspace_id", auth.workspaceId)
-    .select("*")
-    .single();
+    .eq("workspace_id", auth.workspaceId);
+  if (expectedUpdatedAt) updateQuery = updateQuery.eq("updated_at", expectedUpdatedAt);
+  const { data, error } = await updateQuery.select("*").maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) {
+    // Either the row vanished mid-flight or the expected_updated_at
+    // didn't match. Re-read to distinguish and hand the client the
+    // current row so it can reconcile its UI instead of silently
+    // losing the edit.
+    const { data: current } = await supabase
+      .from("leads")
+      .select("*")
+      .eq("id", id)
+      .eq("workspace_id", auth.workspaceId)
+      .maybeSingle();
+    if (!current) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json(
+      {
+        error:
+          "This lead was updated by someone else since you loaded it. Reload to see the latest version, then reapply your edit.",
+        reason: "stale_write",
+        lead: current,
+      },
+      { status: 409 }
+    );
+  }
 
   // Best-effort Google delete after the DB write using THIS user's token.
   // A workspace member who has not connected their own calendar yet will
