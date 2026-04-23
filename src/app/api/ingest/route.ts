@@ -5,7 +5,7 @@ import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireMembership } from "@/lib/auth";
 import { checkRateLimit, rateLimitKey } from "@/lib/rateLimit";
-import { PRICING, getBillingState } from "@/lib/billing";
+import { PRICING, getBillingState, getUploadsInLastDay } from "@/lib/billing";
 import { getSettings } from "@/lib/settings";
 import type { Lead } from "@/lib/types";
 
@@ -57,6 +57,16 @@ export async function POST(req: NextRequest) {
     // burns 10 OpenAI calls even though it's one request. Keyed by workspace
     // (not user) because the Starter plan sells a workspace-level quota — a
     // five-person team shares the same daily bucket.
+    //
+    // Two layers of rate limiting, in order:
+    //   1. In-memory sliding window (fast pre-filter, per Vercel instance).
+    //      Handles runaway retries from a single warm instance without
+    //      touching the DB.
+    //   2. DB-backed count on the `leads` table (authoritative).
+    //      Required because the in-memory limiter is per-process — two
+    //      Vercel instances handling concurrent requests can each grant
+    //      up to 50 uploads, doubling real consumption. `getUploadsInLastDay`
+    //      is the same source of truth used by the /billing meter.
     const limit = checkRateLimit({
       key: rateLimitKey(["ingest", auth.workspaceId]),
       limit: INGEST_LIMIT_PER_DAY,
@@ -79,6 +89,36 @@ export async function POST(req: NextRequest) {
             "Retry-After": String(limit.retryAfterSeconds),
             "X-RateLimit-Limit": String(limit.limit),
             "X-RateLimit-Remaining": "0",
+          },
+        }
+      );
+    }
+
+    // DB-backed authoritative check. Counts `intake_source='web_upload'`
+    // rows in the last 24h for this workspace. If the combined count
+    // (existing + this batch) would exceed the cap, reject. Accepts the
+    // first upload that *crosses* the cap as a 1-file edge (e.g. user
+    // at 49 uploads 1 file → ok; uploads 2 files → refuse).
+    const usedToday = await getUploadsInLastDay(auth.workspaceId);
+    if (usedToday + files.length > INGEST_LIMIT_PER_DAY) {
+      const remaining = Math.max(0, INGEST_LIMIT_PER_DAY - usedToday);
+      return NextResponse.json(
+        {
+          error:
+            remaining === 0
+              ? `Daily upload limit reached (${INGEST_LIMIT_PER_DAY}/day on Starter). Try again tomorrow or upgrade to Pro for unlimited uploads.`
+              : `Only ${remaining} upload${remaining === 1 ? "" : "s"} remaining today. Trying to upload ${files.length} — retry with ${remaining} or fewer, or upgrade to Pro for unlimited.`,
+          reason: "plan_cap",
+          plan: billing.plan,
+          limit: INGEST_LIMIT_PER_DAY,
+          used: usedToday,
+          remaining,
+        },
+        {
+          status: 429,
+          headers: {
+            "X-RateLimit-Limit": String(INGEST_LIMIT_PER_DAY),
+            "X-RateLimit-Remaining": String(remaining),
           },
         }
       );
