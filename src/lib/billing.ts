@@ -179,3 +179,35 @@ export const PRICING = {
 export function monthlyPrice(plan: "starter" | "pro"): number {
   return PRICING[plan].base;
 }
+
+/**
+ * Count screenshot-ingested leads for a workspace in the last 24 hours.
+ * Used to drive the usage meter on /workspace and /billing.
+ *
+ * We count DB rows rather than the in-memory rate limiter because the
+ * limiter is per-process and gets cleared when a Vercel function cold
+ * starts — the DB is the only durable source of truth. Rows produced by
+ * the ingest path always have intake_source='web_upload'; manual creates
+ * use 'manual' and don't count toward the upload cap.
+ *
+ * Returns 0 on error (e.g. table missing) — we never want a billing
+ * dashboard probe to throw and blank out the page.
+ */
+export async function getUploadsInLastDay(
+  workspaceId: string
+): Promise<number> {
+  const admin = createAdminClient();
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const { count, error } = await admin
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("intake_source", "web_upload")
+      .gte("created_at", since);
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}

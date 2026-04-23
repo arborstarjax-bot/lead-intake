@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { getSessionMembership } from "@/lib/auth";
 import { createAdminClient, createSSRClient } from "@/lib/supabase/server";
+import { getBillingState, getUploadsInLastDay } from "@/lib/billing";
 import { WorkspaceClient } from "./WorkspaceClient";
 import { OrphanWorkspaceClient } from "./OrphanWorkspaceClient";
+import { BillingSummary } from "./BillingSummary";
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +45,17 @@ export default async function WorkspacePage() {
   }
 
   const admin = createAdminClient();
-  const [{ data: memberRows }, { data: users }] = await Promise.all([
-    admin
-      .from("workspace_members")
-      .select("user_id, role, created_at")
-      .eq("workspace_id", auth.workspaceId)
-      .order("created_at", { ascending: true }),
-    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-  ]);
+  const [{ data: memberRows }, { data: users }, billing, uploadsToday] =
+    await Promise.all([
+      admin
+        .from("workspace_members")
+        .select("user_id, role, created_at")
+        .eq("workspace_id", auth.workspaceId)
+        .order("created_at", { ascending: true }),
+      admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+      getBillingState(auth.workspaceId),
+      getUploadsInLastDay(auth.workspaceId),
+    ]);
 
   const emailById = new Map<string, string>();
   for (const u of users?.users ?? []) {
@@ -75,6 +80,8 @@ export default async function WorkspacePage() {
           </span>
         }
       />
+
+      <BillingSummary billing={billing} uploadsToday={uploadsToday} />
 
       <WorkspaceClient
         workspace={{
