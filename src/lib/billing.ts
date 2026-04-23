@@ -215,9 +215,16 @@ export async function getUploadsInLastDay(
       .eq("workspace_id", workspaceId)
       .eq("bucket_date", bucketDate)
       .maybeSingle();
-    if (!error && data) return Number(data.count ?? 0);
+    // A successful query with no row means the post-migration counter
+    // exists but today's bucket hasn't been created yet — i.e. 0
+    // uploads so far today. Returning 0 here is correct; falling
+    // through to the legacy 24h row-count would surface yesterday's
+    // count in the early hours after midnight ET and misrepresent the
+    // available quota.
+    if (!error) return Number(data?.count ?? 0);
   } catch {
-    // Fall through to legacy path.
+    // Fall through to legacy path only on hard errors (e.g. the
+    // rate_limit_counters table doesn't exist yet pre-migration).
   }
   try {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
