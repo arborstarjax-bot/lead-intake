@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { displayName } from "@/lib/format";
+import { getSettings } from "@/lib/settings";
 import { LOST_AFTER_DAYS } from "@/lib/types";
 import { requireMembership } from "@/lib/auth";
 
@@ -75,12 +76,18 @@ export async function POST(req: NextRequest) {
   if (!base.client) {
     base.client = displayName(base.first_name, base.last_name) || null;
   }
-  // Default the salesperson to whoever is creating the lead so the
-  // /leads filter dropdown can group by author without requiring the
-  // user to type a name every time. Only defaults when the caller didn't
-  // supply one — explicit "" (user cleared it) is preserved as null.
-  if (!("sales_person" in base) && auth.email) {
-    base.sales_person = auth.email;
+  // Default the salesperson to the workspace's configured
+  // default_salesperson (a human display name), NOT the creator's email.
+  // `sales_person` is rendered into customer-facing SMS/email templates
+  // via the {salesPerson} placeholder — leaking an email like
+  // "Hi Jane, this is john@example.com with Acme Tree…" is a real bug.
+  // We leave sales_person null if no default is configured; the template
+  // renderer's existing fallback chain keeps messages clean either way.
+  if (!("sales_person" in base)) {
+    const settings = await getSettings(auth.workspaceId);
+    if (settings.default_salesperson) {
+      base.sales_person = settings.default_salesperson;
+    }
   }
 
   const { data, error } = await supabase

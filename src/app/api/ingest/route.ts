@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { requireMembership } from "@/lib/auth";
 import { checkRateLimit, rateLimitKey } from "@/lib/rateLimit";
 import { PRICING, getBillingState } from "@/lib/billing";
+import { getSettings } from "@/lib/settings";
 import type { Lead } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -94,6 +95,12 @@ export async function POST(req: NextRequest) {
   }> = [];
   const errors: Array<{ fileName: string; error: string }> = [];
 
+  // `sales_person` is rendered into customer-facing SMS/email templates
+  // via the {salesPerson} placeholder — default it to the workspace's
+  // configured display name, never the creator's email.
+  const settings = await getSettings(auth.workspaceId);
+  const fallbackSalesperson = settings.default_salesperson ?? null;
+
   for (const file of files) {
     try {
       const { blob, fileName } = await maybeConvertHeic(file, file.name);
@@ -102,7 +109,7 @@ export async function POST(req: NextRequest) {
         file: blob,
         fileName,
         source: "web_upload",
-        defaultSalesperson: auth.email,
+        defaultSalesperson: fallbackSalesperson,
       });
       results.push({ fileName, originalFileName: file.name, ...res });
     } catch (e) {
