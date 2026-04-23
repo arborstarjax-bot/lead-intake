@@ -36,8 +36,8 @@ export function CapacitorLinkHandler() {
     const cap = (window as unknown as CapacitorWindow).Capacitor;
     if (!cap || typeof cap.isNativePlatform !== "function") return;
     if (!cap.isNativePlatform()) return;
-    const browser = cap.Plugins?.Browser;
-    if (!browser || typeof browser.open !== "function") return;
+    const openInBrowser = cap.Plugins?.Browser?.open;
+    if (typeof openInBrowser !== "function") return;
 
     const handler = (event: MouseEvent) => {
       const target = event.target as Element | null;
@@ -53,7 +53,7 @@ export function CapacitorLinkHandler() {
         anchor.hasAttribute("data-external");
       if (!opensInNewTab) return;
       event.preventDefault();
-      browser.open({ url: href }).catch(() => {
+      openInBrowser({ url: href }).catch(() => {
         // Fallback to default navigation if the native bridge rejects —
         // better a stuck webview than a silent no-op.
         window.location.href = href;
