@@ -208,6 +208,14 @@ function queuedResponse(id: number): Response {
 export type ReplaySummary = {
   replayed: number;
   dropped: number;
+  /**
+   * Count of writes dropped because the server rejected them with
+   * 409 stale_write — a newer edit landed while we were offline and
+   * our queued PATCH would have clobbered it. Separated from `dropped`
+   * so the UI can surface a targeted message ("X offline edits were
+   * overwritten by newer changes") instead of a generic failure.
+   */
+  droppedStale: number;
   remaining: number;
   stoppedOnError: boolean;
   /**
@@ -227,6 +235,7 @@ export async function replayQueue(): Promise<ReplaySummary> {
 
   let replayed = 0;
   let dropped = 0;
+  let droppedStale = 0;
   let stoppedOnError = false;
   let authRequired = false;
 
@@ -254,6 +263,32 @@ export async function replayQueue(): Promise<ReplaySummary> {
         // (another actor, or a duplicate replay). Treat as success.
         await removeWrite(row.id);
         replayed += 1;
+      } else if (res.status === 409) {
+        // Optimistic-concurrency rejection. The row moved on while we
+        // were offline (updated_at advanced since our snapshot), so
+        // retrying with the same body would keep failing — drop
+        // immediately and tally separately so the user sees the
+        // meaningful "newer edit won" message.
+        let isStale = false;
+        try {
+          const clone = res.clone();
+          const json = await clone.json();
+          if (json?.reason === "stale_write") isStale = true;
+        } catch {
+          // Body wasn't JSON / already consumed — fall through and treat
+          // as a normal 4xx.
+        }
+        if (isStale) {
+          await removeWrite(row.id);
+          droppedStale += 1;
+        } else if ((row.attempts ?? 0) + 1 >= MAX_ATTEMPTS_PER_CLIENT_ERROR) {
+          await removeWrite(row.id);
+          dropped += 1;
+        } else {
+          await bumpAttempts(row.id);
+          stoppedOnError = true;
+          break;
+        }
       } else if (res.status >= 400 && res.status < 500) {
         if ((row.attempts ?? 0) + 1 >= MAX_ATTEMPTS_PER_CLIENT_ERROR) {
           await removeWrite(row.id);
@@ -276,7 +311,7 @@ export async function replayQueue(): Promise<ReplaySummary> {
   }
 
   const remaining = (await listPending()).length;
-  return { replayed, dropped, remaining, stoppedOnError, authRequired };
+  return { replayed, dropped, droppedStale, remaining, stoppedOnError, authRequired };
 }
 
 export async function pendingCount(): Promise<number> {
