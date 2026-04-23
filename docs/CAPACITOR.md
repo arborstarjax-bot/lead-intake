@@ -40,6 +40,10 @@ Committed artifacts:
 - `ios/App/` — Xcode project. Safe to commit. Signing is handled via Xcode automatic signing on the developer machine (never commit provisioning profiles or certificates).
 - `android/` — Android Studio / Gradle project. Safe to commit. `google-services.json` (for FCM push) is secrets — use `.gitignore` + Vercel env vars pattern.
 
+After `cap add ios` generates the project, follow `docs/IOS_SHELL_SETUP.md`
+for the required post-generation edits (WKWebView UA marker, Info.plist
+permission strings, launch screen, app icons, push capability).
+
 ### Linux / Windows
 
 Only Android can be built here:
@@ -56,17 +60,46 @@ iOS builds and App Store uploads require macOS + Xcode, full stop. CI path: use 
 - **Staging** (future): point to a staging Vercel domain with its own Supabase env
 - **Prod**: no env var set → uses `https://lead-intake-sooty.vercel.app`
 
-## In-app purchase (IAP)
+## Billing — App Store Guideline 3.1.1 / 3.1.3(b)
 
-iOS and Android both **require** native IAP for digital subscriptions (Apple Guideline 3.1.1, Google equivalent). Stripe can't be used for web-style checkout inside the apps.
+LeadFlow does **not** use native IAP (StoreKit / Play Billing). We qualify
+for the **3.1.3(b) business-services exemption**: a multi-user B2B CRM
+where accounts and seats are provisioned by a workspace admin, not by
+end users. Under that exemption purchase and billing management happen
+outside the app — on the web — and the app must not present any
+in-app purchase or Stripe portal UI.
 
-Plan:
-1. Use **RevenueCat** (`@revenuecat/purchases-capacitor`) — wraps Apple StoreKit + Google Play Billing with one JS API, handles receipt verification, sends webhooks to our server that we can idempotency-key against `billing_events` (same table as Stripe flow).
-2. Map RevenueCat "entitlements" to the same `workspaces.plan` column as Stripe: `starter` / `pro`.
-3. Separate price IDs in App Store Connect + Google Play Console matching the web SKUs. Apple takes 30% (15% via Small Business Program after year 1); Google takes 15% on the first $1M/yr.
-4. UI: `/billing` page detects `Capacitor.isNativePlatform()` and hides the Stripe upgrade button in favor of a native IAP button on mobile. Web users still see Stripe Checkout.
+How that's enforced in the code (shipped across #147–#156):
 
-This happens in a separate PR **after** the Stripe flow lands.
+1. `src/lib/ios-shell.ts` is the single source of truth for "is this a
+   native shell?" — `isIosShellUserAgent` matches the shell's WKWebView
+   UA (`Capacitor/*` and the explicit `LeadFlowiOS/*` marker from
+   `AppDelegate.swift` — see `IOS_SHELL_SETUP.md`).
+2. `src/lib/ios-shell-server.ts` exposes `isIosShellRequest()` for
+   server components; `src/lib/use-ios-shell.ts` exposes
+   `useIsIosShell()` for client components and prefers the canonical
+   `window.Capacitor.isNativePlatform()` check.
+3. Every billing CTA is gated:
+   - `/billing` page — `PlanCompareCard` + `ManageBillingButton` are
+     replaced by `WebManagedBillingNote` when `inShell` is true.
+   - `TrialEndingBanner`, `PastDueBanner`, `LapsedBanner` — admin
+     copy rewrites to "open LeadFlow in a web browser …" and any
+     Stripe-portal button (e.g. "Update payment method") is
+     suppressed.
+   - `UploadBox` daily-cap dialog and subscription-lapsed dialog —
+     the "Upgrade to Pro" / "Go to billing" buttons are suppressed
+     and the body copy directs the user to the web.
+
+If App Review challenges the 3.1.3(b) claim during submission, the
+argument is: (a) workspace creation requires an admin, (b) free-tier
+users can not self-upgrade to a paid plan from inside the app at all,
+(c) billing management is read-only on mobile, (d) there are no
+individual "buy" flows. The app is a thin mobile surface for a B2B
+tool whose purchasing happens in the web dashboard, identical to
+Slack / Asana / Notion's mobile apps.
+
+Do **not** re-add RevenueCat / native IAP without first re-reading
+this section — the B2B exemption is the agreed path.
 
 ## Push notifications
 
