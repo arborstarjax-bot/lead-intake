@@ -6,7 +6,7 @@ import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { BottomNav } from "@/components/BottomNav";
 import { CapacitorLinkHandler } from "@/components/CapacitorLinkHandler";
-import { OfflineQueueReplayer } from "@/modules/offline";
+import { OfflineBanner, OfflineQueueReplayer } from "@/modules/offline";
 
 const sans = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -55,6 +55,7 @@ export default function RootLayout({
               {children}
               <BottomNav />
               <CapacitorLinkHandler />
+              <OfflineBanner />
               <OfflineQueueReplayer />
             </SettingsProvider>
           </ConfirmProvider>
