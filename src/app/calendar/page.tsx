@@ -102,6 +102,15 @@ export default function CalendarPage() {
     return entries;
   }, [leads]);
 
+  // True when there is at least one lead with a real salesperson on
+  // the calendar. The `Unassigned` bucket by itself shouldn't trigger
+  // the filter UI — "View all · Unassigned" is a useless two-option
+  // dropdown. Hides the legend too for the same reason.
+  const hasAssignedSalespeople = useMemo(
+    () => salespeopleOnCalendar.some((s) => s.key !== UNASSIGNED_KEY),
+    [salespeopleOnCalendar]
+  );
+
   const leadsByDay = useMemo(() => {
     const byDay = new Map<string, Lead[]>();
     for (const l of leads) {
@@ -154,8 +163,9 @@ export default function CalendarPage() {
 
         {/* Salesperson filter. Only render when the workspace has actually
            assigned leads to salespeople — otherwise the dropdown would
-           just say "View all · Unassigned". */}
-        {salespeopleOnCalendar.length > 0 && (
+           just say "View all · Unassigned". The unassigned bucket by
+           itself doesn't count: we want real names to distinguish. */}
+        {hasAssignedSalespeople && (
           <label className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-white pl-3 pr-1 h-9 text-xs">
             <span className="text-[var(--muted)] font-medium">Salesperson</span>
             <select
@@ -176,9 +186,10 @@ export default function CalendarPage() {
 
       {/* Color legend. Mirrors the filter dropdown but stays visible so
          users can always see who owns which color. Hidden when nobody
-         is assigned. Dots are deterministic from the sales_person name
+         is assigned (unassigned-only workspaces have nothing to
+         distinguish). Dots are deterministic from the sales_person name
          — same name renders the same color everywhere. */}
-      {salespeopleOnCalendar.length > 0 && (
+      {hasAssignedSalespeople && (
         <div className="flex flex-wrap items-center justify-center gap-2 text-[11px]">
           {salespeopleOnCalendar.map((s) => {
             const isActive =
