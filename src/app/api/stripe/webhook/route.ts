@@ -53,10 +53,17 @@ async function recordEvent(
 
 async function markEventProcessed(event: Stripe.Event) {
   const admin = createAdminClient();
-  await admin
+  // Supabase's .update() returns { error }, it does not throw. If the
+  // update fails (DB blip), processed_at stays null — on the next Stripe
+  // re-delivery the disposition would then flip back to "retry" and the
+  // handler would run again, which is the opposite of idempotent. Throw
+  // here so the POST handler's catch returns 500, Stripe retries, and
+  // eventually the update lands.
+  const { error } = await admin
     .from("billing_events")
     .update({ processed_at: new Date().toISOString() })
     .eq("stripe_event_id", event.id);
+  if (error) throw error;
 }
 
 /**
@@ -262,11 +269,12 @@ export async function POST(req: NextRequest) {
       }
 
       case "customer.subscription.deleted": {
-        // A deletion event races with an out-of-order update the same
-        // way. Retrieve the live subscription: if Stripe still has it
-        // (shouldn't for a delete, but defensively) we treat its
-        // status as authoritative; otherwise fall back to the
-        // embedded object so we still mark the workspace free.
+        // A subscription deletion is terminal — Stripe will not resurrect
+        // it. Out-of-order delivery concerns don't apply here: if a later
+        // `subscription.updated` for the same sub arrives with status=
+        // "active" (e.g. the customer resubscribed), its handler above
+        // retrieves the current live subscription and overwrites free
+        // back to the paid plan, which is the correct outcome.
         const embedded = event.data.object as Stripe.Subscription;
         const wsId = embedded.metadata?.workspace_id ?? workspaceId;
         if (!wsId) break;
