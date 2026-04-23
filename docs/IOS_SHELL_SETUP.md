@@ -259,11 +259,11 @@ async function subscribe() {
 
 ### 5d. APNs credentials (☁️ + secret request)
 
-To mint APNs tokens server-side you need three things from Apple:
+To mint APNs tokens server-side you need four values:
 
 1. **Team ID** — shown at
    [developer.apple.com/account](https://developer.apple.com/account)
-   top-right (10-character alphanumeric).
+   under **Membership details** (10-character alphanumeric).
 2. **Key ID** — create at Apple Developer → Certificates, Identifiers &
    Profiles → **Keys** → the blue "+" → check "Apple Push Notifications
    service (APNs)" → Continue → give it a name like "LeadFlow APNs" →
@@ -272,10 +272,41 @@ To mint APNs tokens server-side you need three things from Apple:
 3. **`.p8` private key** — the same page gives you **one chance** to
    download a `.p8` file. Save it immediately; Apple won't let you
    re-download.
+4. **Bundle ID** — the identifier you registered under Identifiers
+   (currently `com.arborcore.leadflow`). Used as the `apns-topic`
+   header on every push.
 
-When you have all three, I'll request them through the secrets tool so
-they land in the Vercel env (not the repo). The push-send endpoint
-will sign a JWT using the `.p8` and hit APNs.
+All four land in Vercel as env vars (not the repo). See `.env.example`:
+
+- `APNS_AUTH_KEY_P8` — multiline PEM, paste the full `.p8` contents.
+- `APNS_KEY_ID`
+- `APNS_TEAM_ID`
+- `APNS_BUNDLE_ID`
+
+Optional `APNS_USE_SANDBOX=1` switches the transport to
+`api.sandbox.push.apple.com` — only relevant for local Xcode
+dev-signed builds. TestFlight + App Store use the production endpoint,
+so leave it unset in Vercel.
+
+The transport (`src/lib/apns.ts`) is zero-dependency: ES256 JWT signed
+via `node:crypto` (cached ~50 min to stay inside Apple's regeneration
+rate-limit), POSTed over `node:http2` to `/3/device/<token>`. The
+`sendNewLeadPush` fan-out (`src/lib/push.ts`) now runs the web path +
+APNs path in parallel; a missing APNs config silently disables the
+native path without affecting web push.
+
+Pruning semantics match Apple's response model:
+
+- `200` → record `last_success_at`.
+- `410 Unregistered` → user uninstalled or disabled notifications;
+  delete the row.
+- `400 BadDeviceToken` / `DeviceTokenNotForTopic` /
+  `MissingDeviceToken` / `TopicDisallowed` → stale token or bundle
+  mismatch; delete the row.
+- `403 InvalidProviderToken` → the cached JWT is invalid (e.g. key
+  was revoked); invalidate in-memory token so the next send resigns.
+- Other errors → stored in `last_error` on the subscription; the row
+  stays so subsequent sends get a chance to succeed.
 
 ---
 

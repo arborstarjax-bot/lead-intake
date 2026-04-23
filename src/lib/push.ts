@@ -1,11 +1,19 @@
 import webpush from "web-push";
 import { createAdminClient } from "@/modules/shared/supabase/server";
+import { isApnsConfigured, sendApnsPush } from "@/lib/apns";
 
-type PushRow = {
+type WebPushRow = {
   id: string;
   endpoint: string;
   p256dh: string;
   auth: string;
+  last_acknowledged_at: string;
+};
+
+type NativePushRow = {
+  id: string;
+  device_token: string;
+  platform: "ios" | "android";
   last_acknowledged_at: string;
 };
 
@@ -31,20 +39,31 @@ export type NewLeadPushInput = {
 };
 
 /**
- * Fan out a "new lead" push to every stored subscription in this workspace.
+ * Fan out a "new lead" push to every stored subscription in this workspace,
+ * across both the web and native (APNs) delivery paths.
+ *
  * Each subscription gets its own payload because the badge count / title
  * depend on how many leads arrived since that device last opened the app.
- * Dead subscriptions (410/404) are pruned so the table stays clean.
+ * Dead subscriptions (410/404 on web, 410 or BadDeviceToken on APNs) are
+ * pruned so the table stays clean.
  *
- * Silently no-ops if VAPID keys are not configured — push is optional.
+ * Silently no-ops if neither delivery path is configured — push is optional.
  */
 export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
-  if (!configure()) return;
+  const webEnabled = configure();
+  const apnsEnabled = isApnsConfigured();
+  if (!webEnabled && !apnsEnabled) return;
+
+  await Promise.all([
+    webEnabled ? sendWeb(input) : Promise.resolve(),
+    apnsEnabled ? sendNative(input) : Promise.resolve(),
+  ]);
+}
+
+async function sendWeb(input: NewLeadPushInput): Promise<void> {
   const admin = createAdminClient();
   // platform='web' only: native (ios/android) rows carry a device_token
   // instead of an endpoint and are delivered by APNs / FCM, not web-push.
-  // They're picked up separately by sendNewLeadNativePush once the
-  // native-send path ships (see docs/IOS_SHELL_SETUP.md §5d).
   const { data: subs } = await admin
     .from("push_subscriptions")
     .select("id, endpoint, p256dh, auth, last_acknowledged_at")
@@ -53,24 +72,12 @@ export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
   if (!subs || subs.length === 0) return;
 
   await Promise.all(
-    (subs as PushRow[]).map(async (s) => {
-      // How many leads has this device not yet seen (including the one
-      // that just triggered this push) — scoped to the workspace.
-      const { count } = await admin
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", input.workspaceId)
-        .gt("created_at", s.last_acknowledged_at);
-      const unseen = count ?? 1;
-
-      const title = unseen === 1 ? "New lead" : `${unseen} new leads`;
-      const body =
-        unseen === 1 && input.latestLead
-          ? [input.latestLead.client, input.latestLead.phone_number]
-              .filter(Boolean)
-              .join(" · ") || "Tap to review."
-          : "Tap to review.";
-
+    (subs as WebPushRow[]).map(async (s) => {
+      const unseen = await countUnseen(
+        input.workspaceId,
+        s.last_acknowledged_at
+      );
+      const { title, body } = renderNewLeadPayload(unseen, input.latestLead);
       const payload = JSON.stringify({
         title,
         body,
@@ -78,7 +85,6 @@ export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
         badgeCount: unseen,
         tag: "new-lead",
       });
-
       try {
         await webpush.sendNotification(
           {
@@ -104,6 +110,77 @@ export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
       }
     })
   );
+}
+
+async function sendNative(input: NewLeadPushInput): Promise<void> {
+  const admin = createAdminClient();
+  // APNs only for now — Android (FCM) will route through the same table
+  // with platform='android' when its transport lands.
+  const { data: subs } = await admin
+    .from("push_subscriptions")
+    .select("id, device_token, platform, last_acknowledged_at")
+    .eq("workspace_id", input.workspaceId)
+    .eq("platform", "ios");
+  if (!subs || subs.length === 0) return;
+
+  await Promise.all(
+    (subs as NativePushRow[]).map(async (s) => {
+      const unseen = await countUnseen(
+        input.workspaceId,
+        s.last_acknowledged_at
+      );
+      const { title, body } = renderNewLeadPayload(unseen, input.latestLead);
+      const result = await sendApnsPush({
+        deviceToken: s.device_token,
+        title,
+        body,
+        badge: unseen,
+        collapseId: "new-lead",
+      });
+      if (result.ok) {
+        await admin
+          .from("push_subscriptions")
+          .update({ last_success_at: new Date().toISOString(), last_error: null })
+          .eq("id", s.id);
+        return;
+      }
+      if (result.shouldPrune) {
+        await admin.from("push_subscriptions").delete().eq("id", s.id);
+        return;
+      }
+      await admin
+        .from("push_subscriptions")
+        .update({ last_error: `${result.status} ${result.reason}` })
+        .eq("id", s.id);
+    })
+  );
+}
+
+async function countUnseen(
+  workspaceId: string,
+  since: string
+): Promise<number> {
+  const admin = createAdminClient();
+  const { count } = await admin
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .gt("created_at", since);
+  return count ?? 1;
+}
+
+function renderNewLeadPayload(
+  unseen: number,
+  latestLead: NewLeadPushInput["latestLead"]
+): { title: string; body: string } {
+  const title = unseen === 1 ? "New lead" : `${unseen} new leads`;
+  const body =
+    unseen === 1 && latestLead
+      ? [latestLead.client, latestLead.phone_number]
+          .filter(Boolean)
+          .join(" · ") || "Tap to review."
+      : "Tap to review.";
+  return { title, body };
 }
 
 /**
