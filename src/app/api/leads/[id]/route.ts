@@ -118,16 +118,20 @@ export async function PATCH(
   // route map AND from Google Calendar — a completed job is done and no
   // longer relevant to today's drive plan.
   //
-  // When `calendar_event_id` holds the "pending:" claim sentinel from a
-  // concurrent create-in-flight, treat it as "no real event yet" —
-  // clearing it here would invalidate that concurrent POST's claim and
-  // leave its Google event orphaned with no DB pointer.
+  // The null-out below must run whether `calendar_event_id` holds a real
+  // event id OR a "pending:" claim sentinel. If a concurrent POST is
+  // mid-create and we leave the sentinel in place, its final UPDATE
+  // (which is gated on the sentinel still matching) will succeed and
+  // overwrite `status` back to "Scheduled", silently undoing the user's
+  // completion. Invalidating the sentinel here makes that final UPDATE
+  // match zero rows, at which point the POST's claim-validation branch
+  // deletes the Google event it just created and returns 409.
   const hasRealCalendarEvent =
     Boolean(existing.calendar_event_id) && !isPendingCalendarClaim(existing.calendar_event_id);
   const completing =
     patch.status === "Completed" &&
     existing.status !== "Completed" &&
-    hasRealCalendarEvent;
+    Boolean(existing.calendar_event_id);
   if (completing) {
     patch.calendar_event_id = null;
     patch.calendar_scheduled_day = null;
@@ -150,8 +154,11 @@ export async function PATCH(
     "flex_window" in patch &&
     patch.flex_window !== null &&
     patch.flex_window !== undefined;
+  // Same reasoning as `completing`: unbooking must also invalidate a
+  // pending claim, or the concurrent POST's final UPDATE will land a
+  // real event id after the user just tried to clear it.
   const unbookingCalendar =
-    !completing && clearingSchedule && hasRealCalendarEvent;
+    !completing && clearingSchedule && Boolean(existing.calendar_event_id);
   if (unbookingCalendar) {
     patch.calendar_event_id = null;
     patch.calendar_scheduled_day = null;
