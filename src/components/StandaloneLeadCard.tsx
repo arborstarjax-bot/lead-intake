@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LeadCard } from "@/components/LeadTable";
 import { useToast } from "@/components/Toast";
+import { fetchWithOfflineQueue } from "@/lib/offline-queue";
 import { formatLeadPatchError, patchLead } from "@/lib/patchLead";
 import type { Lead } from "@/lib/types";
 
@@ -138,7 +139,24 @@ export default function StandaloneLeadCard({
     setDeleted(true);
     const timer = setTimeout(async () => {
       deleteTimer.current = null;
-      const res = await fetch(`/api/leads/${snapshot.id}`, { method: "DELETE" });
+      // Route through the offline queue so a delete started on a flaky
+      // connection survives a reload — the card is already hidden
+      // locally; the queued DELETE replays once the tab is online.
+      const res = await fetchWithOfflineQueue(
+        `/api/leads/${snapshot.id}`,
+        {
+          method: "DELETE",
+          label: `Delete lead ${snapshot.id.slice(0, 6)}`,
+        }
+      );
+      if (res.headers.get("x-offline-queued") === "1") {
+        onRemoved?.(originalId.current);
+        toast({
+          kind: "info",
+          message: "Deleted offline — will sync when online",
+        });
+        return;
+      }
       if (res.ok) {
         onRemoved?.(originalId.current);
       } else {

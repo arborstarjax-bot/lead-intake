@@ -262,7 +262,21 @@ export default function LeadTable({
     });
     const timer = setTimeout(async () => {
       pendingDeletes.current.delete(id);
-      const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
+      // Route through the offline queue so a delete started on a flaky
+      // connection survives a reload — without this, the local card was
+      // hidden optimistically but the server never heard about the
+      // delete, so the lead reappeared on the next refresh.
+      const res = await fetchWithOfflineQueue(`/api/leads/${id}`, {
+        method: "DELETE",
+        label: `Delete lead ${id.slice(0, 6)}`,
+      });
+      if (res.headers.get("x-offline-queued") === "1") {
+        toast({
+          kind: "info",
+          message: "Deleted offline — will sync when online",
+        });
+        return;
+      }
       if (!res.ok) {
         // Restore in place and surface the error so nothing disappears silently.
         setLeads((prev) => (prev.some((l) => l.id === id) ? prev : [lead, ...prev]));
