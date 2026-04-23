@@ -89,8 +89,11 @@ export function BillingSummary({ billing, uploadsToday }: Props) {
 
       {/* Usage meter. Starter always gets a bar; Pro gets a plain
           "unlimited" note so they can still see the count. Trial uses the
-          Starter cap since that's what the ingest route enforces. */}
-      {(isTrial || isStarter) && (
+          Starter cap since that's what the ingest route enforces — but
+          we hide the bar once the trial has expired (canUsePaidFeatures
+          is false) because the ingest gate blocks all uploads and
+          showing "0 / 50" would imply quota that doesn't exist. */}
+      {((isTrial && billing.canUsePaidFeatures) || isStarter) && (
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between">
             <div className="text-xs font-medium text-[var(--muted)]">

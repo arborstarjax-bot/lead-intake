@@ -140,10 +140,17 @@ function CurrentPlanCard({
         <div>
           <dt className="text-[var(--muted)]">Uploads today</dt>
           <dd className="font-medium tabular-nums">
-            {/* Display the plan's nominal capability, not the access
-                gate — a past_due Pro workspace is still a Pro plan. */}
+            {/* Pro keeps its own 'unlimited' line even on past_due so it
+                still reads as the Pro plan. Lapsed (free) and expired
+                trials must NOT show 'N / 50' — the ingest gate blocks
+                them at 0 regardless of the cap, and rendering the
+                fraction misleads users into thinking they have quota. */}
             {billing.plan === "pro"
               ? `${uploadsToday} · unlimited`
+              : billing.plan === "free"
+              ? "Paused"
+              : billing.plan === "trial" && !billing.canUsePaidFeatures
+              ? "Trial ended"
               : `${uploadsToday} / ${PRICING.starter.uploadsPerDay}`}
           </dd>
         </div>
