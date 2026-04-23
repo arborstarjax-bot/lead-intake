@@ -1,11 +1,10 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Logo } from "@/components/Logo";
 import LeadTable, { type LeadFilter, type LeadCounts } from "@/components/LeadTable";
 import NotificationAcknowledge from "@/components/NotificationAcknowledge";
+import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 
 const TABS: { id: LeadFilter; label: string }[] = [
@@ -70,15 +69,9 @@ function LeadsPageInner() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5">
+    <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-6">
       <NotificationAcknowledge />
-      <header className="flex items-center justify-between gap-3">
-        <Link href="/" aria-label="Home" className="inline-flex items-center">
-          <Logo variant="mark" size="sm" />
-        </Link>
-        <h1 className="text-lg sm:text-xl font-semibold">Leads</h1>
-        <div className="w-9" />
-      </header>
+      <PageHeader title="Leads" />
 
       <nav
         aria-label="Lead status"

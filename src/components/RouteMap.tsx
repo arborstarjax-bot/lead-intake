@@ -367,7 +367,7 @@ export default function RouteMap({
       )}
       {status === "error" && (
         <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
-          <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-md">
+          <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 max-w-md">
             {errorMessage ?? "Couldn't load Google Maps."}
           </div>
         </div>

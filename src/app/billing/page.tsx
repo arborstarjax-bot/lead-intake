@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { PageHeader } from "@/components/PageHeader";
 import { getSessionMembership } from "@/lib/auth";
 import {
   getBillingState,
@@ -31,13 +30,14 @@ export default async function BillingPage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
-      <header className="flex items-center justify-between gap-3">
-        <Link href="/" aria-label="Home" className="inline-flex items-center">
-          <Logo variant="mark" size="sm" />
-        </Link>
-        <h1 className="text-lg sm:text-xl font-semibold">Billing</h1>
-        <span className="text-xs text-[var(--muted)]">{auth.email}</span>
-      </header>
+      <PageHeader
+        title="Billing"
+        rightSlot={
+          <span className="text-xs text-[var(--muted)] truncate max-w-[10rem] hidden sm:inline">
+            {auth.email}
+          </span>
+        }
+      />
 
       {params.status === "success" && <CheckoutSuccessBanner />}
       {params.status === "canceled" && <CheckoutCanceledBanner />}

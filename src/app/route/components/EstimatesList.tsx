@@ -253,7 +253,7 @@ export function EstimatesList({
       </div>
 
       {optimizeError && !previewingOptimize && (
-        <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
           {optimizeError}
         </div>
       )}
@@ -268,7 +268,7 @@ export function EstimatesList({
         )}
 
       {previewingOptimize && optimizePreview && (
-        <div className="mb-3 text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 space-y-1.5">
+        <div className="mb-3 text-xs rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 space-y-1.5">
           <div className="font-semibold">
             {optimizePreview.placements.length === 1
               ? "1 flex lead ready to place"
@@ -311,7 +311,7 @@ export function EstimatesList({
         !optimizePreview.nothingToDo &&
         optimizePreview.placements.length === 0 &&
         optimizePreview.unplaced.length > 0 && (
-          <div className="mb-3 text-xs rounded-lg border border-red-200 bg-red-50 text-red-800 px-3 py-2 space-y-0.5">
+          <div className="mb-3 text-xs rounded-xl border border-red-200 bg-red-50 text-red-800 px-3 py-2 space-y-0.5">
             <div className="font-semibold">
               No flex lead could be placed in a feasible slot.
             </div>
@@ -324,7 +324,7 @@ export function EstimatesList({
         )}
 
       {reordering && (
-        <div className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        <div className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
           Use the arrows to change visit order. Saving will recompute every start
           time from your work-start using real drive legs and update Google
           Calendar.
@@ -384,7 +384,7 @@ export function EstimatesList({
       {reordering && (
         <div className="mt-3 space-y-2">
           {error && (
-            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
               {error}
             </div>
           )}
@@ -419,7 +419,7 @@ export function EstimatesList({
       {optimizePreview && (previewingOptimize || optimizePreview.unplaced.length > 0 || optimizePreview.nothingToDo) && (
         <div className="mt-3 space-y-2">
           {optimizeError && (
-            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
               {optimizeError}
             </div>
           )}

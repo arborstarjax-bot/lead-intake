@@ -1,13 +1,12 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   CalendarCheck,
 } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { PageHeader } from "@/components/PageHeader";
 import RouteMap, { type RouteMapMode, type RouteMapStop } from "@/components/RouteMap";
 import {
   addDaysIso,
@@ -181,16 +180,10 @@ function RoutePageInner() {
 
   return (
     <main
-      className="mx-auto max-w-6xl p-4 sm:p-6 space-y-5"
+      className="mx-auto max-w-6xl p-4 sm:p-6 space-y-6"
       style={{ paddingBottom: panelHeight ? panelHeight + 24 : 128 }}
     >
-      <header className="flex items-center justify-between gap-3">
-        <Link href="/" aria-label="Home" className="inline-flex items-center">
-          <Logo variant="mark" size="sm" />
-        </Link>
-        <h1 className="text-lg sm:text-xl font-semibold">Route Map</h1>
-        <div className="w-9" />
-      </header>
+      <PageHeader title="Route Map" />
 
       {scheduleLeadId && (
         <SchedulingBanner
@@ -226,7 +219,7 @@ function RoutePageInner() {
       </div>
 
       {error && (
-        <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
           {error}
         </div>
       )}
@@ -240,7 +233,7 @@ function RoutePageInner() {
       />
 
       {data && data.unresolved.length > 0 && (
-        <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
             Couldn&apos;t pin{" "}

@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Logo } from "@/components/Logo";
+import { PageHeader } from "@/components/PageHeader";
 import { getSessionMembership } from "@/lib/auth";
 import { createAdminClient, createSSRClient } from "@/lib/supabase/server";
 import { WorkspaceClient } from "./WorkspaceClient";
@@ -29,10 +28,15 @@ export default async function WorkspacePage() {
     // just send them right back here.
     return (
       <main className="mx-auto max-w-md p-4 sm:p-6 space-y-6">
-        <header className="flex items-center justify-between gap-3">
-          <h1 className="text-lg sm:text-xl font-semibold">No workspace</h1>
-          <span className="text-xs text-[var(--muted)]">{data.user.email}</span>
-        </header>
+        <PageHeader
+          title="No workspace"
+          hideNavIcons
+          rightSlot={
+            <span className="text-xs text-[var(--muted)] truncate max-w-[12rem]">
+              {data.user.email}
+            </span>
+          }
+        />
         <OrphanWorkspaceClient email={data.user.email ?? ""} />
       </main>
     );
@@ -63,13 +67,14 @@ export default async function WorkspacePage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4 sm:p-6 space-y-6">
-      <header className="flex items-center justify-between gap-3">
-        <Link href="/" aria-label="Home" className="inline-flex items-center">
-          <Logo variant="mark" size="sm" />
-        </Link>
-        <h1 className="text-lg sm:text-xl font-semibold">Workspace</h1>
-        <span className="text-xs text-[var(--muted)]">{auth.email}</span>
-      </header>
+      <PageHeader
+        title="Workspace"
+        rightSlot={
+          <span className="text-xs text-[var(--muted)] truncate max-w-[10rem] hidden sm:inline">
+            {auth.email}
+          </span>
+        }
+      />
 
       <WorkspaceClient
         workspace={{
