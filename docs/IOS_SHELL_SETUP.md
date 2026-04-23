@@ -287,7 +287,7 @@ will sign a JWT using the `.p8` and hit APNs.
 - Name: `LeadFlow` (reserve this now even if not shipping for weeks —
   names are first-come-first-served)
 - Primary language: English (U.S.)
-- Bundle ID: register `com.leadflow.app` in Developer Portal first
+- Bundle ID: register `com.arborcore.leadflow` in Developer Portal first
   (Certificates, Identifiers & Profiles → Identifiers → "+" → App IDs).
   Once registered it shows up in the App Store Connect dropdown.
 - SKU: `leadflow-ios` (internal, free form)
@@ -377,7 +377,7 @@ In Xcode:
 1. Select the **App** target → **Signing & Capabilities** → tick
    "Automatically manage signing" → pick your team.
 2. Add the **Push Notifications** capability (+ button).
-3. Set the bundle identifier to `com.leadflow.app` (should already be
+3. Set the bundle identifier to `com.arborcore.leadflow` (should already be
    set from `capacitor.config.ts`).
 4. Set version to `1.0.0` and build number to `1`.
 5. **Product → Archive** (requires "Any iOS Device" selected as the
