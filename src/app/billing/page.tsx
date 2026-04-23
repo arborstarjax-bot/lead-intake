@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Globe } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { getSessionMembership } from "@/modules/auth/server";
 import {
@@ -10,6 +10,7 @@ import {
   PRICING,
   type BillingState,
 } from "@/modules/billing/server";
+import { isIosShellRequest } from "@/lib/ios-shell-server";
 import { PlanCompareCard } from "./PlanCompareCard";
 import { ManageBillingButton } from "./ManageBillingButton";
 
@@ -23,10 +24,11 @@ export default async function BillingPage({ searchParams }: Props) {
   const auth = await getSessionMembership();
   if (!auth) redirect("/login?next=/billing");
 
-  const [billing, uploadsToday, params] = await Promise.all([
+  const [billing, uploadsToday, params, inShell] = await Promise.all([
     getBillingState(auth.workspaceId),
     getUploadsInLastDay(auth.workspaceId),
     searchParams,
+    isIosShellRequest(),
   ]);
   const isAdmin = auth.role === "admin";
 
@@ -60,6 +62,7 @@ export default async function BillingPage({ searchParams }: Props) {
         billing={billing}
         workspaceName={auth.workspaceName}
         isAdmin={isAdmin}
+        inShell={inShell}
         uploadsToday={uploadsToday}
       />
 
@@ -69,8 +72,38 @@ export default async function BillingPage({ searchParams }: Props) {
         </p>
       )}
 
-      {isAdmin && <PlanCompareCard billing={billing} />}
+      {/* App Store Guideline 3.1.1 gate: the Capacitor iOS shell can't
+          present Stripe purchase or billing-management UI. We qualify
+          for the 3.1.3(b) business-services exemption, which requires
+          that accounts be provisioned and managed outside the app.
+          See src/lib/ios-shell.ts for the detection + rationale. */}
+      {isAdmin && inShell && <WebManagedBillingNote />}
+      {isAdmin && !inShell && <PlanCompareCard billing={billing} />}
     </main>
+  );
+}
+
+function WebManagedBillingNote() {
+  return (
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5 space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
+          <Globe className="h-4 w-4" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-base font-semibold">
+            Manage your subscription on the web
+          </h2>
+          <p className="text-sm text-[var(--muted)]">
+            Plans, payment methods, and invoices for your LeadFlow
+            workspace are managed from your web browser. Open LeadFlow
+            on a computer or mobile browser to change plans or update
+            billing details — the iOS app picks up the changes
+            automatically.
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -101,11 +134,13 @@ function CurrentPlanCard({
   billing,
   workspaceName,
   isAdmin,
+  inShell,
   uploadsToday,
 }: {
   billing: BillingState;
   workspaceName: string;
   isAdmin: boolean;
+  inShell: boolean;
   uploadsToday: number;
 }) {
   const price =
@@ -190,7 +225,7 @@ function CurrentPlanCard({
         )}
       </dl>
 
-      {isAdmin && billing.stripeCustomerId && (
+      {isAdmin && billing.stripeCustomerId && !inShell && (
         <div className="pt-1 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-xs text-[var(--muted)]">
             Update your card, download invoices, or cancel anytime in the

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { UploadCloud, Loader2, Plus, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale";
+import { useIsIosShell } from "@/lib/use-ios-shell";
 import { StandaloneLeadCard } from "@/modules/leads";
 import { useToast } from "@/components/Toast";
 import type { Lead } from "@/modules/leads/model";
@@ -53,6 +54,12 @@ export default function UploadBox({
   } | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const { toast } = useToast();
+  // App Store Guideline 3.1.1: suppress Stripe-backed upgrade CTAs when
+  // we're running inside the Capacitor iOS shell. The cap-hit / lapsed
+  // dialogs still render — they just replace the "Upgrade to Pro" /
+  // "Go to billing" buttons with an instruction to subscribe on the
+  // web. See src/lib/ios-shell.ts for the detection + rationale.
+  const inShell = useIsIosShell();
 
   async function upgradeToPro() {
     if (upgrading) return;
@@ -367,23 +374,27 @@ export default function UploadBox({
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
                   You&apos;ve used all {capHit.limit} Starter uploads for today.
-                  Upgrade to Pro for unlimited uploads and keep going.
+                  {inShell
+                    ? " Uploads will resume automatically in 24 hours. To upgrade to Pro, open LeadFlow in a web browser."
+                    : " Upgrade to Pro for unlimited uploads and keep going."}
                 </p>
               </div>
             </div>
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Pro</span>
-                <span className="font-semibold">$59.99/mo</span>
+            {!inShell && (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Pro</span>
+                  <span className="font-semibold">$59.99/mo</span>
+                </div>
+                <div className="text-xs text-[var(--muted)]">
+                  Unlimited uploads · Unlimited team members
+                </div>
+                <div className="text-xs text-[var(--muted)] mt-1">
+                  Prorated: you&apos;ll only be charged the difference
+                  (~$30/mo) for the remaining days in this cycle.
+                </div>
               </div>
-              <div className="text-xs text-[var(--muted)]">
-                Unlimited uploads · Unlimited team members
-              </div>
-              <div className="text-xs text-[var(--muted)] mt-1">
-                Prorated: you&apos;ll only be charged the difference
-                (~$30/mo) for the remaining days in this cycle.
-              </div>
-            </div>
+            )}
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
@@ -391,17 +402,19 @@ export default function UploadBox({
                 onClick={() => setCapHit(null)}
                 className="px-4 h-10 rounded-lg border border-[var(--border)] bg-white text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
               >
-                Not now
+                {inShell ? "OK" : "Not now"}
               </button>
-              <button
-                type="button"
-                disabled={upgrading}
-                onClick={upgradeToPro}
-                className="px-4 h-10 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 inline-flex items-center gap-2"
-              >
-                {upgrading && <Loader2 className="h-4 w-4 animate-spin" />}
-                Upgrade to Pro
-              </button>
+              {!inShell && (
+                <button
+                  type="button"
+                  disabled={upgrading}
+                  onClick={upgradeToPro}
+                  className="px-4 h-10 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {upgrading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Upgrade to Pro
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -431,7 +444,9 @@ export default function UploadBox({
                   Subscription required
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  {subRequired.message}
+                  {inShell
+                    ? "Your workspace subscription has lapsed. To reactivate, open LeadFlow in a web browser from a computer or phone and update your plan there."
+                    : subRequired.message}
                 </p>
               </div>
             </div>
@@ -443,12 +458,14 @@ export default function UploadBox({
               >
                 Close
               </button>
-              <Link
-                href="/billing"
-                className="px-4 h-10 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-hover)] inline-flex items-center"
-              >
-                Go to billing
-              </Link>
+              {!inShell && (
+                <Link
+                  href="/billing"
+                  className="px-4 h-10 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:bg-[var(--accent-hover)] inline-flex items-center"
+                >
+                  Go to billing
+                </Link>
+              )}
             </div>
           </div>
         </div>
