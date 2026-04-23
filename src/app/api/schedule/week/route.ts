@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
-import { requireMembership } from "@/modules/auth";
-import { suggestSlots, leadAddressString } from "@/modules/schedule";
-import { MapsUnavailableError, createDriveMemo } from "@/modules/routing";
+import { requireMembership } from "@/modules/auth/server";
+import { suggestSlots, leadAddressString } from "@/modules/schedule/server";
+import { MapsUnavailableError, createDriveMemo } from "@/modules/routing/server";
 import type { Lead } from "@/modules/leads/model";
 import {
   isoInBusinessTz,

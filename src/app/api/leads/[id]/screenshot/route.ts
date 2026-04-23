@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { signScreenshotUrl } from "@/modules/ingest";
-import { requireMembership } from "@/modules/auth";
+import { signScreenshotUrl } from "@/modules/ingest/server";
+import { requireMembership } from "@/modules/auth/server";
 
 export const runtime = "nodejs";
 

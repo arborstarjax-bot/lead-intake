@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { getAccessToken } from "@/modules/calendar";
-import { requireMembership } from "@/modules/auth";
+import { getAccessToken } from "@/modules/calendar/server";
+import { requireMembership } from "@/modules/auth/server";
 import {
   canSchedule,
   createCalendarEvent,
   isPendingCalendarClaim,
   realCalendarEventId,
   updateCalendarEvent,
-} from "@/modules/calendar";
+} from "@/modules/calendar/server";
 import type { Lead } from "@/modules/leads/model";
 
 export const runtime = "nodejs";

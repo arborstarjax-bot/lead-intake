@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
-import { requireMembership } from "@/modules/auth";
-import { MapsUnavailableError, createDriveMemo } from "@/modules/routing";
+import { requireMembership } from "@/modules/auth/server";
+import { MapsUnavailableError, createDriveMemo } from "@/modules/routing/server";
 import type { Lead } from "@/modules/leads/model";
-import { leadAddressString, parseHHMM, formatHHMM } from "@/modules/schedule";
+import { leadAddressString, parseHHMM, formatHHMM } from "@/modules/schedule/server";
 import { todayIsoInBusinessTz } from "@/modules/shared/date";
 
 export const runtime = "nodejs";

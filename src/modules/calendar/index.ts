@@ -1,29 +1,10 @@
-// Barrel for the calendar module.
+// The calendar module has no client-safe exports. Server callers
+// (api/leads/[id]/calendar, google/callback, google/connect,
+// google/status, schedule/reorder, schedule/optimize-day,
+// schedule/sync-day, the leads PATCH handler) use
+// @/modules/calendar/server.
 //
-// Surface area is split across two server files: ./server/google
-// (event CRUD + the pending-claim sentinel helpers) and ./server/oauth
-// (token exchange / refresh / storage). Both are server-only — the
-// eslint boundary rule keeps callers from reaching past this barrel.
-//
-// The pending-claim sentinel (CALENDAR_PENDING_PREFIX / isPendingCalendar
-// Claim / realCalendarEventId) gates concurrent POST + PATCH + DELETE on
-// /api/leads/[id]/calendar and downstream batch endpoints (optimize-day,
-// reorder, sync-day). Keep all three symbols co-located.
+// This file exists so the module directory has a conventional
+// index.ts; it is intentionally empty.
 
-export {
-  canSchedule,
-  CALENDAR_PENDING_PREFIX,
-  isPendingCalendarClaim,
-  realCalendarEventId,
-  createCalendarEvent,
-  deleteCalendarEvent,
-  updateCalendarEvent,
-} from "./server/google";
-
-export {
-  googleAuthUrl,
-  exchangeCodeForTokens,
-  getAccessToken,
-  saveTokens,
-  isGoogleConnected,
-} from "./server/oauth";
+export {};

@@ -1,7 +1,7 @@
 import "server-only";
 import { requireEnv } from "@/lib/utils";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { MapsUnavailableError } from "@/modules/routing";
+import { MapsUnavailableError } from "./maps";
 
 /**
  * Server-side address → lat/lng using Google Geocoding API, backed by a

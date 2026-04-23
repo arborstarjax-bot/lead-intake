@@ -14,11 +14,12 @@ const eslintConfig = [
       // Module boundary: only the owning module may reach into its own
       // server / client / ui subtrees. Everyone else must import through
       // the module's barrel (e.g. `@/modules/leads`, not
-      // `@/modules/leads/server/dedupe`). Starts in "warn" so the
-      // scaffold PRs can land without a churn storm; R-9 flips to
-      // "error".
+      // `@/modules/leads/server/dedupe`). Enforced at error level since
+      // R-9 — the barrel is the stable public surface, subpath imports
+      // break the encapsulation that lets us make surgical changes
+      // inside a module without ripples.
       "no-restricted-imports": [
-        "warn",
+        "error",
         {
           patterns: [
             {
