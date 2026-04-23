@@ -41,10 +41,15 @@ export type NewLeadPushInput = {
 export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
   if (!configure()) return;
   const admin = createAdminClient();
+  // platform='web' only: native (ios/android) rows carry a device_token
+  // instead of an endpoint and are delivered by APNs / FCM, not web-push.
+  // They're picked up separately by sendNewLeadNativePush once the
+  // native-send path ships (see docs/IOS_SHELL_SETUP.md §5d).
   const { data: subs } = await admin
     .from("push_subscriptions")
     .select("id, endpoint, p256dh, auth, last_acknowledged_at")
-    .eq("workspace_id", input.workspaceId);
+    .eq("workspace_id", input.workspaceId)
+    .eq("platform", "web");
   if (!subs || subs.length === 0) return;
 
   await Promise.all(
@@ -108,12 +113,22 @@ export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
  */
 export async function acknowledgeSubscription(
   userId: string,
-  endpoint: string
+  opts: { endpoint?: string; device_token?: string }
 ): Promise<void> {
   const admin = createAdminClient();
-  await admin
-    .from("push_subscriptions")
-    .update({ last_acknowledged_at: new Date().toISOString() })
-    .eq("endpoint", endpoint)
-    .eq("user_id", userId);
+  if (opts.endpoint) {
+    await admin
+      .from("push_subscriptions")
+      .update({ last_acknowledged_at: new Date().toISOString() })
+      .eq("endpoint", opts.endpoint)
+      .eq("user_id", userId);
+    return;
+  }
+  if (opts.device_token) {
+    await admin
+      .from("push_subscriptions")
+      .update({ last_acknowledged_at: new Date().toISOString() })
+      .eq("device_token", opts.device_token)
+      .eq("user_id", userId);
+  }
 }

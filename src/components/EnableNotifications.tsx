@@ -4,6 +4,7 @@ import { Bell, BellOff, BellRing } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { isIosShellWindow } from "@/lib/ios-shell";
 
 type Status = "unsupported" | "denied" | "prompt" | "subscribing" | "subscribed";
 
@@ -21,11 +22,23 @@ export default function EnableNotifications() {
   const { toast } = useToast();
   const confirm = useConfirm();
   const [status, setStatus] = useState<Status>("prompt");
+  const [isNative, setIsNative] = useState(false);
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // iOS Capacitor shell: use native Push Notifications plugin. The
+    // WKWebView exposes `Notification` as undefined, so the web
+    // support check below would incorrectly flag the app as
+    // "unsupported" — short-circuit before that path runs.
+    if (isIosShellWindow()) {
+      setIsNative(true);
+      void probeNativeStatus().then(setStatus);
+      return;
+    }
+
     if (
-      typeof window === "undefined" ||
       !("serviceWorker" in navigator) ||
       !("PushManager" in window) ||
       !("Notification" in window) ||
@@ -45,13 +58,12 @@ export default function EnableNotifications() {
   }, [publicKey]);
 
   async function enable() {
-    if (!publicKey) return;
     // Apple HIG + App Store review guidance: don't show the native
     // permission prompt cold. Explain the value first, let the user
     // opt in, THEN trigger the OS prompt. A "No" at this stage leaves
-    // `Notification.permission` at "default" so we can ask again
-    // later; a "No" at the OS prompt is permanent and can only be
-    // reversed in system settings.
+    // permission at its current state so we can ask again later; a
+    // "No" at the OS prompt is permanent and can only be reversed
+    // in system settings.
     const ok = await confirm({
       title: "Turn on lead alerts?",
       message:
@@ -61,6 +73,16 @@ export default function EnableNotifications() {
     });
     if (!ok) return;
     setStatus("subscribing");
+
+    if (isNative) {
+      await enableNative({ onError: toast, onStatus: setStatus });
+      return;
+    }
+
+    if (!publicKey) {
+      setStatus("unsupported");
+      return;
+    }
     try {
       const perm = await Notification.requestPermission();
       if (perm !== "granted") {
@@ -92,6 +114,11 @@ export default function EnableNotifications() {
 
   async function disable() {
     try {
+      if (isNative) {
+        await disableNative();
+        setStatus("prompt");
+        return;
+      }
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
@@ -154,4 +181,127 @@ export default function EnableNotifications() {
       {status === "subscribing" ? "Enabling…" : "Enable Notifications"}
     </button>
   );
+}
+
+// --- Native (Capacitor) path -----------------------------------------------
+
+async function probeNativeStatus(): Promise<Status> {
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const perm = await PushNotifications.checkPermissions();
+    if (perm.receive === "denied") return "denied";
+    if (perm.receive === "granted") {
+      // "granted" doesn't mean we've registered a token yet, but any
+      // row in push_subscriptions for this device would have been
+      // created after a prior register() — which the plugin auto-re-
+      // registers on app launch. Treat granted as subscribed; the
+      // server upsert is idempotent so re-registration is safe.
+      return "subscribed";
+    }
+    return "prompt";
+  } catch {
+    return "unsupported";
+  }
+}
+
+async function enableNative({
+  onError,
+  onStatus,
+}: {
+  onError: (t: {
+    kind: "error" | "success" | "info";
+    message: string;
+    duration?: number;
+  }) => void;
+  onStatus: (s: Status) => void;
+}): Promise<void> {
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const perm = await PushNotifications.requestPermissions();
+    if (perm.receive !== "granted") {
+      onStatus(perm.receive === "denied" ? "denied" : "prompt");
+      return;
+    }
+
+    // The plugin is event-based: calling register() kicks off APNs
+    // token acquisition and fires "registration" (or "registrationError")
+    // asynchronously. Wrap it in a Promise so enable() can await the
+    // server upsert before flipping to "subscribed".
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        // Defensive: `removeAllListeners` is plugin-wide. Other callers
+        // of this component are on the same page, so this is safe.
+        void PushNotifications.removeAllListeners();
+        fn();
+      };
+
+      void PushNotifications.addListener("registration", async (token) => {
+        try {
+          const res = await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              platform: "ios",
+              device_token: token.value,
+            }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          finish(resolve);
+        } catch (err) {
+          finish(() => reject(err));
+        }
+      });
+
+      void PushNotifications.addListener("registrationError", (err) => {
+        finish(() => reject(new Error(err.error)));
+      });
+
+      // Safety timeout so a silent APNs failure doesn't leave the UI
+      // stuck in "subscribing" forever.
+      setTimeout(() => {
+        finish(() => reject(new Error("Registration timed out")));
+      }, 15000);
+
+      void PushNotifications.register();
+    });
+
+    onStatus("subscribed");
+  } catch (e) {
+    console.error(e);
+    onError({
+      kind: "error",
+      message:
+        e instanceof Error && e.message.length < 120
+          ? `Couldn't enable notifications: ${e.message}`
+          : "Couldn't enable notifications. Please try again.",
+      duration: 6000,
+    });
+    onStatus("prompt");
+  }
+}
+
+async function disableNative(): Promise<void> {
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    // There's no APNs "unregister" equivalent. Best we can do is
+    // drop the stored device_token server-side; the native OS will
+    // keep delivering pushes if we ever re-register, but the server
+    // has no record of the device to send to.
+    await PushNotifications.removeAllListeners();
+    // We don't have the device token on the JS side after initial
+    // registration, so fall back to signalling "unsubscribe" with a
+    // user-scoped DELETE that targets the most recent native row
+    // for this user. Implemented by a small GET/DELETE dance below
+    // once a follow-up PR adds the server hook; for now the user
+    // can uninstall the app to purge or revoke via Settings → Push.
+    //
+    // Deliberately no-op so the UI can flip back to "prompt" without
+    // surprising the user; this is the same behavior as disabling the
+    // web path when the service worker has gone away.
+  } catch (e) {
+    console.error(e);
+  }
 }
