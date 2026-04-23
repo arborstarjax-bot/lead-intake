@@ -7,9 +7,11 @@ import { MapsUnavailableError, getDriveMatrix } from "@/lib/maps";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
 import { getAccessToken } from "@/lib/google/oauth";
 import {
-  createCalendarEvent,
-  updateCalendarEvent,
   canSchedule,
+  createCalendarEvent,
+  isPendingCalendarClaim,
+  realCalendarEventId,
+  updateCalendarEvent,
 } from "@/lib/google/calendar";
 import type { Lead } from "@/lib/types";
 
@@ -472,9 +474,22 @@ export async function POST(req: Request) {
       continue;
     }
 
+    // Another request is mid-create on this lead's calendar event. Skip
+    // so we don't pass the "pending:" sentinel to updateCalendarEvent.
+    if (isPendingCalendarClaim(lead.calendar_event_id)) {
+      results.push({
+        leadId: lead.id,
+        label,
+        startTime: p.startTime,
+        calendar: "skipped",
+      });
+      continue;
+    }
+
     try {
-      const event = lead.calendar_event_id
-        ? await updateCalendarEvent(token, lead.calendar_event_id, leadNext)
+      const realEventId = realCalendarEventId(lead.calendar_event_id);
+      const event = realEventId
+        ? await updateCalendarEvent(token, realEventId, leadNext)
         : await createCalendarEvent(token, leadNext);
       await supabase
         .from("leads")
@@ -488,7 +503,7 @@ export async function POST(req: Request) {
         leadId: lead.id,
         label,
         startTime: p.startTime,
-        calendar: lead.calendar_event_id ? "updated" : "created",
+        calendar: realEventId ? "updated" : "created",
       });
     } catch (e) {
       results.push({

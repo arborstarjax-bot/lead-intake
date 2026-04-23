@@ -3,7 +3,10 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { EDITABLE_COLUMNS, LEAD_STATUSES } from "@/lib/types";
 import { displayName, normalizeEmail, normalizePhone, normalizeState, normalizeZip } from "@/lib/format";
 import { getAccessToken } from "@/lib/google/oauth";
-import { deleteCalendarEvent } from "@/lib/google/calendar";
+import {
+  deleteCalendarEvent,
+  isPendingCalendarClaim,
+} from "@/lib/google/calendar";
 import { requireMembership } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -114,10 +117,17 @@ export async function PATCH(
   // Flipping status to Completed should make the job disappear from the
   // route map AND from Google Calendar — a completed job is done and no
   // longer relevant to today's drive plan.
+  //
+  // When `calendar_event_id` holds the "pending:" claim sentinel from a
+  // concurrent create-in-flight, treat it as "no real event yet" —
+  // clearing it here would invalidate that concurrent POST's claim and
+  // leave its Google event orphaned with no DB pointer.
+  const hasRealCalendarEvent =
+    Boolean(existing.calendar_event_id) && !isPendingCalendarClaim(existing.calendar_event_id);
   const completing =
     patch.status === "Completed" &&
     existing.status !== "Completed" &&
-    existing.calendar_event_id;
+    hasRealCalendarEvent;
   if (completing) {
     patch.calendar_event_id = null;
     patch.calendar_scheduled_day = null;
@@ -141,7 +151,7 @@ export async function PATCH(
     patch.flex_window !== null &&
     patch.flex_window !== undefined;
   const unbookingCalendar =
-    !completing && clearingSchedule && existing.calendar_event_id;
+    !completing && clearingSchedule && hasRealCalendarEvent;
   if (unbookingCalendar) {
     patch.calendar_event_id = null;
     patch.calendar_scheduled_day = null;
@@ -221,11 +231,11 @@ export async function PATCH(
     }
   }
 
-  if ((completing || unbookingCalendar) && existing.calendar_event_id) {
+  if ((completing || unbookingCalendar) && hasRealCalendarEvent) {
     const token = await getAccessToken(auth.userId);
     if (token) {
       try {
-        await deleteCalendarEvent(token, existing.calendar_event_id);
+        await deleteCalendarEvent(token, existing.calendar_event_id!);
       } catch {
         // Swallow: the lead is already updated locally; a stale Google
         // event is recoverable but blocking the status flip isn't.

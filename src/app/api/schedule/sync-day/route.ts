@@ -4,9 +4,11 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { getAccessToken } from "@/lib/google/oauth";
 import { requireMembership } from "@/lib/auth";
 import {
-  createCalendarEvent,
-  updateCalendarEvent,
   canSchedule,
+  createCalendarEvent,
+  isPendingCalendarClaim,
+  realCalendarEventId,
+  updateCalendarEvent,
 } from "@/lib/google/calendar";
 import type { Lead } from "@/lib/types";
 
@@ -90,12 +92,20 @@ export async function POST(req: Request) {
       results.push({ leadId: lead.id, label, status: "skipped" });
       continue;
     }
+    // Another request is mid-create on this lead's calendar event. Don't
+    // race against the single-lead POST — skip for this batch and let
+    // the next sync-day sweep pick it up.
+    if (isPendingCalendarClaim(lead.calendar_event_id)) {
+      results.push({ leadId: lead.id, label, status: "skipped" });
+      continue;
+    }
     const desiredDay = lead.scheduled_day;
     const desiredTime = normalizeTime(lead.scheduled_time);
     const syncedDay = lead.calendar_scheduled_day;
     const syncedTime = normalizeTime(lead.calendar_scheduled_time);
+    const realEventId = realCalendarEventId(lead.calendar_event_id);
     const upToDate =
-      lead.calendar_event_id && syncedDay === desiredDay && syncedTime === desiredTime;
+      realEventId && syncedDay === desiredDay && syncedTime === desiredTime;
     if (upToDate) {
       results.push({ leadId: lead.id, label, status: "already" });
       continue;
@@ -106,8 +116,8 @@ export async function POST(req: Request) {
     const leadForEvent: Lead = { ...lead, status: nextStatus };
 
     try {
-      const event = lead.calendar_event_id
-        ? await updateCalendarEvent(token, lead.calendar_event_id, leadForEvent)
+      const event = realEventId
+        ? await updateCalendarEvent(token, realEventId, leadForEvent)
         : await createCalendarEvent(token, leadForEvent);
       await supabase
         .from("leads")
@@ -122,7 +132,7 @@ export async function POST(req: Request) {
       results.push({
         leadId: lead.id,
         label,
-        status: lead.calendar_event_id ? "updated" : "created",
+        status: realEventId ? "updated" : "created",
       });
     } catch (e) {
       results.push({
