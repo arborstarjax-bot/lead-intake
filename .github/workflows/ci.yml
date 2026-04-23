@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-flight runs when a branch is pushed again so stale PR
+# updates don't hold a worker.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: lint + typecheck + next build
+    runs-on: ubuntu-latest
+    env:
+      # Next's build step needs certain public env vars resolvable at
+      # bundle time or the build fails. These values are not used at
+      # runtime in CI (no traffic hits this build) — they only satisfy
+      # the compile-time reference check. Real values are injected by
+      # Vercel on deploy.
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: BIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ci-placeholder
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # `next build` is the authoritative type / bundling check — it
+      # runs stricter narrow-through-closure rules than `tsc --noEmit`
+      # and catches server-only / client-only boundary issues that lint
+      # can't see. PR #148 merged with a broken build because neither
+      # `typecheck` nor `lint` caught a narrowing regression that only
+      # `next build`'s type-check layer flags. Running it here blocks
+      # that class of issue before it reaches main.
+      - name: Next build
+        run: npm run build
