@@ -117,7 +117,7 @@ alter table public.push_subscriptions
 ## App Store submission checklist (when ready)
 
 - [ ] Apple Developer Program account ($99/yr)
-- [ ] Bundle ID `com.leadflow.app` registered
+- [ ] Bundle ID `com.arborcore.leadflow` registered
 - [ ] App Store Connect app created
 - [ ] Pricing tier in App Store Connect matches web tiers (Apple will reject large disparities)
 - [ ] Privacy policy URL (already have at `/privacy`)
@@ -129,7 +129,7 @@ alter table public.push_subscriptions
 ## Google Play submission checklist
 
 - [ ] Google Play Developer account ($25 one-time)
-- [ ] Package name `com.leadflow.app`
+- [ ] Package name `com.arborcore.leadflow`
 - [ ] Internal testing track with 20+ opt-in testers for 14 days (required for new accounts after Nov 2023)
 - [ ] Data safety disclosure (mirrors `/privacy`)
 - [ ] Content rating questionnaire

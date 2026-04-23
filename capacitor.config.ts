@@ -15,7 +15,7 @@ const WEB_URL =
   process.env.CAP_DEV_URL ?? "https://lead-intake-sooty.vercel.app";
 
 const config: CapacitorConfig = {
-  appId: "com.leadflow.app",
+  appId: "com.arborcore.leadflow",
   appName: "LeadFlow",
   webDir: "out",
   server: {
