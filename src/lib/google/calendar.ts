@@ -56,6 +56,25 @@ export function canSchedule(lead: Lead): boolean {
   return Boolean(lead.scheduled_day && /^\d{4}-\d{2}-\d{2}$/.test(lead.scheduled_day));
 }
 
+/**
+ * Sentinel prefix stamped onto `leads.calendar_event_id` while a
+ * createCalendarEvent call is in flight (see
+ * /api/leads/[id]/calendar POST). Any reader touching the column must
+ * treat the sentinel as "no real Google event" — passing it to
+ * update/deleteCalendarEvent would 404 (at best) or clobber the
+ * in-flight claim (at worst).
+ */
+export const CALENDAR_PENDING_PREFIX = "pending:";
+
+export function isPendingCalendarClaim(id: string | null | undefined): boolean {
+  return typeof id === "string" && id.startsWith(CALENDAR_PENDING_PREFIX);
+}
+
+export function realCalendarEventId(id: string | null | undefined): string | null {
+  if (!id || isPendingCalendarClaim(id)) return null;
+  return id;
+}
+
 export async function createCalendarEvent(
   accessToken: string,
   lead: Lead

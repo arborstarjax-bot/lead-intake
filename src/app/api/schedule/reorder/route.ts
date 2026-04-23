@@ -11,9 +11,11 @@ import {
 } from "@/lib/schedule";
 import { getAccessToken } from "@/lib/google/oauth";
 import {
-  createCalendarEvent,
-  updateCalendarEvent,
   canSchedule,
+  createCalendarEvent,
+  isPendingCalendarClaim,
+  realCalendarEventId,
+  updateCalendarEvent,
 } from "@/lib/google/calendar";
 import type { Lead } from "@/lib/types";
 
@@ -245,9 +247,17 @@ export async function POST(req: Request) {
       continue;
     }
 
+    // Another request is mid-create on this lead's calendar event. Skip
+    // so we don't pass the "pending:" sentinel to updateCalendarEvent.
+    if (isPendingCalendarClaim(lead.calendar_event_id)) {
+      results.push({ leadId: id, label, oldTime, newTime, calendar: "skipped" });
+      continue;
+    }
+
+    const realEventId = realCalendarEventId(lead.calendar_event_id);
     const unchanged =
       normalizeTime(oldTime) === newTime &&
-      lead.calendar_event_id &&
+      realEventId &&
       lead.calendar_scheduled_day === parsed.date &&
       normalizeTime(lead.calendar_scheduled_time) === newTime;
     if (unchanged) {
@@ -256,8 +266,8 @@ export async function POST(req: Request) {
     }
 
     try {
-      const event = lead.calendar_event_id
-        ? await updateCalendarEvent(token, lead.calendar_event_id, leadNext)
+      const event = realEventId
+        ? await updateCalendarEvent(token, realEventId, leadNext)
         : await createCalendarEvent(token, leadNext);
       await supabase
         .from("leads")
@@ -274,7 +284,7 @@ export async function POST(req: Request) {
         label,
         oldTime,
         newTime,
-        calendar: lead.calendar_event_id ? "updated" : "created",
+        calendar: realEventId ? "updated" : "created",
       });
     } catch (e) {
       results.push({

@@ -3,32 +3,16 @@ import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getAccessToken } from "@/lib/google/oauth";
 import {
-  createCalendarEvent,
-  updateCalendarEvent,
-  deleteCalendarEvent,
+  CALENDAR_PENDING_PREFIX,
   canSchedule,
+  createCalendarEvent,
+  deleteCalendarEvent,
+  isPendingCalendarClaim,
+  updateCalendarEvent,
 } from "@/lib/google/calendar";
 import { requireMembership } from "@/lib/auth";
 
 export const runtime = "nodejs";
-
-/**
- * Sentinel prefix on leads.calendar_event_id while a create is in
- * flight. Two users tapping "Add to Calendar" at the same time both
- * see calendar_event_id=null; without this, both call
- * createCalendarEvent and only the last-saved id is remembered,
- * leaking an orphan event on Google's side with no DB pointer.
- *
- * The claim is a conditional update: exactly one writer wins the race
- * by flipping null → "pending:<uuid>" via `.is("calendar_event_id", null)`.
- * The loser sees the claim and bails with 409. The winner calls
- * Google, then swaps the sentinel for the real event id.
- */
-const PENDING_PREFIX = "pending:";
-
-function isPendingClaim(id: string | null | undefined): boolean {
-  return typeof id === "string" && id.startsWith(PENDING_PREFIX);
-}
 
 export async function POST(
   _req: NextRequest,
@@ -57,7 +41,7 @@ export async function POST(
 
   // Another tab / user is mid-create. Bail out so we don't double-book.
   // The caller can retry after the other create finishes.
-  if (isPendingClaim(lead.calendar_event_id)) {
+  if (isPendingCalendarClaim(lead.calendar_event_id)) {
     return NextResponse.json(
       { error: "A calendar sync is already in progress for this lead. Try again in a moment." },
       { status: 409 }
@@ -106,7 +90,7 @@ export async function POST(
       // Claim creation rights atomically. `.is("calendar_event_id", null)`
       // gates the UPDATE on the row still being unclaimed; RETURNING id
       // via `.select` tells us whether we won the race.
-      claimToken = `${PENDING_PREFIX}${randomUUID()}`;
+      claimToken = `${CALENDAR_PENDING_PREFIX}${randomUUID()}`;
       const { data: claimed } = await supabase
         .from("leads")
         .update({ calendar_event_id: claimToken })
@@ -126,7 +110,7 @@ export async function POST(
           .eq("id", id)
           .eq("workspace_id", auth.workspaceId)
           .single();
-        if (fresh?.calendar_event_id && !isPendingClaim(fresh.calendar_event_id)) {
+        if (fresh?.calendar_event_id && !isPendingCalendarClaim(fresh.calendar_event_id)) {
           return NextResponse.json({ eventId: fresh.calendar_event_id, already: true });
         }
         return NextResponse.json(
@@ -151,16 +135,54 @@ export async function POST(
       }
     }
 
-    await supabase
-      .from("leads")
-      .update({
-        calendar_event_id: event.id,
-        calendar_scheduled_day: desiredDay,
-        calendar_scheduled_time: desiredTime,
-        status: nextStatus,
-      })
-      .eq("id", id)
-      .eq("workspace_id", auth.workspaceId);
+    // When we claimed the create, only write the real event id if the
+    // row *still* holds our sentinel. Otherwise a concurrent DELETE (or
+    // PATCH cleanup) that ran between createCalendarEvent and this UPDATE
+    // would have its null-out silently clobbered, re-resurrecting the
+    // event the user just deleted. If the claim lost, roll back Google.
+    if (claimToken) {
+      const { data: finalRow } = await supabase
+        .from("leads")
+        .update({
+          calendar_event_id: event.id,
+          calendar_scheduled_day: desiredDay,
+          calendar_scheduled_time: desiredTime,
+          status: nextStatus,
+        })
+        .eq("id", id)
+        .eq("workspace_id", auth.workspaceId)
+        .eq("calendar_event_id", claimToken)
+        .select("id")
+        .maybeSingle();
+
+      if (!finalRow) {
+        // Claim invalidated mid-flight (e.g. concurrent DELETE). Delete
+        // the Google event we just created so we don't leak an orphan.
+        try {
+          await deleteCalendarEvent(token, event.id);
+        } catch {
+          // Best-effort cleanup — swallow.
+        }
+        return NextResponse.json(
+          {
+            error: "Calendar state changed while syncing — try again.",
+            reason: "claim_invalidated",
+          },
+          { status: 409 }
+        );
+      }
+    } else {
+      await supabase
+        .from("leads")
+        .update({
+          calendar_event_id: event.id,
+          calendar_scheduled_day: desiredDay,
+          calendar_scheduled_time: desiredTime,
+          status: nextStatus,
+        })
+        .eq("id", id)
+        .eq("workspace_id", auth.workspaceId);
+    }
 
     return NextResponse.json({ eventId: event.id, htmlLink: event.htmlLink });
   } catch (e) {
@@ -194,7 +216,7 @@ export async function DELETE(
 
   // Skip the Google call for pending-claim sentinels — those aren't real
   // event ids and deleteCalendarEvent would 404.
-  if (lead.calendar_event_id && !isPendingClaim(lead.calendar_event_id)) {
+  if (lead.calendar_event_id && !isPendingCalendarClaim(lead.calendar_event_id)) {
     const token = await getAccessToken(auth.userId);
     if (token) {
       try {
