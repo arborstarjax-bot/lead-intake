@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { getSessionMembership } from "@/modules/auth";
 import { createAdminClient, createSSRClient } from "@/modules/shared/supabase/server";
-import { getBillingState, getUploadsInLastDay } from "@/lib/billing";
+import { getBillingState, getUploadsInLastDay } from "@/modules/billing";
 import { WorkspaceClient } from "@/modules/workspace";
 import { OrphanWorkspaceClient } from "./OrphanWorkspaceClient";
-import { BillingSummary } from "./BillingSummary";
+import { BillingSummary } from "@/modules/billing";
 
 export const dynamic = "force-dynamic";
 

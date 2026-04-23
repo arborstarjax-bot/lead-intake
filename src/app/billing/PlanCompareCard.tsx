@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/components/Toast";
-import type { BillingState } from "@/lib/billing";
+import type { BillingState } from "@/modules/billing";
 
 export function PlanCompareCard({ billing }: { billing: BillingState }) {
   const currentPlan = billing.plan;

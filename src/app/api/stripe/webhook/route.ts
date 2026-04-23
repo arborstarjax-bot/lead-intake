@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { stripe, inferPlanFromSubscription } from "@/lib/stripe";
+import { stripe, inferPlanFromSubscription } from "@/modules/billing";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import type { SubscriptionStatus, WorkspacePlan } from "@/lib/billing";
+import type { SubscriptionStatus, WorkspacePlan } from "@/modules/billing";
 
 export const runtime = "nodejs";
 // Stripe signs the raw bytes, so we need to read them before any JSON

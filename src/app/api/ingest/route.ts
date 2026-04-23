@@ -5,7 +5,7 @@ import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth";
 import { checkRateLimit, rateLimitKey, refundRateLimit } from "@/modules/ingest";
-import { PRICING, getBillingState } from "@/lib/billing";
+import { PRICING, getBillingState } from "@/modules/billing";
 import { getSettings } from "@/lib/settings";
 import type { Lead } from "@/modules/leads/model";
 
