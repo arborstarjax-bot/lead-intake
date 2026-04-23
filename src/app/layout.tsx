@@ -5,6 +5,7 @@ import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { BottomNav } from "@/components/BottomNav";
+import { OfflineQueueReplayer } from "@/components/OfflineQueueReplayer";
 
 const sans = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -52,6 +53,7 @@ export default function RootLayout({
             <SettingsProvider>
               {children}
               <BottomNav />
+              <OfflineQueueReplayer />
             </SettingsProvider>
           </ConfirmProvider>
         </ToastProvider>
