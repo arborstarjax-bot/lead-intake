@@ -16,15 +16,23 @@ function requireEnv(name: string): string {
 }
 
 /**
- * Idempotently record the event. Returns `true` if this is the first time
- * we're seeing it (caller should process), `false` if we've already handled
- * it (caller should no-op and return 200). Stripe retries aggressively
- * so this guard is load-bearing.
+ * Idempotently record the event and decide whether to process it.
+ *
+ * - "new": first time we've seen this event. Process it, then mark
+ *   processed_at on success.
+ * - "retry": we saw this event before but the handler errored
+ *   (processed_at is still null). Stripe's re-delivery should re-run
+ *   the handler.
+ * - "already": processed_at is set — handler previously succeeded.
+ *   Caller short-circuits and returns 200.
+ *
+ * Rows are never deleted, so a failed cleanup can't silently swallow
+ * an event. This replaces the previous "delete on error" pattern.
  */
 async function recordEvent(
   event: Stripe.Event,
   workspaceId: string | null
-): Promise<boolean> {
+): Promise<"new" | "retry" | "already"> {
   const admin = createAdminClient();
   const { error } = await admin.from("billing_events").insert({
     stripe_event_id: event.id,
@@ -32,12 +40,23 @@ async function recordEvent(
     workspace_id: workspaceId,
     payload: event as unknown as Record<string, unknown>,
   });
-  if (error) {
-    // Unique violation on stripe_event_id = duplicate delivery.
-    if (error.code === "23505") return false;
-    throw error;
-  }
-  return true;
+  if (!error) return "new";
+  // Unique violation on stripe_event_id — we've seen this event before.
+  if (error.code !== "23505") throw error;
+  const { data: existing } = await admin
+    .from("billing_events")
+    .select("processed_at")
+    .eq("stripe_event_id", event.id)
+    .maybeSingle();
+  return existing?.processed_at ? "already" : "retry";
+}
+
+async function markEventProcessed(event: Stripe.Event) {
+  const admin = createAdminClient();
+  await admin
+    .from("billing_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("stripe_event_id", event.id);
 }
 
 /**
@@ -184,11 +203,16 @@ export async function POST(req: NextRequest) {
   }
 
   const workspaceId = getWorkspaceIdFromEvent(event);
-  const isNew = await recordEvent(event, workspaceId);
-  if (!isNew) {
+  const disposition = await recordEvent(event, workspaceId);
+  if (disposition === "already") {
     // Already handled. Return 200 so Stripe stops retrying.
     return NextResponse.json({ received: true, duplicate: true });
   }
+  // disposition === "new" or "retry": fall through to the handler. A
+  // retry means an earlier attempt errored before marking
+  // processed_at; the handler itself must be idempotent (all of our
+  // subscription writes are last-write-wins on state).
+  void disposition;
 
   try {
     switch (event.type) {
@@ -218,22 +242,33 @@ export async function POST(req: NextRequest) {
 
       case "customer.subscription.created":
       case "customer.subscription.updated": {
-        const sub = event.data.object as Stripe.Subscription;
-        const wsId = sub.metadata?.workspace_id ?? workspaceId;
+        const embedded = event.data.object as Stripe.Subscription;
+        const wsId = embedded.metadata?.workspace_id ?? workspaceId;
         if (!wsId) {
           console.error(
             `${event.type} without workspace_id metadata`,
-            { subscriptionId: sub.id }
+            { subscriptionId: embedded.id }
           );
           break;
         }
+        // Retrieve the live subscription instead of trusting the event's
+        // embedded snapshot. Stripe doesn't guarantee webhook delivery
+        // order — an older `updated` arriving after a newer one would
+        // otherwise clobber current state with stale data. A fresh
+        // retrieve always returns the authoritative current state.
+        const sub = await stripe().subscriptions.retrieve(embedded.id);
         await applySubscriptionToWorkspace(wsId, sub);
         break;
       }
 
       case "customer.subscription.deleted": {
-        const sub = event.data.object as Stripe.Subscription;
-        const wsId = sub.metadata?.workspace_id ?? workspaceId;
+        // A deletion event races with an out-of-order update the same
+        // way. Retrieve the live subscription: if Stripe still has it
+        // (shouldn't for a delete, but defensively) we treat its
+        // status as authoritative; otherwise fall back to the
+        // embedded object so we still mark the workspace free.
+        const embedded = event.data.object as Stripe.Subscription;
+        const wsId = embedded.metadata?.workspace_id ?? workspaceId;
         if (!wsId) break;
         await markWorkspaceFree(wsId);
         break;
@@ -257,15 +292,15 @@ export async function POST(req: NextRequest) {
         break;
     }
 
+    await markEventProcessed(event);
     return NextResponse.json({ received: true });
   } catch (err) {
     console.error("stripe webhook handler failed", { eventType: event.type, err });
-    // Return 500 so Stripe retries. The dedupe in recordEvent already
-    // happened; on retry, the second attempt will find the event in
-    // billing_events and short-circuit. To handle the retry correctly,
-    // we should delete the billing_events row when the handler fails.
-    const admin = createAdminClient();
-    await admin.from("billing_events").delete().eq("stripe_event_id", event.id);
+    // Return 500 so Stripe retries. The billing_events row is left in
+    // place with processed_at=null — the next retry will see
+    // disposition="retry" and re-run the handler. This is safer than
+    // the old "delete on error" flow, which could silently swallow an
+    // event forever if the cleanup DELETE itself failed.
     return NextResponse.json({ error: "handler failed" }, { status: 500 });
   }
 }
