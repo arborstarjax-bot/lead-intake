@@ -167,13 +167,20 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
       return match ? match.created_at < ourCreatedAt : false;
     });
     if (earlierHardMatch) {
-      postInsertDuplicates = raceDuplicates;
-      finalIntakeStatus = "needs_review";
-      await admin
+      // Demote in DB first; only mutate the response state if the
+      // update actually lands. Otherwise we'd return needs_review +
+      // the duplicate list while the row stays `ready` in the DB —
+      // the API route re-fetches the lead to build the response, so
+      // the client would see contradictory intake_status values on
+      // the same lead in the same payload.
+      const { error: updateErr } = await admin
         .from("leads")
         .update({ intake_status: "needs_review" })
         .eq("id", inserted.id)
         .eq("workspace_id", args.workspaceId);
+      if (updateErr) throw updateErr;
+      postInsertDuplicates = raceDuplicates;
+      finalIntakeStatus = "needs_review";
     }
   }
 
