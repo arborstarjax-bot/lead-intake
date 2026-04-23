@@ -36,8 +36,8 @@ export function CapacitorLinkHandler() {
     const cap = (window as unknown as CapacitorWindow).Capacitor;
     if (!cap || typeof cap.isNativePlatform !== "function") return;
     if (!cap.isNativePlatform()) return;
-    const openInBrowser = cap.Plugins?.Browser?.open;
-    if (typeof openInBrowser !== "function") return;
+    const browser = cap.Plugins?.Browser;
+    if (!browser) return;
 
     const handler = (event: MouseEvent) => {
       const target = event.target as Element | null;
@@ -53,7 +53,12 @@ export function CapacitorLinkHandler() {
         anchor.hasAttribute("data-external");
       if (!opensInNewTab) return;
       event.preventDefault();
-      openInBrowser({ url: href }).catch(() => {
+      // NOTE: Call through `browser.open(...)` rather than extracting
+      // the method to a local const. Capacitor plugin methods are
+      // class instance methods on a `WebPlugin` subclass and rely on
+      // `this` to reach the native bridge; detaching the method
+      // breaks that binding in strict mode.
+      browser.open({ url: href }).catch(() => {
         // Fallback to default navigation if the native bridge rejects —
         // better a stuck webview than a silent no-op.
         window.location.href = href;
@@ -74,8 +79,12 @@ type CapacitorWindow = {
   Capacitor?: {
     isNativePlatform?: () => boolean;
     Plugins?: {
+      // `Browser` itself is optional (the plugin may not be installed),
+      // but if it's present we assume it has the documented `open`
+      // method. Otherwise TypeScript narrows `open` back to optional
+      // inside the handler closure and complains at the call site.
       Browser?: {
-        open?: (options: { url: string }) => Promise<void>;
+        open: (options: { url: string }) => Promise<void>;
       };
     };
   };
