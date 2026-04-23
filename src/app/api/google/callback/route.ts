@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForTokens, saveTokens } from "@/lib/google/oauth";
+import { exchangeCodeForTokens, saveTokens } from "@/modules/calendar";
 import { getSessionMembership } from "@/modules/auth";
 
 export const runtime = "nodejs";

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { getAccessToken } from "@/lib/google/oauth";
+import { getAccessToken } from "@/modules/calendar";
 import { requireMembership } from "@/modules/auth";
 import {
   canSchedule,
@@ -9,7 +9,7 @@ import {
   isPendingCalendarClaim,
   realCalendarEventId,
   updateCalendarEvent,
-} from "@/lib/google/calendar";
+} from "@/modules/calendar";
 import type { Lead } from "@/modules/leads/model";
 
 export const runtime = "nodejs";

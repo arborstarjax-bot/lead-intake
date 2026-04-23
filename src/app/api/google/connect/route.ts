@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { googleAuthUrl } from "@/lib/google/oauth";
+import { googleAuthUrl } from "@/modules/calendar";
 import { requireMembership } from "@/modules/auth";
 import { randomBytes } from "node:crypto";
 
