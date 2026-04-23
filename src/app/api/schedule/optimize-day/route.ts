@@ -3,8 +3,8 @@ import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth";
-import { MapsUnavailableError, getDriveMatrix } from "@/lib/maps";
-import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
+import { MapsUnavailableError, getDriveMatrix } from "@/modules/routing";
+import { leadAddressString, parseHHMM, formatHHMM } from "@/modules/schedule";
 import { getAccessToken } from "@/lib/google/oauth";
 import {
   canSchedule,

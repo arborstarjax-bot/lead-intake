@@ -3,8 +3,8 @@ import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth";
-import { suggestSlots } from "@/lib/schedule";
-import { MapsUnavailableError } from "@/lib/maps";
+import { suggestSlots } from "@/modules/schedule";
+import { MapsUnavailableError } from "@/modules/routing";
 import type { Lead } from "@/modules/leads/model";
 import { todayIsoInBusinessTz } from "@/modules/shared/date";
 

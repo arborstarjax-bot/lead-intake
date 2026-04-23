@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth";
-import { MapsUnavailableError, createDriveMemo } from "@/lib/maps";
-import { geocodeMany, type LatLng } from "@/lib/geocode";
-import { leadAddressString, parseHHMM, formatHHMM } from "@/lib/schedule";
+import { MapsUnavailableError, createDriveMemo } from "@/modules/routing";
+import { geocodeMany, type LatLng } from "@/modules/routing";
+import { leadAddressString, parseHHMM, formatHHMM } from "@/modules/schedule";
 import { todayIsoInBusinessTz } from "@/modules/shared/date";
 import type { Lead, LeadFlexWindow } from "@/modules/leads/model";
 

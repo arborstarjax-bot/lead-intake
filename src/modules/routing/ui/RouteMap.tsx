@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { loadGoogleMaps } from "@/lib/google-maps-loader";
+import { loadGoogleMaps } from "@/modules/routing";
 
 export type RouteMapStop = {
   id: string;
