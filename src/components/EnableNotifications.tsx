@@ -80,7 +80,23 @@ export default function EnableNotifications() {
       // `platform` must come from Capacitor.getPlatform() to avoid
       // storing Android FCM tokens as iOS subscriptions (which would
       // fail silently when the APNs fan-out ships).
-      const platform = getNativePlatform() ?? "ios";
+      //
+      // If the probe returns null we refuse to register rather than
+      // default to a platform — a wrong default would mis-route the
+      // device's token on the server side. In practice this branch
+      // is unreachable: isIosShellWindow() required window.Capacitor
+      // to exist, and the same global carries getPlatform().
+      const platform = getNativePlatform();
+      if (!platform) {
+        toast({
+          kind: "error",
+          message:
+            "Couldn't detect the native platform. Please reopen the app and try again.",
+          duration: 6000,
+        });
+        setStatus("prompt");
+        return;
+      }
       await enableNative({ platform, onError: toast, onStatus: setStatus });
       return;
     }
