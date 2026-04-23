@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { EDITABLE_COLUMNS, LEAD_STATUSES } from "@/modules/leads/model";
 import { displayName, normalizeEmail, normalizePhone, normalizeState, normalizeZip } from "@/modules/shared/format";
-import { getAccessToken } from "@/lib/google/oauth";
+import { getAccessToken } from "@/modules/calendar";
 import {
   deleteCalendarEvent,
   isPendingCalendarClaim,
-} from "@/lib/google/calendar";
+} from "@/modules/calendar";
 import { requireMembership } from "@/modules/auth";
 
 export const runtime = "nodejs";

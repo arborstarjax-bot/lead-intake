@@ -5,14 +5,14 @@ import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth";
 import { MapsUnavailableError, getDriveMatrix } from "@/modules/routing";
 import { leadAddressString, parseHHMM, formatHHMM } from "@/modules/schedule";
-import { getAccessToken } from "@/lib/google/oauth";
+import { getAccessToken } from "@/modules/calendar";
 import {
   canSchedule,
   createCalendarEvent,
   isPendingCalendarClaim,
   realCalendarEventId,
   updateCalendarEvent,
-} from "@/lib/google/calendar";
+} from "@/modules/calendar";
 import type { Lead } from "@/modules/leads/model";
 
 export const runtime = "nodejs";
