@@ -4,7 +4,7 @@ import { maybeConvertHeic } from "@/lib/convert-heic";
 import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireMembership } from "@/lib/auth";
-import { checkRateLimit, rateLimitKey } from "@/lib/rateLimit";
+import { checkRateLimit, rateLimitKey, refundRateLimit } from "@/lib/rateLimit";
 import { PRICING, getBillingState, getUploadsInLastDay } from "@/lib/billing";
 import { getSettings } from "@/lib/settings";
 import type { Lead } from "@/lib/types";
@@ -67,8 +67,9 @@ export async function POST(req: NextRequest) {
     //      Vercel instances handling concurrent requests can each grant
     //      up to 50 uploads, doubling real consumption. `getUploadsInLastDay`
     //      is the same source of truth used by the /billing meter.
+    const rlKey = rateLimitKey(["ingest", auth.workspaceId]);
     const limit = checkRateLimit({
-      key: rateLimitKey(["ingest", auth.workspaceId]),
+      key: rlKey,
       limit: INGEST_LIMIT_PER_DAY,
       windowMs: INGEST_WINDOW_MS,
       cost: files.length,
@@ -102,6 +103,12 @@ export async function POST(req: NextRequest) {
     const usedToday = await getUploadsInLastDay(auth.workspaceId);
     if (usedToday + files.length > INGEST_LIMIT_PER_DAY) {
       const remaining = Math.max(0, INGEST_LIMIT_PER_DAY - usedToday);
+      // Refund the in-memory slots we just claimed. Without this, each
+      // rejected-by-DB request still consumes quota in the per-process
+      // sliding window, and a caller bumping against the DB cap would
+      // eventually be throttled below it by the in-memory limiter
+      // alone — which is meant to be load-shedding, not a second cap.
+      refundRateLimit({ key: rlKey, cost: files.length });
       return NextResponse.json(
         {
           error:
