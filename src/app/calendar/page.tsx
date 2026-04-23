@@ -6,8 +6,33 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { LEAD_FLEX_WINDOW_DISPLAY, type Lead } from "@/lib/types";
+import {
+  salespersonColor,
+  normalizeSalespersonKey,
+  UNASSIGNED_LABEL,
+} from "@/lib/salesperson-color";
 
 type CalendarView = "month" | "week";
+
+/** Sentinel filter value meaning "no filter". */
+const ALL_SALESPEOPLE = "__all__";
+/** Sentinel key used as the filter value + map key for unassigned leads. */
+const UNASSIGNED_KEY = "__unassigned__";
+
+/**
+ * Group key for a lead based on its sales_person. Empty/null collapse to
+ * a single "unassigned" bucket so the filter dropdown stays compact.
+ */
+function salespersonGroupKey(lead: Lead): string {
+  const key = normalizeSalespersonKey(lead.sales_person);
+  return key || UNASSIGNED_KEY;
+}
+
+/** Human-readable label for a group key (handles the unassigned sentinel). */
+function salespersonLabel(key: string, source?: string | null): string {
+  if (key === UNASSIGNED_KEY) return UNASSIGNED_LABEL;
+  return source?.trim() || key;
+}
 
 /**
  * In-app calendar. Two modes:
@@ -22,6 +47,10 @@ export default function CalendarPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<CalendarView>("month");
+  // Salesperson filter. Default is "View all" so a new workspace sees the
+  // same calendar as before this feature shipped.
+  const [selectedSalesperson, setSelectedSalesperson] =
+    useState<string>(ALL_SALESPEOPLE);
   // Month view anchors on a (year, month). Week view anchors on the
   // Sunday of the visible week. We track the two independently so
   // flipping views keeps the user near where they were looking.
@@ -45,11 +74,45 @@ export default function CalendarPage() {
   }, []);
 
   const todayIso = useMemo(() => toIso(new Date()), []);
+
+  // Salespeople present in the loaded data, deduplicated + sorted for a
+  // stable dropdown. Computed from the full lead set so the filter UI is
+  // aware of teammates even if the current view filters them out.
+  const salespeopleOnCalendar = useMemo(() => {
+    // key -> first-seen display name. Preserves original capitalization
+    // ("Jane" over "jane") by only storing the first occurrence.
+    const seen = new Map<string, string | null>();
+    for (const l of leads) {
+      if (!l.scheduled_day) continue;
+      if (l.status === "Completed" || l.status === "Lost") continue;
+      const key = salespersonGroupKey(l);
+      if (!seen.has(key)) seen.set(key, l.sales_person ?? null);
+    }
+    const entries = Array.from(seen.entries()).map(([key, source]) => ({
+      key,
+      label: salespersonLabel(key, source),
+      color: salespersonColor(source),
+    }));
+    // Unassigned sorts last so it doesn't lead the legend.
+    entries.sort((a, b) => {
+      if (a.key === UNASSIGNED_KEY) return 1;
+      if (b.key === UNASSIGNED_KEY) return -1;
+      return a.label.localeCompare(b.label);
+    });
+    return entries;
+  }, [leads]);
+
   const leadsByDay = useMemo(() => {
     const byDay = new Map<string, Lead[]>();
     for (const l of leads) {
       if (!l.scheduled_day) continue;
       if (l.status === "Completed" || l.status === "Lost") continue;
+      if (
+        selectedSalesperson !== ALL_SALESPEOPLE &&
+        salespersonGroupKey(l) !== selectedSalesperson
+      ) {
+        continue;
+      }
       const arr = byDay.get(l.scheduled_day) ?? [];
       arr.push(l);
       byDay.set(l.scheduled_day, arr);
@@ -63,13 +126,13 @@ export default function CalendarPage() {
       });
     }
     return byDay;
-  }, [leads]);
+  }, [leads, selectedSalesperson]);
 
   return (
     <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-6">
       <PageHeader title="Calendar" />
 
-      <div className="flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
         <div className="inline-flex rounded-full border border-[var(--border)] bg-white p-1">
           {(["month", "week"] as CalendarView[]).map((v) => (
             <button
@@ -88,7 +151,66 @@ export default function CalendarPage() {
             </button>
           ))}
         </div>
+
+        {/* Salesperson filter. Only render when the workspace has actually
+           assigned leads to salespeople — otherwise the dropdown would
+           just say "View all · Unassigned". */}
+        {salespeopleOnCalendar.length > 0 && (
+          <label className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-white pl-3 pr-1 h-9 text-xs">
+            <span className="text-[var(--muted)] font-medium">Salesperson</span>
+            <select
+              value={selectedSalesperson}
+              onChange={(e) => setSelectedSalesperson(e.target.value)}
+              className="h-7 pr-6 pl-2 rounded-full bg-transparent text-[var(--fg)] font-semibold focus:outline-none"
+            >
+              <option value={ALL_SALESPEOPLE}>View all</option>
+              {salespeopleOnCalendar.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
+
+      {/* Color legend. Mirrors the filter dropdown but stays visible so
+         users can always see who owns which color. Hidden when nobody
+         is assigned. Dots are deterministic from the sales_person name
+         — same name renders the same color everywhere. */}
+      {salespeopleOnCalendar.length > 0 && (
+        <div className="flex flex-wrap items-center justify-center gap-2 text-[11px]">
+          {salespeopleOnCalendar.map((s) => {
+            const isActive =
+              selectedSalesperson === ALL_SALESPEOPLE ||
+              selectedSalesperson === s.key;
+            return (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() =>
+                  setSelectedSalesperson((prev) =>
+                    prev === s.key ? ALL_SALESPEOPLE : s.key
+                  )
+                }
+                aria-pressed={selectedSalesperson === s.key}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors",
+                  isActive
+                    ? "border-[var(--border)] bg-white text-[var(--fg)]"
+                    : "border-[var(--border)] bg-[var(--surface-2)]/40 text-[var(--muted)]"
+                )}
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full"
+                  style={{ background: s.color.dot }}
+                />
+                <span className="font-medium">{s.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {view === "month" ? (
         <MonthView
@@ -454,6 +576,11 @@ function WeekEventBlock({
   const href = lead.scheduled_day
     ? `/route?day=${lead.scheduled_day}`
     : "/route";
+  // Color is keyed on sales_person so a teammate's events look uniform
+  // across the week. `salespersonColor` is deterministic — same name,
+  // same color across reloads and across users.
+  const color = salespersonColor(lead.sales_person);
+  const owner = lead.sales_person?.trim() || UNASSIGNED_LABEL;
   // Leads with only a flex window render as a chip at the top of the
   // day column rather than a positioned block, since we don't know when
   // during the window they'll land.
@@ -468,9 +595,19 @@ function WeekEventBlock({
     return (
       <Link
         href={href}
-        className="absolute left-1 right-1 rounded-md bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] font-semibold px-1.5 py-0.5 truncate hover:ring-1 hover:ring-[var(--accent)]"
-        style={{ top, height: CHIP_H }}
-        title={`${client} — ${flexLabel}`}
+        className="absolute left-1 right-1 rounded-md text-[10px] font-semibold px-1.5 py-0.5 truncate hover:ring-1"
+        style={{
+          top,
+          height: CHIP_H,
+          background: color.soft,
+          color: color.fg,
+          // Using a ring via inline style so it picks up the same palette
+          // color on hover without needing a Tailwind class per palette.
+          // The class `hover:ring-1` takes care of the width.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ["--tw-ring-color" as any]: color.solid,
+        }}
+        title={`${client} — ${flexLabel} · ${owner}`}
       >
         {flexLabel} · {client}
       </Link>
@@ -485,9 +622,9 @@ function WeekEventBlock({
   return (
     <Link
       href={href}
-      className="absolute left-1 right-1 rounded-md bg-[var(--accent)]/90 text-white px-1.5 py-0.5 text-[10px] leading-tight overflow-hidden hover:bg-[var(--accent)]"
-      style={{ top, height }}
-      title={`${lead.client ?? "Untitled"} at ${formatHMM(time)}`}
+      className="absolute left-1 right-1 rounded-md text-white px-1.5 py-0.5 text-[10px] leading-tight overflow-hidden hover:brightness-110"
+      style={{ top, height, background: color.solid }}
+      title={`${lead.client ?? "Untitled"} at ${formatHMM(time)} · ${owner}`}
     >
       <div className="font-semibold truncate">{lead.client ?? "Untitled"}</div>
       <div className="opacity-90 truncate">{formatHMM(time)}</div>
@@ -544,13 +681,43 @@ function DayCell({
         )}
       </div>
       {active && (
-        <div className="mt-1 text-[10px] leading-tight text-[var(--muted)] truncate hidden sm:block">
-          {preview}
-          {leads.length > 2 && ` +${leads.length - 2}`}
+        <div className="mt-1 space-y-0.5">
+          {/* Color chips — one per salesperson represented on the day,
+             deduplicated. Gives a visual sense of "who's on today"
+             without reading labels. Capped at 4 so the day cell
+             doesn't wrap on narrow viewports. */}
+          <div className="flex items-center gap-0.5">
+            {uniqueSalespersonColors(leads)
+              .slice(0, 4)
+              .map((c, i) => (
+                <span
+                  key={i}
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ background: c }}
+                />
+              ))}
+          </div>
+          <div className="text-[10px] leading-tight text-[var(--muted)] truncate hidden sm:block">
+            {preview}
+            {leads.length > 2 && ` +${leads.length - 2}`}
+          </div>
         </div>
       )}
     </Link>
   );
+}
+
+/** Stable list of distinct salesperson colors present in the given leads. */
+function uniqueSalespersonColors(leads: Lead[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const l of leads) {
+    const key = normalizeSalespersonKey(l.sales_person) || UNASSIGNED_KEY;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(salespersonColor(l.sales_person).solid);
+  }
+  return out;
 }
 
 function toIso(d: Date): string {
