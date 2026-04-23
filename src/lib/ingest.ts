@@ -9,6 +9,9 @@ type IngestArgs = {
   file: Blob;
   fileName: string;
   source: LeadIntakeSource;
+  /** Fallback salesperson to attribute the lead to when the screenshot
+   *  doesn't include one (e.g. creator's email on manual uploads). */
+  defaultSalesperson?: string | null;
 };
 
 export type IngestResult = {
@@ -109,7 +112,7 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
       state: extracted.state,
       zip: extracted.zip,
       status: "New",
-      sales_person: extracted.sales_person,
+      sales_person: extracted.sales_person ?? args.defaultSalesperson ?? null,
       scheduled_day: extracted.scheduled_day,
       scheduled_time: extracted.scheduled_time,
       notes: extracted.notes,
