@@ -39,24 +39,33 @@ export function OfflineQueueReplayer() {
     let interval: ReturnType<typeof setInterval> | null = null;
 
     async function run() {
+      // Claim the guard synchronously BEFORE any await, otherwise two
+      // triggers firing near-simultaneously (e.g. online + visibilitychange
+      // when a mobile PWA returns to foreground) can both pass the check
+      // before either sets it and we'd replay every queued write twice.
       if (running.current) return;
-      if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        return;
-      }
-      const pending = await pendingCount().catch(() => 0);
-      if (pending === 0) return;
-
       running.current = true;
       let summary: ReplaySummary | null = null;
       try {
-        summary = await replayQueue();
-      } catch {
-        summary = null;
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+          return;
+        }
+        const pending = await pendingCount().catch(() => 0);
+        if (pending === 0) return;
+        try {
+          summary = await replayQueue();
+        } catch {
+          summary = null;
+        }
       } finally {
         running.current = false;
       }
       if (!mounted || !summary) return;
 
+      // Two independent toasts: a single run can both land writes AND
+      // drop others (replayQueue continues past a 4xx max-attempts drop).
+      // Hiding the drop behind an `else if` would let permanently-lost
+      // edits disappear silently under a success message.
       if (summary.replayed > 0) {
         toast({
           kind: "success",
@@ -68,7 +77,8 @@ export function OfflineQueueReplayer() {
         // Refresh server-rendered lists so the just-replayed writes are
         // reflected (lead card status, scheduled time, etc).
         router.refresh();
-      } else if (summary.dropped > 0) {
+      }
+      if (summary.dropped > 0) {
         toast({
           kind: "error",
           message:
