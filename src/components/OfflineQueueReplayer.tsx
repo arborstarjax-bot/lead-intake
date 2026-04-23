@@ -87,6 +87,25 @@ export function OfflineQueueReplayer() {
               : `${summary.dropped} offline changes failed and were dropped`,
         });
       }
+      if (summary.authRequired) {
+        // Distinct from the "dropped" toast: the queue is intact, it
+        // just needs a signed-in session to drain. Previously 401s
+        // burned through the 3-attempt 4xx budget and silently
+        // dropped the user's work.
+        toast({
+          kind: "error",
+          message:
+            summary.remaining === 1
+              ? "Sign in again to sync 1 offline change"
+              : `Sign in again to sync ${summary.remaining} offline changes`,
+          action: {
+            label: "Sign in",
+            onClick: () => {
+              router.push("/login");
+            },
+          },
+        });
+      }
     }
 
     // Initial attempt after mount.

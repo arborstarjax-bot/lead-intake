@@ -26,7 +26,8 @@ export type QueuedWrite = {
   id: number;
   url: string;
   method: string;
-  body: string;
+  /** JSON body string, or null for bodyless methods like DELETE. */
+  body: string | null;
   /** Optional label shown in the "N pending" toast. */
   label?: string;
   createdAt: number;
@@ -80,7 +81,7 @@ async function tx<T>(
 export async function enqueueWrite(input: {
   url: string;
   method: string;
-  body: string;
+  body: string | null;
   label?: string;
 }): Promise<number> {
   const record = {
@@ -146,6 +147,11 @@ export async function fetchWithOfflineQueue(
   const body = typeof fetchInit.body === "string" ? fetchInit.body : null;
   const method = (fetchInit.method ?? "GET").toUpperCase();
 
+  // Only mutation requests are replayable. GETs are idempotent reads
+  // that should hit the network fresh or fail — queueing them would
+  // just pile up stale requests.
+  const replayable = method !== "GET" && method !== "HEAD";
+
   // Offline gate: shortcut directly to enqueue without burning a request.
   // `navigator.onLine` is lossy on some platforms (returns true while
   // captive-portal'd), but combined with the catch block below it's
@@ -153,7 +159,7 @@ export async function fetchWithOfflineQueue(
   const knownOffline =
     typeof navigator !== "undefined" && navigator.onLine === false;
 
-  if (knownOffline && body !== null) {
+  if (knownOffline && replayable) {
     const id = await enqueueWrite({ url, method, body, label });
     return queuedResponse(id);
   }
@@ -162,9 +168,9 @@ export async function fetchWithOfflineQueue(
     return await fetch(url, fetchInit);
   } catch (err) {
     // Any thrown fetch() is a network-level failure (DNS, offline, CORS,
-    // or abort). If we have a replayable body, queue it. Otherwise
+    // or abort). If the request is replayable, queue it. Otherwise
     // re-throw so callers handle it normally.
-    if (body !== null) {
+    if (replayable) {
       const id = await enqueueWrite({ url, method, body, label });
       return queuedResponse(id);
     }
@@ -204,6 +210,13 @@ export type ReplaySummary = {
   dropped: number;
   remaining: number;
   stoppedOnError: boolean;
+  /**
+   * True when replay halted on a 401. The queue is intact; the user
+   * needs to re-authenticate and then replay will pick up where it
+   * left off. Surfaced as a distinct toast so offline edits aren't
+   * silently dropped on a lapsed session.
+   */
+  authRequired: boolean;
 };
 
 const MAX_ATTEMPTS_PER_CLIENT_ERROR = 3;
@@ -215,15 +228,30 @@ export async function replayQueue(): Promise<ReplaySummary> {
   let replayed = 0;
   let dropped = 0;
   let stoppedOnError = false;
+  let authRequired = false;
 
   for (const row of pending) {
     try {
-      const res = await fetch(row.url, {
-        method: row.method,
-        headers: { "content-type": "application/json" },
-        body: row.body,
-      });
+      const init: RequestInit = { method: row.method };
+      if (row.body !== null && row.body !== undefined) {
+        init.headers = { "content-type": "application/json" };
+        init.body = row.body;
+      }
+      const res = await fetch(row.url, init);
       if (res.ok) {
+        await removeWrite(row.id);
+        replayed += 1;
+      } else if (res.status === 401) {
+        // Session lapsed. Keep the queue intact — the user needs to
+        // sign back in. Surface via authRequired so the UI can show a
+        // "Sign in to sync N changes" prompt instead of silently
+        // dropping work after 3 retries.
+        authRequired = true;
+        stoppedOnError = true;
+        break;
+      } else if (res.status === 404 && row.method === "DELETE") {
+        // Idempotent delete: the row is already gone on the server
+        // (another actor, or a duplicate replay). Treat as success.
         await removeWrite(row.id);
         replayed += 1;
       } else if (res.status >= 400 && res.status < 500) {
@@ -248,7 +276,7 @@ export async function replayQueue(): Promise<ReplaySummary> {
   }
 
   const remaining = (await listPending()).length;
-  return { replayed, dropped, remaining, stoppedOnError };
+  return { replayed, dropped, remaining, stoppedOnError, authRequired };
 }
 
 export async function pendingCount(): Promise<number> {
