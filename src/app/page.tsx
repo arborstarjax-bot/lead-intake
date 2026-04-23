@@ -9,7 +9,7 @@ import {
   Plus,
   Users,
 } from "lucide-react";
-import UploadBox from "@/components/UploadBox";
+import { UploadBox } from "@/modules/ingest";
 import { StandaloneLeadCard } from "@/modules/leads";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
