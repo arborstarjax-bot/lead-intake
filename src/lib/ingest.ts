@@ -120,16 +120,69 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
       intake_source: args.source,
       intake_status: intakeStatus,
     })
-    .select("id, intake_status")
+    .select("id, intake_status, created_at")
     .single();
   if (insertErr) throw insertErr;
+
+  // Post-insert dedupe sweep. The pre-insert check can miss a duplicate
+  // when two uploads of the same lead race each other — both read an
+  // active-lead list that doesn't yet contain the other, both pass the
+  // check, and both insert. Re-query now that our own row is in place
+  // and look for anything that matches on phone / email (the hard
+  // criteria). If a match exists AND was created earlier than ours,
+  // we lost the race: demote to needs_review so the user sees the
+  // dupe warning instead of the new row silently going "ready".
+  let postInsertDuplicates: ReturnType<typeof findDuplicates> = duplicates;
+  let finalIntakeStatus: Lead["intake_status"] = inserted.intake_status;
+  if (isSaveable(extracted) && intakeStatus === "ready") {
+    const { data: after } = await admin
+      .from("leads")
+      .select("id, first_name, last_name, phone_number, email, address, status, created_at")
+      .eq("workspace_id", args.workspaceId)
+      .neq("status", "Completed")
+      .neq("id", inserted.id);
+    const afterList = (after ?? []) as (Pick<
+      Lead,
+      "id" | "first_name" | "last_name" | "phone_number" | "email" | "address" | "status"
+    > & { created_at: string })[];
+    const raceDuplicates = findDuplicates(
+      {
+        phone_number: extracted.phone_number,
+        email: extracted.email,
+        first_name: extracted.first_name,
+        last_name: extracted.last_name,
+        address: extracted.address,
+      },
+      afterList
+    );
+    // Only consider HARD matches (phone/email) for the race check. Name
+    // / address collisions are soft warnings that should stay as warnings
+    // regardless of insert order. And only demote when the colliding row
+    // pre-dates ours — otherwise two simultaneous inserts would both
+    // demote each other and the user sees no "ready" row at all.
+    const ourCreatedAt = inserted.created_at;
+    const earlierHardMatch = raceDuplicates.some((m) => {
+      if (m.reason !== "phone" && m.reason !== "email") return false;
+      const match = afterList.find((r) => r.id === m.lead.id);
+      return match ? match.created_at < ourCreatedAt : false;
+    });
+    if (earlierHardMatch) {
+      postInsertDuplicates = raceDuplicates;
+      finalIntakeStatus = "needs_review";
+      await admin
+        .from("leads")
+        .update({ intake_status: "needs_review" })
+        .eq("id", inserted.id)
+        .eq("workspace_id", args.workspaceId);
+    }
+  }
 
   try {
     await admin.from("lead_activities").insert({
       workspace_id: args.workspaceId,
       lead_id: inserted.id,
       type: "lead_intake",
-      details: { source: args.source, intake_status: intakeStatus },
+      details: { source: args.source, intake_status: finalIntakeStatus },
     });
   } catch {
     // Activity log is best-effort; a failure here must not break intake.
@@ -137,8 +190,8 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
 
   return {
     lead_id: inserted.id,
-    intake_status: inserted.intake_status,
-    duplicates,
+    intake_status: finalIntakeStatus,
+    duplicates: postInsertDuplicates,
   };
 }
 
