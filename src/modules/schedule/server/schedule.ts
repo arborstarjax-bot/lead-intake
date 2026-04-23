@@ -1,7 +1,7 @@
 import "server-only";
 import type { AppSettings } from "@/lib/settings";
 import { homeAddressString } from "@/lib/settings";
-import { createDriveMemo } from "@/modules/routing";
+import { createDriveMemo } from "@/modules/routing/server";
 import type { Lead } from "@/modules/leads/model";
 
 /** Drive-time callback used internally by suggestSlots. Stable signature so

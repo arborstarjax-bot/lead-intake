@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { getSessionMembership } from "@/modules/auth";
+import { getSessionMembership } from "@/modules/auth/server";
 import { ForgotPasswordForm } from "./ForgotPasswordForm";
 
 export const dynamic = "force-dynamic";

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireMembership, requireAdmin, generateJoinCode } from "@/modules/auth";
+import { requireMembership, requireAdmin, generateJoinCode } from "@/modules/auth/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 
 export const dynamic = "force-dynamic";

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { isGoogleConnected } from "@/modules/calendar";
-import { requireMembership } from "@/modules/auth";
+import { isGoogleConnected } from "@/modules/calendar/server";
+import { requireMembership } from "@/modules/auth/server";
 
 export const runtime = "nodejs";
 

@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { extractLeadFromImage } from "@/modules/ingest";
+import { extractLeadFromImage } from "./ai/extract";
 import { findDuplicates, isSaveable } from "@/modules/leads";
 import { displayName } from "@/modules/shared/format";
 import type { Lead, LeadIntakeSource } from "@/modules/leads/model";

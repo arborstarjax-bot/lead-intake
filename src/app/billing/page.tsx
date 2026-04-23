@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import { getSessionMembership } from "@/modules/auth";
+import { getSessionMembership } from "@/modules/auth/server";
 import {
   getBillingState,
   getUploadsInLastDay,
@@ -9,7 +9,7 @@ import {
   planLabel,
   PRICING,
   type BillingState,
-} from "@/modules/billing";
+} from "@/modules/billing/server";
 import { PlanCompareCard } from "./PlanCompareCard";
 import { ManageBillingButton } from "./ManageBillingButton";
 

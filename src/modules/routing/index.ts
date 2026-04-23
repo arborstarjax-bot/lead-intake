@@ -1,26 +1,11 @@
-// Barrel for the routing module.
+// Client-safe barrel for the routing module.
 //
-// Routing owns everything that touches Google Maps — server-side
-// drive-time / geocode (server/*) and the client-side Maps JS loader
-// + RouteMap React component (client/*, ui/*). Calendar-side Google
-// integration lives in its own module under @/modules/calendar.
+// Only the client-side Maps JS loader + the RouteMap React component
+// are exposed here. Anything that depends on `import "server-only"`
+// (drive-time matrix, geocoder) lives under @/modules/routing/server.
+// Mixing them in a single barrel breaks the webpack client bundle
+// because side-effect imports don't tree-shake reliably.
 
-export {
-  getDriveTime,
-  getDriveMatrix,
-  createDriveMemo,
-  MapsUnavailableError,
-  type DriveResult,
-} from "./server/maps";
-
-export {
-  geocode,
-  geocodeMany,
-  type LatLng,
-} from "./server/geocode";
-
-// Client-only: depends on window + runtime script injection. Keep
-// gated to the components that need it (RouteMap today).
 export { loadGoogleMaps } from "./client/maps-loader";
 
 export { default as RouteMap } from "./ui/RouteMap";

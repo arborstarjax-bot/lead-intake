@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ingestScreenshot } from "@/modules/ingest";
+import { ingestScreenshot, checkRateLimit, rateLimitKey, refundRateLimit } from "@/modules/ingest/server";
 import { maybeConvertHeic } from "@/lib/convert-heic";
 import { sendNewLeadPush } from "@/lib/push";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { requireMembership } from "@/modules/auth";
-import { checkRateLimit, rateLimitKey, refundRateLimit } from "@/modules/ingest";
-import { PRICING, getBillingState } from "@/modules/billing";
+import { requireMembership } from "@/modules/auth/server";
+import { PRICING, getBillingState } from "@/modules/billing/server";
 import { getSettings } from "@/lib/settings";
 import type { Lead } from "@/modules/leads/model";
 

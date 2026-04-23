@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForTokens, saveTokens } from "@/modules/calendar";
-import { getSessionMembership } from "@/modules/auth";
+import { exchangeCodeForTokens, saveTokens } from "@/modules/calendar/server";
+import { getSessionMembership } from "@/modules/auth/server";
 
 export const runtime = "nodejs";
 

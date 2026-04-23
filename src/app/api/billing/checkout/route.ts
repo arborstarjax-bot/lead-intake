@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/modules/auth";
-import { stripe, priceIds } from "@/modules/billing";
+import { requireAdmin } from "@/modules/auth/server";
+import { stripe, priceIds } from "@/modules/billing/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 
 export const runtime = "nodejs";

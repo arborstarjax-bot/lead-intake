@@ -2,21 +2,21 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
-import { requireMembership } from "@/modules/auth";
-import { MapsUnavailableError, createDriveMemo } from "@/modules/routing";
+import { requireMembership } from "@/modules/auth/server";
+import { MapsUnavailableError, createDriveMemo } from "@/modules/routing/server";
 import {
   parseHHMM,
   formatHHMM,
   leadAddressString,
-} from "@/modules/schedule";
-import { getAccessToken } from "@/modules/calendar";
+} from "@/modules/schedule/server";
+import { getAccessToken } from "@/modules/calendar/server";
 import {
   canSchedule,
   createCalendarEvent,
   isPendingCalendarClaim,
   realCalendarEventId,
   updateCalendarEvent,
-} from "@/modules/calendar";
+} from "@/modules/calendar/server";
 import type { Lead } from "@/modules/leads/model";
 
 export const runtime = "nodejs";

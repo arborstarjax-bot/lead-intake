@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
-import { getSessionMembership } from "@/modules/auth";
+import { getSessionMembership } from "@/modules/auth/server";
 import { createAdminClient, createSSRClient } from "@/modules/shared/supabase/server";
-import { getBillingState, getUploadsInLastDay } from "@/modules/billing";
+import { getBillingState, getUploadsInLastDay } from "@/modules/billing/server";
 import { WorkspaceClient } from "@/modules/workspace";
 import { OrphanWorkspaceClient } from "./OrphanWorkspaceClient";
 import { BillingSummary } from "@/modules/billing";

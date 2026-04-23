@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "./LoginForm";
 import { SignedInNotice } from "./SignedInNotice";
 import { Logo } from "@/components/Logo";
-import { getSessionMembership } from "@/modules/auth";
+import { getSessionMembership } from "@/modules/auth/server";
 import { createSSRClient } from "@/modules/shared/supabase/server";
 import { safeNext } from "@/lib/safeRedirect";
 

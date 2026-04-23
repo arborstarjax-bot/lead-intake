@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { requireMembership } from "@/modules/auth";
+import { requireMembership } from "@/modules/auth/server";
 
 export const runtime = "nodejs";
 

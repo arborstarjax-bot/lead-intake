@@ -9,7 +9,7 @@ import {
 } from "@/modules/shared/format";
 import { getSettings } from "@/lib/settings";
 import { LOST_AFTER_DAYS } from "@/modules/leads/model";
-import { requireMembership } from "@/modules/auth";
+import { requireMembership } from "@/modules/auth/server";
 
 export const runtime = "nodejs";
 

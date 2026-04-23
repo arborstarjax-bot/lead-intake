@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { getAccessToken } from "@/modules/calendar";
+import { getAccessToken } from "@/modules/calendar/server";
 import {
   CALENDAR_PENDING_PREFIX,
   canSchedule,
@@ -9,8 +9,8 @@ import {
   deleteCalendarEvent,
   isPendingCalendarClaim,
   updateCalendarEvent,
-} from "@/modules/calendar";
-import { requireMembership } from "@/modules/auth";
+} from "@/modules/calendar/server";
+import { requireMembership } from "@/modules/auth/server";
 
 export const runtime = "nodejs";
 
