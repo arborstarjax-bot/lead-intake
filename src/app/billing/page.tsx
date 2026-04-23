@@ -47,15 +47,27 @@ export default async function BillingPage({ searchParams }: Props) {
       {params.status === "canceled" && <CheckoutCanceledBanner />}
 
       {billing.trialEndingSoon && (
-        <TrialEndingBanner billing={billing} isAdmin={isAdmin} />
+        <TrialEndingBanner
+          billing={billing}
+          isAdmin={isAdmin}
+          inShell={inShell}
+        />
       )}
 
       {billing.subscriptionStatus === "past_due" && (
-        <PastDueBanner billing={billing} isAdmin={isAdmin} />
+        <PastDueBanner
+          billing={billing}
+          isAdmin={isAdmin}
+          inShell={inShell}
+        />
       )}
 
       {billing.plan === "free" && (
-        <LapsedBanner billing={billing} isAdmin={isAdmin} />
+        <LapsedBanner
+          billing={billing}
+          isAdmin={isAdmin}
+          inShell={inShell}
+        />
       )}
 
       <CurrentPlanCard
@@ -241,10 +253,15 @@ function CurrentPlanCard({
 function TrialEndingBanner({
   billing,
   isAdmin,
+  inShell,
 }: {
   billing: BillingState;
   isAdmin: boolean;
+  inShell: boolean;
 }) {
+  const adminCopy = inShell
+    ? "Open LeadFlow in a web browser to pick a plan before the trial ends."
+    : "Upgrade to Starter or Pro to keep using LeadFlow without interruption.";
   return (
     <div className="rounded-xl border border-amber-300 bg-amber-50 text-amber-900 p-4 flex items-start gap-3">
       <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
@@ -255,7 +272,7 @@ function TrialEndingBanner({
         </div>
         <div className="mt-1 opacity-90">
           {isAdmin
-            ? "Upgrade to Starter or Pro to keep using LeadFlow without interruption."
+            ? adminCopy
             : "Ask a workspace admin to upgrade before the trial ends."}
         </div>
       </div>
@@ -266,10 +283,15 @@ function TrialEndingBanner({
 function PastDueBanner({
   billing,
   isAdmin,
+  inShell,
 }: {
   billing: BillingState;
   isAdmin: boolean;
+  inShell: boolean;
 }) {
+  const adminCopy = inShell
+    ? "Your last charge didn't go through. Open LeadFlow in a web browser to update your payment method and avoid losing access."
+    : "Your last charge didn't go through. Update your payment method to avoid losing access.";
   return (
     <div className="rounded-xl border border-red-300 bg-red-50 text-red-900 p-4 flex flex-col sm:flex-row sm:items-start gap-3">
       <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
@@ -277,11 +299,18 @@ function PastDueBanner({
         <div className="font-semibold">Payment failed</div>
         <div className="opacity-90">
           {isAdmin
-            ? "Your last charge didn't go through. Update your payment method to avoid losing access."
+            ? adminCopy
             : "Ask a workspace admin to update the payment method to avoid losing access."}
         </div>
       </div>
-      {isAdmin && billing.stripeCustomerId && (
+      {/* App Store Guideline 3.1.1: the Stripe customer-portal link
+          that `ManageBillingButton` opens is a billing-management
+          surface for digital-goods subscriptions; it can't be
+          presented inside the Capacitor shell. The admin copy above
+          swaps in "open LeadFlow in a web browser" instructions when
+          `inShell` is true — suppressing the button here keeps us in
+          compliance with 3.1.3(b). */}
+      {isAdmin && billing.stripeCustomerId && !inShell && (
         <div className="shrink-0 sm:self-center">
           <ManageBillingButton
             label="Update payment method"
@@ -296,9 +325,11 @@ function PastDueBanner({
 function LapsedBanner({
   billing,
   isAdmin,
+  inShell,
 }: {
   billing: BillingState;
   isAdmin: boolean;
+  inShell: boolean;
 }) {
   const deadline = billing.dataRetentionDeadline;
   const daysLeft = deadline
@@ -322,9 +353,15 @@ function LapsedBanner({
             </>
           )}
         </div>
+        {/* In the Capacitor iOS shell the plan picker below is replaced
+            by `WebManagedBillingNote` (no "plans" list exists), so
+            "Pick a plan below" would be misleading. Swap the recovery
+            instruction to point at the web. */}
         {isAdmin && (
           <div className="opacity-90">
-            Pick a plan below to reactivate immediately.
+            {inShell
+              ? "Open LeadFlow in a web browser to reactivate your subscription."
+              : "Pick a plan below to reactivate immediately."}
           </div>
         )}
       </div>
