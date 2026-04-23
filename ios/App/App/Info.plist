@@ -45,5 +45,17 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>LeadFlow uses the camera so you can capture a photo of an estimate or a worksite directly from a lead record.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>LeadFlow uses your photo library so you can upload lead screenshots and estimate photos into your workspace.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>LeadFlow saves generated estimates and route previews back to your photo library when you export them.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>LeadFlow uses your location to order the day's route and give accurate drive-time estimates between stops.</string>
 </dict>
 </plist>
