@@ -1,11 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
 import { LeadCard } from "@/modules/leads";
 import { useToast } from "@/components/Toast";
 import { fetchWithOfflineQueue } from "@/modules/offline";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
+import type { DuplicateMatch } from "@/modules/leads";
 import type { Lead, LeadPatch } from "@/modules/leads/model";
 
 /**
@@ -25,16 +28,31 @@ export default function StandaloneLeadCard({
   initialLead,
   onRemoved,
   pending = false,
+  duplicates,
 }: {
   initialLead: Lead;
   onRemoved?: (id: string) => void;
   pending?: boolean;
+  /**
+   * Possible duplicate leads flagged at ingest time. Rendered as a
+   * warning banner above the card with links to the colliding leads
+   * so the user can merge or dismiss. Only passed for cards rendered
+   * right after an upload — loaded-from-DB cards don't surface dupes
+   * because the collision check only makes sense at insert time.
+   */
+  duplicates?: DuplicateMatch[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [lead, setLead] = useState<Lead>(initialLead);
   const [isPending, setIsPending] = useState(pending);
   const [deleted, setDeleted] = useState(false);
+  // Let the user dismiss the "possible duplicate" banner once they've
+  // looked at the other lead and decided the new one is genuinely
+  // different. We don't persist this — a fresh page load will re-show
+  // the banner from the ingest response — but that's fine since the
+  // banner is only ever rendered on the just-uploaded card.
+  const [dupesDismissed, setDupesDismissed] = useState(false);
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The parent tracks manual leads by their original `pending-xxx` id.
   // After the first POST swaps it for the server UUID the parent can no
@@ -252,26 +270,137 @@ export default function StandaloneLeadCard({
 
   if (deleted) return null;
 
+  const showDupes =
+    !dupesDismissed && duplicates && duplicates.length > 0;
+
   return (
-    <LeadCard
-      lead={lead}
-      onPatch={savePatch}
-      onDelete={onDelete}
-      onAddCalendar={onAddCalendar}
-      onToggleComplete={() => savePatch({ status: "Completed" })}
-      onAISchedule={() => {
-        if (isPending) {
-          toast({
-            kind: "error",
-            message: "Save this lead first, then find a time.",
-          });
-          return;
-        }
-        const day = lead.scheduled_day ?? "";
-        const qs = new URLSearchParams({ scheduleLead: lead.id });
-        if (day) qs.set("day", day);
-        router.push(`/route?${qs.toString()}`);
-      }}
-    />
+    <div className="space-y-2">
+      {showDupes && (
+        <DuplicateWarning
+          duplicates={duplicates!}
+          onDismiss={() => setDupesDismissed(true)}
+        />
+      )}
+      <LeadCard
+        lead={lead}
+        onPatch={savePatch}
+        onDelete={onDelete}
+        onAddCalendar={onAddCalendar}
+        onToggleComplete={() => savePatch({ status: "Completed" })}
+        onAISchedule={() => {
+          if (isPending) {
+            toast({
+              kind: "error",
+              message: "Save this lead first, then find a time.",
+            });
+            return;
+          }
+          const day = lead.scheduled_day ?? "";
+          const qs = new URLSearchParams({ scheduleLead: lead.id });
+          if (day) qs.set("day", day);
+          router.push(`/route?${qs.toString()}`);
+        }}
+      />
+    </div>
   );
+}
+
+/**
+ * Inline banner shown on a just-uploaded lead card when the ingest
+ * pipeline flagged potential duplicates. Hard matches (phone/email)
+ * render in amber with stronger wording; soft matches (address/name)
+ * render with softer copy so we don't drown the user in false-alarm
+ * warnings on common names/addresses.
+ */
+function DuplicateWarning({
+  duplicates,
+  onDismiss,
+}: {
+  duplicates: DuplicateMatch[];
+  onDismiss: () => void;
+}) {
+  const hard = duplicates.filter(
+    (d) => d.reason === "phone" || d.reason === "email"
+  );
+  const soft = duplicates.filter(
+    (d) => d.reason === "address" || d.reason === "name"
+  );
+  // Dedupe: the same existing lead can appear twice if it matches on
+  // both phone AND address. Collapse to one entry per lead id, keeping
+  // the hardest reason.
+  const byId = new Map<string, DuplicateMatch>();
+  for (const m of [...hard, ...soft]) {
+    if (!byId.has(m.lead.id)) byId.set(m.lead.id, m);
+  }
+  const rows = Array.from(byId.values());
+  const hasHard = hard.length > 0;
+
+  return (
+    <div
+      role="status"
+      className={`rounded-xl border px-3 py-2.5 text-sm space-y-1.5 ${
+        hasHard
+          ? "border-amber-300 bg-amber-50 text-amber-900"
+          : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--fg)]"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <AlertTriangle
+          className={`h-4 w-4 mt-0.5 shrink-0 ${
+            hasHard ? "text-amber-600" : "text-[var(--muted)]"
+          }`}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium">
+            {hasHard
+              ? rows.length === 1
+                ? "Possible duplicate client"
+                : `Possible duplicate of ${rows.length} existing leads`
+              : "Similar existing lead"}
+          </div>
+          <ul className="mt-1 space-y-0.5">
+            {rows.map((m) => {
+              const name =
+                [m.lead.first_name, m.lead.last_name]
+                  .filter(Boolean)
+                  .join(" ") || "Unnamed lead";
+              return (
+                <li key={m.lead.id} className="flex items-center gap-2">
+                  <Link
+                    href={`/leads/${m.lead.id}`}
+                    className="underline underline-offset-2 font-medium truncate"
+                  >
+                    {name}
+                  </Link>
+                  <span className="text-xs text-[var(--muted)]">
+                    · matches {reasonLabel(m.reason)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-xs font-medium underline underline-offset-2 shrink-0 opacity-80 hover:opacity-100"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function reasonLabel(reason: DuplicateMatch["reason"]): string {
+  switch (reason) {
+    case "phone":
+      return "phone number";
+    case "email":
+      return "email";
+    case "address":
+      return "address";
+    case "name":
+      return "name";
+  }
 }

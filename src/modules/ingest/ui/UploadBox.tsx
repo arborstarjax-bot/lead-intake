@@ -9,6 +9,7 @@ import { useIsIosShell } from "@/lib/use-ios-shell";
 import { StandaloneLeadCard } from "@/modules/leads";
 import { useToast } from "@/components/Toast";
 import type { Lead } from "@/modules/leads/model";
+import type { DuplicateMatch } from "@/modules/leads";
 
 type ApiOk = {
   results?: {
@@ -17,6 +18,10 @@ type ApiOk = {
     lead_id?: string;
     intake_status?: string;
     lead?: Lead;
+    /** Existing leads in the same workspace that collided with this
+     *  extraction on phone / email / address / name. Surfaced as a
+     *  dismissible banner on the card so the user can merge or ignore. */
+    duplicates?: DuplicateMatch[];
   }[];
   errors?: { fileName: string; error: string }[];
 };
@@ -39,7 +44,10 @@ export default function UploadBox({
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [busyCount, setBusyCount] = useState(0);
-  const [leads, setLeads] = useState<Lead[]>([]);
+  // Each card needs its own duplicate list, so we store them alongside
+  // the Lead rather than in a parallel array — avoids any chance of
+  // the two arrays drifting out of sync after filter()s.
+  const [leads, setLeads] = useState<{ lead: Lead; duplicates?: DuplicateMatch[] }[]>([]);
   const [orphans, setOrphans] = useState<
     { lead_id: string; fileName: string; intake_status?: string }[]
   >([]);
@@ -149,19 +157,21 @@ export default function UploadBox({
         }
       } else {
         const results = json.results ?? [];
-        const withLead: Lead[] = [];
+        const withLead: { lead: Lead; duplicates?: DuplicateMatch[] }[] = [];
         const withoutLead: {
           lead_id: string;
           fileName: string;
           intake_status?: string;
+          duplicates?: DuplicateMatch[];
         }[] = [];
         for (const r of results) {
-          if (r.lead) withLead.push(r.lead);
+          if (r.lead) withLead.push({ lead: r.lead, duplicates: r.duplicates });
           else if (r.lead_id)
             withoutLead.push({
               lead_id: r.lead_id,
               fileName: r.originalFileName ?? r.fileName,
               intake_status: r.intake_status,
+              duplicates: r.duplicates,
             });
         }
         // Backfill: the server attaches full lead objects via a best-effort
@@ -181,7 +191,8 @@ export default function UploadBox({
             const recovered: typeof withoutLead = [];
             for (const orphan of withoutLead) {
               const match = byId.get(orphan.lead_id);
-              if (match) withLead.push(match);
+              if (match)
+                withLead.push({ lead: match, duplicates: orphan.duplicates });
               else recovered.push(orphan);
             }
             withoutLead.length = 0;
@@ -212,7 +223,7 @@ export default function UploadBox({
   }
 
   function removeLead(id: string) {
-    setLeads((prev) => prev.filter((l) => l.id !== id));
+    setLeads((prev) => prev.filter((entry) => entry.lead.id !== id));
   }
 
   const hasCards = leads.length > 0 || orphans.length > 0;
@@ -339,10 +350,11 @@ export default function UploadBox({
 
       {leads.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {leads.map((l) => (
+          {leads.map((entry) => (
             <StandaloneLeadCard
-              key={l.id}
-              initialLead={l}
+              key={entry.lead.id}
+              initialLead={entry.lead}
+              duplicates={entry.duplicates}
               onRemoved={removeLead}
             />
           ))}
