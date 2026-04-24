@@ -122,6 +122,8 @@ export default function StandaloneLeadCard({
       for (const [k, v] of Object.entries(confMerge)) {
         if (typeof v === "number" && isFinite(v) && v >= 0 && v <= 1) {
           merged[k] = v;
+        } else if (v === null) {
+          delete merged[k];
         }
       }
       optimistic.extraction_confidence = merged;

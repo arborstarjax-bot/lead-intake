@@ -34,6 +34,8 @@ function applyOptimisticPatch(lead: Lead, patch: LeadPatch): Lead {
     for (const [k, v] of Object.entries(confMerge)) {
       if (typeof v === "number" && isFinite(v) && v >= 0 && v <= 1) {
         merged[k] = v;
+      } else if (v === null) {
+        delete merged[k];
       }
     }
     next.extraction_confidence = merged;

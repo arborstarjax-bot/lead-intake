@@ -51,6 +51,13 @@ export function InlineField({
     setLocal(value);
   }, [value]);
 
+  // Keep the latest `lead` reference available to `flush` without
+  // re-creating it each keystroke. flush() needs to peek at
+  // extraction_confidence at save time to decide whether to clear the
+  // AI chip — a stable closure would show stale confidence data.
+  const leadRef = useRef(lead);
+  leadRef.current = lead;
+
   const flush = useCallback(() => {
     if (timer.current) {
       clearTimeout(timer.current);
@@ -62,6 +69,18 @@ export function InlineField({
     const patch: LeadPatch = {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (patch as any)[field] = next === "" ? null : next;
+    // Clear the AI confidence chip for this field when the user
+    // overrides an AI-inferred value. Anything the operator types
+    // themselves has operator authority, not AI authority — showing
+    // "AI 87%" next to their own typed value is misleading. We send
+    // `null` via the merge knob so the server deletes just this
+    // field's entry from extraction_confidence (other fields keep
+    // their scores). Only fires when the field currently has an AI
+    // score; otherwise we'd send a no-op merge on every keystroke.
+    const currentConf = leadRef.current.extraction_confidence?.[field as string];
+    if (typeof currentConf === "number" && currentConf > 0) {
+      patch.extraction_confidence_merge = { [field as string]: null };
+    }
     onPatchRef.current(patch);
   }, [field]);
 

@@ -293,6 +293,13 @@ function RoutePageInner() {
             router.replace(`/route?day=${selectedDay}`, { scroll: false });
             reload();
           }}
+          onClose={() => {
+            // Dismissing the panel drops ?scheduleLead so the map fills
+            // the full viewport again. The day selection is preserved
+            // so the user keeps looking at the same route.
+            setPreviewSlot(null);
+            router.replace(`/route?day=${selectedDay}`, { scroll: false });
+          }}
         />
       )}
 

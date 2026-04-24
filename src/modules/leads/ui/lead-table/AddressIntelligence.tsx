@@ -89,10 +89,20 @@ export function AddressIntelligence({
   // Surface any AI-inferred fields (confidence > 0) that still have a
   // value on the lead. Rendered as chips so the operator sees
   // reliability at a glance.
+  //
+  // Skip fields where `conf[f] === 0`: the AI extractor stamps 0 when
+  // it couldn't find the field in the image at all (see
+  // `ExtractedLead.confidence` in modules/ingest/server/ai/extract.ts,
+  // whose system prompt says "A field that is absent from the image
+  // should be null with confidence 0"). If the field later has a value
+  // on the lead, the user typed it in manually — showing "AI city 0%"
+  // for an operator-typed value is misleading. Only fields with a
+  // positive AI score deserve an AI chip.
   const chips = useMemo(() => {
     const conf = lead.extraction_confidence ?? {};
     return ADDRESS_FIELDS.map((f) => {
-      const score = typeof conf[f] === "number" ? conf[f] : null;
+      const raw = conf[f];
+      const score = typeof raw === "number" && raw > 0 ? raw : null;
       const value = (lead[f] ?? "") as string;
       if (score == null || !value) return null;
       return { field: f, score, value };

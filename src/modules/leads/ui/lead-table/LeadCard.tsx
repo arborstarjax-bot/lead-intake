@@ -270,7 +270,15 @@ export function LeadCard({
           )}
         </div>
         {(lead.scheduled_day || lead.scheduled_time || lead.flex_window) && (
-          <div className="mt-1.5">
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onAISchedule}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--accent)]/40 bg-[var(--accent-soft)] text-[var(--accent)] px-3 h-8 text-xs font-semibold hover:bg-[var(--accent)]/15 transition active:scale-[0.98]"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Reschedule
+            </button>
             <button
               type="button"
               onClick={() =>
@@ -280,9 +288,11 @@ export function LeadCard({
                   flex_window: null,
                 })
               }
-              className="text-xs text-[var(--muted)] hover:text-[var(--danger)] hover:underline"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--danger)]/40 bg-rose-50 text-[var(--danger)] px-3 h-8 text-xs font-semibold hover:bg-rose-100 transition active:scale-[0.98]"
+              title="Clear the day, time, and flex window on this lead"
             >
-              Remove date &amp; time
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear date &amp; time
             </button>
           </div>
         )}
@@ -393,15 +403,22 @@ export function LeadCard({
               {needsResync ? "Update calendar event" : "Add to Calendar"}
             </button>
           )}
-          {!scheduledInSync && (
-            <button
-              onClick={onAISchedule}
-              className="inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto border border-[var(--accent)] text-[var(--accent)] bg-white hover:bg-[var(--accent-soft)] transition active:scale-[0.98]"
-            >
-              <Sparkles className="h-4 w-4" />
-              {lead.scheduled_day ? "Find best time" : "Find best day & time"}
-            </button>
-          )}
+          {/* Only show the "Find best day & time" CTA when the lead has
+              no schedule yet. Once a day or flex window is set, the
+              Reschedule button near the Appointment fields handles the
+              same entry point — avoid the duplicate button in the row. */}
+          {!scheduledInSync &&
+            !lead.scheduled_day &&
+            !lead.scheduled_time &&
+            !lead.flex_window && (
+              <button
+                onClick={onAISchedule}
+                className="inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto border border-[var(--accent)] text-[var(--accent)] bg-white hover:bg-[var(--accent-soft)] transition active:scale-[0.98]"
+              >
+                <Sparkles className="h-4 w-4" />
+                Find best day &amp; time
+              </button>
+            )}
         </div>
       </Section>
 
