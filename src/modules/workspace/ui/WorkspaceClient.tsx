@@ -312,6 +312,10 @@ export function WorkspaceClient({ workspace, role, members: initialMembers }: Pr
           Billing
         </Link>
         <span aria-hidden>·</span>
+        <Link href="/support" className="hover:underline">
+          Support
+        </Link>
+        <span aria-hidden>·</span>
         <Link href="/privacy" className="hover:underline">
           Privacy
         </Link>
