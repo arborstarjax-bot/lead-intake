@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { login } from "./actions";
+import { AppleSignInButton } from "@/app/auth/AppleSignInButton";
 import { safeNext } from "@/lib/safeRedirect";
 
 export function LoginForm({
@@ -18,70 +19,84 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(initialError ?? null);
 
   return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const form = new FormData(e.currentTarget);
-        setError(null);
-        startTransition(async () => {
-          const res = await login(form);
-          if (res?.error) {
-            setError(res.error);
-            return;
-          }
-          router.replace(safeNext(next));
-          router.refresh();
-        });
-      }}
-    >
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-          Email
-        </span>
-        <input
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm"
-        />
-      </label>
-      <label className="block space-y-1">
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-            Password
-          </span>
-          <Link
-            href="/forgot-password"
-            className="text-xs text-[var(--accent)] font-medium"
-          >
-            Forgot password?
-          </Link>
-        </div>
-        <input
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          className="w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm"
-        />
-      </label>
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2"
-        >
-          {error}
-        </div>
-      ) : null}
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full h-11 rounded-full bg-[var(--accent)] text-white text-sm font-semibold disabled:opacity-50"
+    <div className="space-y-4">
+      {/* Apple Sign-In satisfies App Review Guideline 4.8 when any
+          other third-party auth (email/password here) is offered. Kept
+          above the email form per Apple's HIG preference. */}
+      <AppleSignInButton next={next} label="Sign in with Apple" />
+      <div
+        className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]"
+        aria-hidden
       >
-        {pending ? "Signing in…" : "Sign in"}
-      </button>
-    </form>
+        <span className="h-px flex-1 bg-[var(--border)]" />
+        or continue with email
+        <span className="h-px flex-1 bg-[var(--border)]" />
+      </div>
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const form = new FormData(e.currentTarget);
+          setError(null);
+          startTransition(async () => {
+            const res = await login(form);
+            if (res?.error) {
+              setError(res.error);
+              return;
+            }
+            router.replace(safeNext(next));
+            router.refresh();
+          });
+        }}
+      >
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
+            Email
+          </span>
+          <input
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            className="w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm"
+          />
+        </label>
+        <label className="block space-y-1">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
+              Password
+            </span>
+            <Link
+              href="/forgot-password"
+              className="text-xs text-[var(--accent)] font-medium"
+            >
+              Forgot password?
+            </Link>
+          </div>
+          <input
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            className="w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm"
+          />
+        </label>
+        {error ? (
+          <div
+            role="alert"
+            className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2"
+          >
+            {error}
+          </div>
+        ) : null}
+        <button
+          type="submit"
+          disabled={pending}
+          className="w-full h-11 rounded-full bg-[var(--accent)] text-white text-sm font-semibold disabled:opacity-50"
+        >
+          {pending ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+    </div>
   );
 }

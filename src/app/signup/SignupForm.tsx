@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { signup } from "./actions";
+import { AppleSignInButton } from "@/app/auth/AppleSignInButton";
 
 type Mode = "create" | "join";
 
@@ -38,6 +39,24 @@ export function SignupForm({
           to send a fresh one, or create a new workspace below.
         </div>
       ) : null}
+
+      {/* Apple Sign-In sits above the email flow per Guideline 4.8 and
+          Apple's HIG. New OAuth users land on /workspace to pick
+          create-or-join (see OrphanWorkspaceClient). When the signup
+          came from an invite link, carry the join code across so the
+          code is pre-filled on the other side. */}
+      <AppleSignInButton
+        next={inviteCode ? `/workspace?join=${inviteCode}` : "/workspace"}
+        label="Sign up with Apple"
+      />
+      <div
+        className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]"
+        aria-hidden
+      >
+        <span className="h-px flex-1 bg-[var(--border)]" />
+        or with email
+        <span className="h-px flex-1 bg-[var(--border)]" />
+      </div>
 
       {hasInvite && inviteWorkspaceName ? (
         <div className="rounded-xl bg-[var(--surface-2)] text-sm px-3 py-2">
