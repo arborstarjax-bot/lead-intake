@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Lead } from "@/modules/leads/model";
+import type { Lead, LeadPatch } from "@/modules/leads/model";
 import { formatPhone } from "@/modules/shared/format";
 import { cn } from "@/lib/utils";
 import type { FieldDef } from "./lead-table-helpers";
@@ -21,7 +21,7 @@ export function InlineField({
   placeholder?: string;
   lead: Lead;
   field: keyof Lead;
-  onPatch: (p: Partial<Lead>) => void;
+  onPatch: (p: LeadPatch) => void;
   type?: FieldDef["type"];
   inputMode?: FieldDef["inputMode"];
   className?: string;
@@ -32,10 +32,22 @@ export function InlineField({
   // `pending` holds the most recent unsaved value so `flush()` can fire
   // the patch synchronously without depending on `local`'s closure.
   const pending = useRef<string | null>(null);
+  // Track focus so incoming `value` updates (from the server echo after a
+  // debounced save) don't clobber the user's in-flight keystrokes. The
+  // previous implementation reset `local` on every `value` change, which
+  // swallowed characters typed during the 300–500 ms save round-trip and
+  // produced the "choppy" input the user reported.
+  const focused = useRef(false);
   const onPatchRef = useRef(onPatch);
   onPatchRef.current = onPatch;
 
   useEffect(() => {
+    // Only accept incoming value when the field is idle (not focused and
+    // no unflushed edit). While the user is typing, the last authoritative
+    // value is whatever they just entered — the server echo that arrives
+    // mid-keystroke is stale by definition.
+    if (focused.current) return;
+    if (pending.current !== null) return;
     setLocal(value);
   }, [value]);
 
@@ -47,7 +59,7 @@ export function InlineField({
     const next = pending.current;
     if (next === null) return;
     pending.current = null;
-    const patch: Partial<Lead> = {};
+    const patch: LeadPatch = {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (patch as any)[field] = next === "" ? null : next;
     onPatchRef.current(patch);
@@ -80,6 +92,15 @@ export function InlineField({
     timer.current = setTimeout(flush, 500);
   }
 
+  function onFocus() {
+    focused.current = true;
+  }
+
+  function onBlur() {
+    focused.current = false;
+    flush();
+  }
+
   const conf = lead.extraction_confidence?.[field as string];
   const lowConf =
     typeof conf === "number" && conf > 0 && conf < 0.6 && Boolean(local);
@@ -91,7 +112,8 @@ export function InlineField({
         value={display}
         placeholder={placeholder}
         onChange={(e) => scheduleSave(e.target.value)}
-        onBlur={flush}
+        onFocus={onFocus}
+        onBlur={onBlur}
         rows={3}
         className={cn(className, lowConf && "invalid-soft")}
       />
@@ -105,7 +127,8 @@ export function InlineField({
       placeholder={placeholder}
       inputMode={inputMode}
       onChange={(e) => scheduleSave(e.target.value)}
-      onBlur={flush}
+      onFocus={onFocus}
+      onBlur={onBlur}
       className={cn(className, lowConf && "invalid-soft")}
       title={lowConf ? `Low confidence (${Math.round((conf ?? 0) * 100)}%)` : undefined}
     />

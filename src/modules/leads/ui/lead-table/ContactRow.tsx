@@ -1,6 +1,6 @@
 import type React from "react";
 import { MessageSquare, Truck } from "lucide-react";
-import type { Lead } from "@/modules/leads/model";
+import type { Lead, LeadPatch } from "@/modules/leads/model";
 import type { ClientAppSettings } from "@/lib/client-settings";
 import { ActionIconLink } from "./ActionIconLink";
 import { InlineField } from "./InlineField";
@@ -26,7 +26,7 @@ export function ContactRow({
   email?: boolean;
   lead: Lead;
   field: "phone_number" | "email";
-  onPatch: (p: Partial<Lead>) => void;
+  onPatch: (p: LeadPatch) => void;
   settings: ClientAppSettings;
   /** Fired after a call/text click has been logged to /api/leads/[id]/activities
    *  so the parent (LeadCard) can bump its timeline refresh key. Nothing

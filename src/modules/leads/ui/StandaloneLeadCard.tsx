@@ -6,7 +6,7 @@ import { LeadCard } from "@/modules/leads";
 import { useToast } from "@/components/Toast";
 import { fetchWithOfflineQueue } from "@/modules/offline";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
-import type { Lead } from "@/modules/leads/model";
+import type { Lead, LeadPatch } from "@/modules/leads/model";
 
 /**
  * Renders a single LeadCard outside the /leads table (e.g. right after
@@ -45,7 +45,7 @@ export default function StandaloneLeadCard({
   // promise and then replay their patch as a PATCH against the real id.
   const createInFlight = useRef<Promise<Lead | null> | null>(null);
 
-  async function createFromPending(patch: Partial<Lead>): Promise<Lead | null> {
+  async function createFromPending(patch: LeadPatch): Promise<Lead | null> {
     if (createInFlight.current) return createInFlight.current;
     const promise = (async () => {
       const res = await fetch("/api/leads", {
@@ -71,7 +71,7 @@ export default function StandaloneLeadCard({
 
   async function patchExisting(
     id: string,
-    patch: Partial<Lead>,
+    patch: LeadPatch,
     prev: Lead
   ): Promise<void> {
     const res = await patchLead(id, patch, prev, {
@@ -100,10 +100,33 @@ export default function StandaloneLeadCard({
     toast({ kind: "error", message: formatLeadPatchError(res, json) });
   }
 
-  async function savePatch(patch: Partial<Lead>) {
+  async function savePatch(patch: LeadPatch) {
     const prev = lead;
     // Optimistic update so typing feels instant; snap back on error.
-    setLead({ ...prev, ...patch });
+    // Strip envelope keys (`extraction_confidence_merge`,
+    // `expected_updated_at`) so they don't leak onto the Lead object,
+    // and apply the confidence merge locally for immediate UI feedback.
+    const {
+      extraction_confidence_merge: confMerge,
+      expected_updated_at: _ignore,
+      ...rest
+    } = patch;
+    void _ignore;
+    const optimistic: Lead = { ...prev, ...rest } as Lead;
+    if (confMerge) {
+      const existingConf = (prev.extraction_confidence ?? {}) as Record<
+        string,
+        number
+      >;
+      const merged: Record<string, number> = { ...existingConf };
+      for (const [k, v] of Object.entries(confMerge)) {
+        if (typeof v === "number" && isFinite(v) && v >= 0 && v <= 1) {
+          merged[k] = v;
+        }
+      }
+      optimistic.extraction_confidence = merged;
+    }
+    setLead(optimistic);
 
     if (isPending || createInFlight.current) {
       // If a POST is already in-flight we must not fire a second one —
@@ -120,7 +143,7 @@ export default function StandaloneLeadCard({
       // The very first caller's patch is included in the POST body, so
       // only replay if we piggy-backed on someone else's in-flight create.
       if (alreadyCreating) {
-        await patchExisting(created.id, patch, { ...prev, ...patch });
+        await patchExisting(created.id, patch, optimistic);
       }
       return;
     }

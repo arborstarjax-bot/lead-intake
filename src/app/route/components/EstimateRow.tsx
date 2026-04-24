@@ -195,7 +195,7 @@ export function EstimateRow({
         </div>
         <div className="min-w-0 flex-1">
           <Link
-            href={`/leads?lead=${stop.id}`}
+            href={`/leads/${stop.id}`}
             className="block min-w-0 group"
           >
             <div className="font-medium truncate group-hover:underline">
@@ -247,7 +247,7 @@ export function EstimateRow({
         )}
         {mode === "preview" && (
           <Link
-            href={`/leads?lead=${stop.id}`}
+            href={`/leads/${stop.id}`}
             aria-label={`Open ${stop.label}`}
             className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
           >
@@ -302,7 +302,7 @@ export function EstimateRow({
             <Navigation className="h-4 w-4" />
           </a>
           <Link
-            href={`/leads?lead=${stop.id}`}
+            href={`/leads/${stop.id}`}
             aria-label={`Open ${stop.label}`}
             className="ml-auto inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
           >

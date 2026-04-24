@@ -185,6 +185,15 @@ export default function ScheduleModal({
       );
       const patchJson = await patchRes.json();
       if (!patchRes.ok) {
+        // Double-booking: surface the server's specific message naming
+        // the conflicting lead so the operator knows who's already
+        // holding the slot.
+        if (patchRes.status === 409 && patchJson.reason === "double_booking") {
+          throw new Error(
+            patchJson.error ??
+              "That time slot is already booked by another lead. Pick a different time."
+          );
+        }
         throw new Error(formatLeadPatchError(patchRes, patchJson, "Failed to set time"));
       }
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
-import type { Lead, LeadStatus } from "@/modules/leads/model";
+import type { Lead, LeadPatch, LeadStatus } from "@/modules/leads/model";
 import { EDITABLE_COLUMNS, LEAD_STATUS_LABELS } from "@/modules/leads/model";
 import { fetchWithOfflineQueue } from "@/modules/offline";
 import { useToast } from "@/components/Toast";
@@ -13,6 +13,33 @@ import { LeadCard } from "./lead-table/LeadCard";
 const UNASSIGNED = "__unassigned__";
 
 export { LeadCard } from "./lead-table/LeadCard";
+
+/**
+ * Shallow-merge a LeadPatch into a Lead for optimistic UI updates.
+ * Strips out non-column envelope keys (`extraction_confidence_merge`,
+ * `expected_updated_at`) and applies the confidence merge locally so
+ * the offline-queued write reflects correctly while waiting for replay.
+ */
+function applyOptimisticPatch(lead: Lead, patch: LeadPatch): Lead {
+  const {
+    extraction_confidence_merge: confMerge,
+    expected_updated_at: _ignore,
+    ...rest
+  } = patch;
+  void _ignore;
+  const next: Lead = { ...lead, ...rest } as Lead;
+  if (confMerge) {
+    const existing = (lead.extraction_confidence ?? {}) as Record<string, number>;
+    const merged: Record<string, number> = { ...existing };
+    for (const [k, v] of Object.entries(confMerge)) {
+      if (typeof v === "number" && isFinite(v) && v >= 0 && v <= 1) {
+        merged[k] = v;
+      }
+    }
+    next.extraction_confidence = merged;
+  }
+  return next;
+}
 
 export type LeadFilter = "All" | LeadStatus;
 export type LeadCounts = Record<LeadFilter, number>;
@@ -158,13 +185,13 @@ export default function LeadTable({
     );
   }, [leads, search, filter, salespersonFilter]);
 
-  async function savePatch(id: string, patch: Partial<Lead>): Promise<boolean> {
+  async function savePatch(id: string, patch: LeadPatch): Promise<boolean> {
     // Send the row's current `updated_at` so the server can reject
     // stale writes. If someone else edited the lead between our load
     // and this save, the API returns 409 with the latest row and we
     // reconcile instead of clobbering their edit.
     const current = leads.find((l) => l.id === id);
-    const body: Partial<Lead> & { expected_updated_at?: string } = { ...patch };
+    const body: LeadPatch = { ...patch };
     if (current?.updated_at) body.expected_updated_at = current.updated_at;
     const res = await fetchWithOfflineQueue(`/api/leads/${id}`, {
       method: "PATCH",
@@ -186,7 +213,9 @@ export default function LeadTable({
           Completed: 0,
           Lost: 0,
         };
-        const next = prev.map((l) => (l.id === id ? { ...l, ...patch } : l));
+        const next = prev.map((l) =>
+          l.id === id ? applyOptimisticPatch(l, patch) : l
+        );
         counts.All = next.length;
         for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
         onCounts?.(counts);
@@ -224,6 +253,18 @@ export default function LeadTable({
         onScheduleChange?.();
       }
       return true;
+    }
+    // Double-booking rejection. Server found another active lead pinned
+    // to the same day + time. Don't apply the patch; surface the
+    // conflict to the user with a prominent toast so they can pick a
+    // different slot.
+    if (res.status === 409 && json.reason === "double_booking") {
+      const msg =
+        typeof json.error === "string"
+          ? json.error
+          : "Time slot already booked by another lead.";
+      toast({ kind: "error", message: msg, duration: 6500 });
+      return false;
     }
     // Stale-write rejection. Someone else edited this lead between our
     // load and this save; the server returned the latest row. Drop our

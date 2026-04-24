@@ -5,6 +5,7 @@ import {
   CalendarCheck,
   CalendarSearch,
   ChevronRight,
+  Clock,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -89,6 +90,15 @@ export function SchedulePanel({
   const [dayOptions, setDayOptions] = useState<DayOption[]>([]);
   const [dayOptionsLoading, setDayOptionsLoading] = useState(false);
   const [dayOptionsError, setDayOptionsError] = useState<string | null>(null);
+
+  // Custom-time override. The user explicitly asked that clicking a
+  // scheduled day/time on a lead card let them pick EITHER a
+  // suggested optimal slot OR a manual custom time. We keep a
+  // separate `customTime` value so the `<input type="time">`
+  // doesn't fight the `previewSlot` state (which may be driven by a
+  // suggested-slot tap or a parent reset).
+  const [customTime, setCustomTime] = useState<string>("");
+  const [customOpen, setCustomOpen] = useState(false);
 
   const confirmDialog = useConfirm();
 
@@ -241,6 +251,16 @@ export function SchedulePanel({
       );
       const patchJson = await patchRes.json();
       if (!patchRes.ok) {
+        // Double-booking is its own failure mode — don't reload the
+        // route (leadUpdatedAt is still fresh) and surface the server's
+        // conflict message verbatim so the user sees WHICH lead is
+        // holding the slot.
+        if (patchRes.status === 409 && patchJson.reason === "double_booking") {
+          throw new Error(
+            patchJson.error ??
+              "That time slot is already booked by another lead. Pick a different time."
+          );
+        }
         // On stale_write, re-fetch the route so the parent supplies a
         // fresh leadUpdatedAt — otherwise the next Confirm click re-sends
         // the same stale expected_updated_at and re-409s indefinitely.
@@ -293,6 +313,18 @@ export function SchedulePanel({
           >
             <CalendarSearch className="h-3.5 w-3.5" /> Find best day &amp; time
           </button>
+          <button
+            type="button"
+            onClick={() => setCustomOpen((o) => !o)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-3 h-8 text-xs font-medium transition",
+              customOpen
+                ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                : "border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+            )}
+          >
+            <Clock className="h-3.5 w-3.5" /> Custom time
+          </button>
           {hasMore || offset > 0 ? (
             <button
               type="button"
@@ -305,6 +337,56 @@ export function SchedulePanel({
             </button>
           ) : null}
         </div>
+
+        {customOpen && (
+          <div className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent-soft)]/40 p-3 space-y-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" /> Pick any time
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="time"
+                value={customTime}
+                onChange={(e) => setCustomTime(e.target.value)}
+                step={300}
+                className="field-input max-w-[10rem]"
+                aria-label="Custom appointment time"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!customTime) return;
+                  // Synthesize a Slot for preview. We intentionally report
+                  // 0 drive minutes here: we haven't computed the actual
+                  // drive-time impact for an arbitrary user-picked time,
+                  // and guessing would mislead the ranking UI. The booking
+                  // flow treats custom slots identically to suggested ones
+                  // — same PATCH, same Google calendar sync.
+                  onPreview({
+                    startTime: customTime,
+                    endTime: customTime,
+                    driveMinutesBefore: 0,
+                    driveMinutesAfter: 0,
+                    totalDriveMinutes: 0,
+                    reasoning: {
+                      priorLabel: null,
+                      nextLabel: "Custom time",
+                    },
+                  });
+                }}
+                disabled={!customTime || booking}
+                className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)] text-white px-3 h-8 text-xs font-semibold disabled:opacity-60"
+              >
+                Preview {customTime ? formatClock(customTime) : "time"}
+              </button>
+            </div>
+            <p className="text-[11px] text-[var(--muted)]">
+              Suggested slots below are ranked to minimize drive time. A
+              custom time skips that optimization — use it when an
+              appointment is already agreed with the customer.
+            </p>
+          </div>
+        )}
 
         {dayPickerOpen && (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-2 space-y-1">
