@@ -23,9 +23,11 @@ import {
   LEAD_FLEX_WINDOW_LABELS,
   LEAD_FLEX_WINDOWS,
   type Lead,
+  type LeadPatch,
 } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/components/SettingsProvider";
+import { AddressIntelligence } from "./AddressIntelligence";
 import { ContactRow } from "./ContactRow";
 import { InlineField } from "./InlineField";
 import { LifecycleTimeline } from "./LifecycleTimeline";
@@ -43,7 +45,7 @@ export function LeadCard({
   onAISchedule,
 }: {
   lead: Lead;
-  onPatch: (p: Partial<Lead>) => void;
+  onPatch: (p: LeadPatch) => void;
   onDelete: () => void;
   onAddCalendar: () => void;
   onToggleComplete: () => void;
@@ -223,6 +225,12 @@ export function LeadCard({
             inputMode="numeric"
           />
         </div>
+        {/* Address intelligence: one-tap autofill for missing fields
+            plus a row of "AI ##%" confidence chips for any fields we
+            (or the ingest pipeline) inferred. Lives inside the Location
+            section so the operator's eye flows straight from the inputs
+            to the reliability signal. */}
+        <AddressIntelligence lead={lead} onPatch={onPatch} />
       </Section>
 
       {/* Appointment */}
@@ -397,20 +405,22 @@ export function LeadCard({
         </div>
       </Section>
 
-      {/* Customer Notes — read-only display. The value is populated from the
-          original screenshot extraction (or server-side edits) and is
-          intentionally non-editable here to avoid the jumpy cursor caused by
-          debounced autosave rewriting the textarea mid-type. */}
-      <Section label="Customer Notes" icon={<StickyNote className="h-4 w-4" />}>
-        {lead.notes && lead.notes.trim() ? (
-          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm whitespace-pre-wrap break-words min-h-[44px]">
-            {lead.notes}
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed border-[var(--border)] bg-white px-3 py-2.5 text-sm text-[var(--subtle)] min-h-[44px]">
-            No notes from this lead.
-          </div>
-        )}
+      {/* Notes — editable. Free-form place for the rep to capture estimate,
+          property, customer, or follow-up context. Autosaves on blur /
+          after 500 ms of keyboard quiet (see InlineField). Previously
+          this was read-only because the debounced autosave used to
+          clobber in-flight keystrokes; that's fixed in InlineField's
+          focus-aware effect, so the textarea can accept edits again. */}
+      <Section label="Notes" icon={<StickyNote className="h-4 w-4" />}>
+        <InlineField
+          value={lead.notes ?? ""}
+          placeholder="Details about the lead, estimate, customer, property, or follow-ups…"
+          lead={lead}
+          field="notes"
+          onPatch={onPatch}
+          type="textarea"
+          className="field-input min-h-[88px] leading-5"
+        />
         {/* Lifecycle timeline — collapsed by default. Lazy-loads on first
             open and re-fetches whenever a call/text is logged (via the
             activity refresh key) or the lead's status changes. */}

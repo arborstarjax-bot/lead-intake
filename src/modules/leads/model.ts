@@ -122,6 +122,24 @@ export type LeadActivity = {
   created_at: string;
 };
 
+/**
+ * Body shape accepted by PATCH /api/leads/{id}. Supersets `Partial<Lead>`
+ * with a couple of server-side merge/override knobs the UI uses:
+ *
+ *   • `extraction_confidence_merge` — partial `{field: 0..1}` map that
+ *     the server merges into the row's existing `extraction_confidence`
+ *     jsonb. Used by the address-intelligence autofill flow so we can
+ *     stamp confidence on individual fields without re-POSTing the
+ *     full extraction blob.
+ *   • `expected_updated_at` — optimistic-concurrency guard. The server
+ *     rejects the write with 409 `stale_write` if the row's
+ *     `updated_at` advanced since the caller read it.
+ */
+export type LeadPatch = Partial<Lead> & {
+  extraction_confidence_merge?: Record<string, number>;
+  expected_updated_at?: string;
+};
+
 export const EDITABLE_COLUMNS: (keyof Lead)[] = [
   "date",
   "first_name",

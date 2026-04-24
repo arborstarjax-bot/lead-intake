@@ -26,3 +26,10 @@ export {
   geocodeMany,
   type LatLng,
 } from "./geocode";
+
+export {
+  inferAddress,
+  buildInferenceQuery,
+  type AddressParts,
+  type InferredAddress,
+} from "./infer-address";

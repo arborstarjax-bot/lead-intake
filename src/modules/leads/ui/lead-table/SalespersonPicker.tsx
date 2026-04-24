@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Lead } from "@/modules/leads/model";
+import type { LeadPatch } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,7 +20,7 @@ export function SalespersonPicker({
 }: {
   value: string;
   roster: string[];
-  onPatch: (p: Partial<Lead>) => void;
+  onPatch: (p: LeadPatch) => void;
 }) {
   const trimmed = value.trim();
   const inRoster = roster.some(

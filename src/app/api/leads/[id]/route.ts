@@ -47,7 +47,7 @@ export async function PATCH(
   const { data: existing } = await supabase
     .from("leads")
     .select(
-      "id, workspace_id, status, calendar_event_id, first_name, last_name, client, updated_at"
+      "id, workspace_id, status, calendar_event_id, first_name, last_name, client, updated_at, scheduled_day, scheduled_time, extraction_confidence"
     )
     .eq("id", id)
     .maybeSingle();
@@ -71,6 +71,33 @@ export async function PATCH(
   const patch: Record<string, unknown> = {};
   for (const k of EDITABLE_COLUMNS) {
     if (k in body) patch[k] = body[k];
+  }
+
+  // Merge partial updates into the extraction_confidence jsonb. Used by
+  // the address-intelligence UI to stamp a confidence score onto any
+  // field it just auto-filled (e.g. `{ city: 0.97, state: 0.97 }`),
+  // without having to re-POST the full blob the ingest pipeline wrote.
+  // We do the merge server-side so two concurrent auto-fills can't race
+  // and drop each other's scores.
+  if (
+    body.extraction_confidence_merge &&
+    typeof body.extraction_confidence_merge === "object" &&
+    !Array.isArray(body.extraction_confidence_merge)
+  ) {
+    const existingConf = (existing.extraction_confidence ?? {}) as Record<
+      string,
+      number
+    >;
+    const incoming = body.extraction_confidence_merge as Record<string, unknown>;
+    const merged: Record<string, number> = { ...existingConf };
+    for (const [k, v] of Object.entries(incoming)) {
+      if (typeof v === "number" && isFinite(v) && v >= 0 && v <= 1) {
+        merged[k] = v;
+      } else if (v === null) {
+        delete merged[k];
+      }
+    }
+    patch.extraction_confidence = merged;
   }
   if (patch.status && !LEAD_STATUSES.includes(patch.status as never)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
@@ -173,6 +200,65 @@ export async function PATCH(
       !settingFlexWindow
     ) {
       patch.status = "Called / No Response";
+    }
+  }
+
+  // Double-booking guard. A lead pinned to the same day + time as another
+  // active lead (non-Completed, non-Lost) in this workspace is almost
+  // certainly an operator mistake — two estimates overlapping on the
+  // field crew's calendar. Reject with 409 so the caller can surface a
+  // clear error instead of silently creating the conflict.
+  //
+  // Rules:
+  //   • Only fires when the final state has BOTH scheduled_day and
+  //     scheduled_time set. A flex-window lead (time null) isn't a
+  //     specific-time conflict.
+  //   • Ignores the lead being patched (can't collide with itself).
+  //   • Ignores Completed / Lost leads — those don't occupy a live slot.
+  //   • Accepts an opt-out header (`x-allow-double-book: 1`) for the rare
+  //     workflow where an operator deliberately wants two on the same
+  //     slot; leaves the default safe.
+  const finalDay =
+    "scheduled_day" in patch
+      ? (patch.scheduled_day as string | null)
+      : existing.scheduled_day;
+  const finalTime =
+    "scheduled_time" in patch
+      ? (patch.scheduled_time as string | null)
+      : existing.scheduled_time;
+  const allowDoubleBook = req.headers.get("x-allow-double-book") === "1";
+  if (finalDay && finalTime && !allowDoubleBook) {
+    const { data: conflicts } = await supabase
+      .from("leads")
+      .select("id, client, first_name, last_name, sales_person, status")
+      .eq("workspace_id", auth.workspaceId)
+      .eq("scheduled_day", finalDay)
+      .eq("scheduled_time", finalTime)
+      .neq("id", id)
+      .not("status", "in", '("Completed","Lost")')
+      .limit(5);
+    if (conflicts && conflicts.length > 0) {
+      const first = conflicts[0];
+      const label =
+        (first.client ?? "").trim() ||
+        displayName(first.first_name, first.last_name) ||
+        "another lead";
+      return NextResponse.json(
+        {
+          error: `Double-booking blocked: ${label} is already scheduled for ${finalDay} at ${finalTime}. Pick a different time, or resend with header "x-allow-double-book: 1" to override.`,
+          reason: "double_booking",
+          conflicts: conflicts.map((c) => ({
+            id: c.id,
+            label:
+              (c.client ?? "").trim() ||
+              displayName(c.first_name, c.last_name) ||
+              "(unnamed lead)",
+            salesPerson: c.sales_person ?? null,
+            status: c.status,
+          })),
+        },
+        { status: 409 }
+      );
     }
   }
 

@@ -1,5 +1,5 @@
 import { fetchWithOfflineQueue } from "./queue";
-import type { Lead } from "@/modules/leads/model";
+import type { LeadPatch } from "@/modules/leads/model";
 
 /**
  * Wrap a PATCH against /api/leads/{id} with an optimistic-concurrency
@@ -14,11 +14,11 @@ import type { Lead } from "@/modules/leads/model";
  */
 export async function patchLead(
   id: string,
-  patch: Partial<Lead>,
+  patch: LeadPatch,
   snapshot: { updated_at?: string | null } | null | undefined,
   options: { offlineQueue?: boolean; label?: string } = {}
 ): Promise<Response> {
-  const body: Partial<Lead> & { expected_updated_at?: string } = { ...patch };
+  const body: LeadPatch = { ...patch };
   if (snapshot?.updated_at) body.expected_updated_at = snapshot.updated_at;
   const init: RequestInit = {
     method: "PATCH",
@@ -36,7 +36,7 @@ export async function patchLead(
 
 /**
  * Pick a user-facing error message out of a non-2xx lead PATCH. Keeps
- * the "someone else edited" wording consistent across screens.
+ * wording for the common rejection reasons consistent across screens.
  */
 export function formatLeadPatchError(
   res: Response,
@@ -45,6 +45,14 @@ export function formatLeadPatchError(
 ): string {
   if (res.status === 409 && json?.reason === "stale_write") {
     return "Someone else just edited this lead — refresh and try again.";
+  }
+  if (res.status === 409 && json?.reason === "double_booking") {
+    // Prefer the server's detailed message (it names the conflicting lead)
+    // but fall back to a readable explanation if it's missing.
+    return (
+      json?.error ??
+      "Another lead is already scheduled for that day and time — pick a different slot."
+    );
   }
   return json?.error ?? fallback;
 }
