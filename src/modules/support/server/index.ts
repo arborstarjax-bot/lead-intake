@@ -182,7 +182,11 @@ function renderEmailText(input: SupportTicketInput): string {
     `User: ${input.userId}`,
     input.sourcePath ? `From page: ${input.sourcePath}` : null,
     input.userAgent ? `User agent: ${input.userAgent}` : null,
-  ].filter(Boolean);
+    // Drop null entries only — empty strings in the array above are
+    // intentional blank-line separators between sections. A naive
+    // `filter(Boolean)` would swallow them and collapse header /
+    // subject / body / metadata into an unreadable wall of text.
+  ].filter((line): line is string => line !== null);
   if (input.screenshots.length > 0) {
     lines.push("");
     lines.push(`Screenshots (${input.screenshots.length}):`);
