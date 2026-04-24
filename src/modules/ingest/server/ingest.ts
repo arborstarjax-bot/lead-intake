@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { extractLeadFromImage } from "./ai/extract";
+import { extractLeadFromImage, type ExtractedLead } from "./ai/extract";
 import { findDuplicates, isSaveable } from "@/modules/leads";
-import { displayName } from "@/modules/shared/format";
+import { displayName, normalizeState, normalizeZip } from "@/modules/shared/format";
+import { inferAddress, MapsUnavailableError } from "@/modules/routing/server";
 import type { Lead, LeadIntakeSource } from "@/modules/leads/model";
 
 type IngestArgs = {
@@ -41,7 +42,7 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   const mime = args.file.type || "image/jpeg";
   const dataUrl = `data:${mime};base64,${base64}`;
 
-  let extracted;
+  let extracted: ExtractedLead;
   try {
     extracted = await extractLeadFromImage(dataUrl);
   } catch (e) {
@@ -64,6 +65,25 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
       duplicates: [],
     };
   }
+
+  // Auto-infer missing address components when the extractor returned
+  // enough signal to resolve a canonical address but left fields blank.
+  // Example: screenshot contained "236 Honeysuckle Way, St Johns, 32259"
+  // — address + city + zip all extract at 1.0, but the state never
+  // appears on-screen and the AI reports it as null with 0 confidence.
+  // We have plenty to geocode; do it here so the user never sees
+  // "Autofill state" on a lead whose state we could trivially derive.
+  //
+  // Rules:
+  //   • Only fill fields that are currently null (never overwrite what
+  //     the AI/user actually wrote).
+  //   • Only call Geocoding when we have an anchor (street address OR
+  //     zip) AND at least two segments — otherwise the request burns
+  //     quota for a reverse-lookup that would fail anyway.
+  //   • A failed lookup is swallowed: ingest must still succeed even
+  //     when the Maps API is misconfigured or rate-limited. The user
+  //     still has the existing "Autofill" button as a manual fallback.
+  await backfillMissingAddressParts(extracted);
 
   // Duplicate detection against currently-active leads in THIS workspace.
   const { data: activeLeads } = await admin
@@ -210,6 +230,80 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
     intake_status: finalIntakeStatus,
     duplicates: postInsertDuplicates,
   };
+}
+
+/**
+ * Mutate `extracted` in-place to fill in any null address components
+ * that Google's Geocoding API can derive from the others. See the
+ * comment at the call site in `ingestScreenshot` for the full rationale.
+ *
+ * Confidence stamping: every filled field gets a confidence score
+ * derived from Google's location_type. Fields that were already
+ * present keep whatever confidence the AI stamped — we don't want to
+ * overwrite a 0.98 manual-entry score with a weaker geocode score just
+ * because the Maps API also happened to return the same value.
+ */
+async function backfillMissingAddressParts(lead: ExtractedLead): Promise<void> {
+  const haveAnchor =
+    Boolean(lead.address?.trim()) || Boolean(lead.zip?.trim());
+  if (!haveAnchor) return;
+
+  const segs = [lead.address, lead.city, lead.state, lead.zip].filter(
+    (s): s is string => Boolean(s && s.trim())
+  );
+  if (segs.length < 2) return;
+
+  const needsInference =
+    !lead.address || !lead.city || !lead.state || !lead.zip;
+  if (!needsInference) return;
+
+  let inferred;
+  try {
+    inferred = await inferAddress({
+      address: lead.address,
+      city: lead.city,
+      state: lead.state,
+      zip: lead.zip,
+    });
+  } catch (e) {
+    // MapsUnavailable (bad API key, quota exhausted, 5xx) or a
+    // network hiccup. Leave the lead as-is; the manual "Autofill"
+    // button on the card still works once the user is in the app.
+    if (!(e instanceof MapsUnavailableError)) {
+      // Unexpected — surface to the server log. A hard throw would
+      // fail the whole ingest over a best-effort backfill.
+      console.error("ingest.backfillMissingAddressParts failed", e);
+    }
+    return;
+  }
+  if (!inferred) return;
+
+  const conf = inferred.confidence;
+  const confMap = lead.confidence as Record<string, number>;
+
+  // Only fill fields the extractor left null. Never overwrite a value
+  // the AI actually read off the screenshot.
+  if (!lead.address && inferred.parts.address) {
+    lead.address = inferred.parts.address;
+    confMap.address = conf;
+  }
+  if (!lead.city && inferred.parts.city) {
+    lead.city = inferred.parts.city;
+    confMap.city = conf;
+  }
+  if (!lead.state && inferred.parts.state) {
+    // Normalize to 2-letter state code so it matches the PATCH endpoint's
+    // canonical form — otherwise the UI would show "Florida" here but
+    // "FL" after the first edit round-trip.
+    const st = normalizeState(inferred.parts.state) ?? inferred.parts.state;
+    lead.state = st;
+    confMap.state = conf;
+  }
+  if (!lead.zip && inferred.parts.zip) {
+    const z = normalizeZip(inferred.parts.zip) ?? inferred.parts.zip;
+    lead.zip = z;
+    confMap.zip = conf;
+  }
 }
 
 /**

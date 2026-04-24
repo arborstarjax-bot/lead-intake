@@ -7,6 +7,7 @@ import { requireMembership } from "@/modules/auth/server";
 import { PRICING, getBillingState } from "@/modules/billing/server";
 import { getSettings } from "@/lib/settings";
 import type { Lead } from "@/modules/leads/model";
+import type { DuplicateMatch } from "@/modules/leads";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
     originalFileName: string;
     lead_id: string;
     intake_status: string;
-    duplicates: unknown[];
+    duplicates: DuplicateMatch[];
     lead?: Lead;
   }> = [];
   const errors: Array<{ fileName: string; error: string }> = [];
