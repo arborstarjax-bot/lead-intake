@@ -2,10 +2,11 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { UploadCloud, Loader2, Plus, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
+import { UploadCloud, Loader2, Plus, AlertTriangle, CheckCircle2, Sparkles, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downscaleImage } from "@/lib/downscale";
 import { useIsIosShell } from "@/lib/use-ios-shell";
+import { takeNativePhoto } from "@/lib/native-camera";
 import { StandaloneLeadCard } from "@/modules/leads";
 import { useToast } from "@/components/Toast";
 import type { Lead } from "@/modules/leads/model";
@@ -302,6 +303,31 @@ export default function UploadBox({
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
         />
       </div>
+
+      {/* Native camera shortcut. Only rendered inside the iOS shell —
+          on the web the existing dropzone already routes the user to
+          their camera via the file input's capture attribute. Inside
+          the shell this calls @capacitor/camera directly so the user
+          skips the "Camera / Photo Library / Choose Files" action
+          sheet and lands straight in capture. Also satisfies App
+          Store Guideline 4.2 by giving us one genuine native-only
+          integration on top of the webview. */}
+      {inShell && !busy && (
+        <button
+          type="button"
+          onClick={async (e) => {
+            // Don't bubble up into the dropzone's onClick, which would
+            // reopen the file picker on top of the camera sheet.
+            e.stopPropagation();
+            const file = await takeNativePhoto();
+            if (file) await handleFiles([file]);
+          }}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--accent)] bg-white px-4 h-11 text-sm font-medium text-[var(--accent)] hover:bg-blue-50 active:bg-blue-100 transition"
+        >
+          <Camera className="h-4 w-4" />
+          Take a photo
+        </button>
+      )}
 
       {topError && (
         <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-900">
