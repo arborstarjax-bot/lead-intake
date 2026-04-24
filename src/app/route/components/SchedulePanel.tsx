@@ -197,10 +197,14 @@ export function SchedulePanel({
   // Clear in-flight selection state when the user switches modes.
   // The preview slot / custom time / flex window are mutually
   // exclusive, so only one should be "armed for confirm" at a time.
+  // Also clear `error` — an error raised in one mode (e.g. a slot-load
+  // failure in recommended) should not bleed into the fixed/flex
+  // panels, which have no code path to clear it on their own.
   useEffect(() => {
     onPreview(null);
     setCustomTime("");
     setFlexWindow(null);
+    setError(null);
     // Intentionally only reacting to `mode`. onPreview is a stable setter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
