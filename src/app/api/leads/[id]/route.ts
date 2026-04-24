@@ -210,6 +210,17 @@ export async function PATCH(
   // clear error instead of silently creating the conflict.
   //
   // Rules:
+  //   • Only fires when the patch is ACTUALLY CHANGING scheduled_day or
+  //     scheduled_time. A patch that doesn't touch the schedule (e.g.
+  //     editing notes, name, or marking the lead Completed) inherits
+  //     the existing day/time as `final*`, but it's not introducing a
+  //     new conflict — it's just living with whatever was already there.
+  //     Running the guard on those patches would (a) block unrelated
+  //     edits on any lead whose row already collides with another and
+  //     (b) create a deadlock: pre-existing conflicts (from data
+  //     predating this guard, or from `x-allow-double-book` overrides,
+  //     or from ingest pipelines) could not be cleared because the
+  //     operator can't mark either lead Completed to free the slot.
   //   • Only fires when the final state has BOTH scheduled_day and
   //     scheduled_time set. A flex-window lead (time null) isn't a
   //     specific-time conflict.
@@ -218,6 +229,8 @@ export async function PATCH(
   //   • Accepts an opt-out header (`x-allow-double-book: 1`) for the rare
   //     workflow where an operator deliberately wants two on the same
   //     slot; leaves the default safe.
+  const changingSchedule =
+    "scheduled_day" in patch || "scheduled_time" in patch;
   const finalDay =
     "scheduled_day" in patch
       ? (patch.scheduled_day as string | null)
@@ -227,7 +240,7 @@ export async function PATCH(
       ? (patch.scheduled_time as string | null)
       : existing.scheduled_time;
   const allowDoubleBook = req.headers.get("x-allow-double-book") === "1";
-  if (finalDay && finalTime && !allowDoubleBook) {
+  if (changingSchedule && finalDay && finalTime && !allowDoubleBook) {
     const { data: conflicts } = await supabase
       .from("leads")
       .select("id, client, first_name, last_name, sales_person, status")
