@@ -36,14 +36,16 @@ export function AddressAutocomplete({
   }, [lead.address]);
 
   useEffect(() => {
+    let cancelled = false;
     loadGoogleMaps()
       .then(async (g) => {
         await g.maps.importLibrary("places");
-        setMapsReady(true);
+        if (!cancelled) setMapsReady(true);
       })
-      .catch(() => {
-        /* Maps unavailable — fall back to plain input */
+      .catch((err) => {
+        console.warn("[AddressAutocomplete] Maps unavailable:", err);
       });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -67,13 +69,35 @@ export function AddressAutocomplete({
           sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
         }
         const service = new google.maps.places.AutocompleteService();
-        const res = await service.getPlacePredictions({
-          input,
-          componentRestrictions: { country: "us" },
-          types: ["address"],
-          sessionToken: sessionTokenRef.current,
-        });
-        const items: Prediction[] = (res.predictions ?? []).slice(0, 5).map((p) => ({
+        // getPlacePredictions supports both callback and promise styles.
+        // Use the callback form for maximum compatibility.
+        const preds = await new Promise<google.maps.places.AutocompletePrediction[]>(
+          (resolve, reject) => {
+            service.getPlacePredictions(
+              {
+                input,
+                componentRestrictions: { country: "us" },
+                types: ["address"],
+                sessionToken: sessionTokenRef.current ?? undefined,
+              },
+              (results, status) => {
+                if (
+                  status === google.maps.places.PlacesServiceStatus.OK &&
+                  results
+                ) {
+                  resolve(results);
+                } else if (
+                  status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS
+                ) {
+                  resolve([]);
+                } else {
+                  reject(new Error(`Places API error: ${status}`));
+                }
+              }
+            );
+          }
+        );
+        const items: Prediction[] = preds.slice(0, 5).map((p) => ({
           placeId: p.place_id,
           description: p.description,
           mainText: p.structured_formatting?.main_text ?? p.description,
@@ -81,7 +105,8 @@ export function AddressAutocomplete({
         }));
         setPredictions(items);
         if (items.length > 0) setOpen(true);
-      } catch {
+      } catch (err) {
+        console.warn("[AddressAutocomplete] prediction error:", err);
         setPredictions([]);
       }
     },
