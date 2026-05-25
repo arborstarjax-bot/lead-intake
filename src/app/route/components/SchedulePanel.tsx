@@ -1024,7 +1024,10 @@ function buildMiniRoute(slot: Slot, stops: Stop[]): MiniSeg[] {
   for (let i = 0; i < sorted.length; i++) {
     const stopMin = parseHHMM(sorted[i].startTime);
     if (!inserted && slotMin <= stopMin) {
-      if (segs.length > 0) {
+      if (segs.length > 0 && segs[segs.length - 1].type === "drive") {
+        // Replace the trailing inter-stop drive with the drive-to-new-slot
+        segs[segs.length - 1] = { type: "drive", label: `${slot.driveMinutesBefore}m` };
+      } else if (segs.length > 0) {
         segs.push({ type: "drive", label: `${slot.driveMinutesBefore}m` });
       }
       segs.push({ type: "star" });
@@ -1038,7 +1041,11 @@ function buildMiniRoute(slot: Slot, stops: Stop[]): MiniSeg[] {
     }
   }
   if (!inserted) {
-    segs.push({ type: "drive", label: `${slot.driveMinutesBefore}m` });
+    if (segs.length > 0 && segs[segs.length - 1].type !== "drive") {
+      segs.push({ type: "drive", label: `${slot.driveMinutesBefore}m` });
+    } else if (segs.length > 0) {
+      segs[segs.length - 1] = { type: "drive", label: `${slot.driveMinutesBefore}m` };
+    }
     segs.push({ type: "star" });
   }
 
