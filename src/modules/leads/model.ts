@@ -59,6 +59,8 @@ export const LEAD_SOURCES = [
   "Angi",
   "Email",
   "Referral",
+  "Tree Letter",
+  "Direct Mail",
   "Other",
 ] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];

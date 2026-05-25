@@ -26,4 +26,4 @@ export { default as LeadTable } from "./ui/LeadTable";
 export { default as StandaloneLeadCard } from "./ui/StandaloneLeadCard";
 export { LeadCard } from "./ui/lead-table/LeadCard";
 export { EstimateOutcomeModal } from "./ui/lead-table/EstimateOutcomeModal";
-export type { LeadFilter, LeadCounts } from "./ui/LeadTable";
+export type { LeadFilter, FollowUpSubFilter, LeadCounts } from "./ui/LeadTable";

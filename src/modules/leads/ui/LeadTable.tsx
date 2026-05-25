@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
-import type { Lead, LeadPatch, LeadStatus } from "@/modules/leads/model";
+import type { Lead, LeadPatch, LeadStatus, FollowUpResult } from "@/modules/leads/model";
 import { EDITABLE_COLUMNS, LEAD_STATUS_LABELS } from "@/modules/leads/model";
 import { fetchWithOfflineQueue } from "@/modules/offline";
 import { useToast } from "@/components/Toast";
@@ -14,6 +14,25 @@ import { EstimateOutcomeModal } from "./lead-table/EstimateOutcomeModal";
 const UNASSIGNED = "__unassigned__";
 
 export { LeadCard } from "./lead-table/LeadCard";
+
+function computeCounts(list: Lead[]): LeadCounts {
+  const c: LeadCounts = {
+    All: list.length,
+    New: 0,
+    "Called / No Response": 0,
+    Scheduled: 0,
+    Completed: 0,
+    Lost: 0,
+    Sold: 0,
+    "Not Sold": 0,
+  };
+  for (const l of list) {
+    c[l.status] = (c[l.status] ?? 0) + 1;
+    if (l.status === "Completed" && l.outcome_badge === "Sold") c.Sold += 1;
+    if (l.status === "Completed" && l.outcome_badge === "Not Sold") c["Not Sold"] += 1;
+  }
+  return c;
+}
 
 /**
  * Shallow-merge a LeadPatch into a Lead for optimistic UI updates.
@@ -44,15 +63,18 @@ function applyOptimisticPatch(lead: Lead, patch: LeadPatch): Lead {
   return next;
 }
 
-export type LeadFilter = "All" | LeadStatus;
+export type LeadFilter = "All" | LeadStatus | "Sold" | "Not Sold";
+export type FollowUpSubFilter = "All" | FollowUpResult | "No Contact Yet";
 export type LeadCounts = Record<LeadFilter, number>;
 
 export default function LeadTable({
   filter,
+  subFilter,
   onCounts,
   onScheduleChange,
 }: {
   filter: LeadFilter;
+  subFilter?: FollowUpSubFilter;
   onCounts?: (n: LeadCounts) => void;
   /** Fires when a lead gains/loses a scheduled_time so parents can refresh
    *  derived views (e.g. today's route). */
@@ -90,16 +112,7 @@ export default function LeadTable({
         (l: Lead) => !pendingDeletes.current.has(l.id)
       );
       setLeads(all);
-      const counts: LeadCounts = {
-        All: all.length,
-        New: 0,
-        "Called / No Response": 0,
-        Scheduled: 0,
-        Completed: 0,
-        Lost: 0,
-      };
-      for (const l of all) counts[l.status] = (counts[l.status] ?? 0) + 1;
-      onCounts?.(counts);
+      onCounts?.(computeCounts(all));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -171,14 +184,30 @@ export default function LeadTable({
   );
 
   const filtered = useMemo(() => {
-    const byStatus = filter === "All" ? leads : leads.filter((l) => l.status === filter);
-    const byPerson = salespersonFilter
+    let byStatus: Lead[];
+    if (filter === "All") {
+      byStatus = leads;
+    } else if (filter === "Sold") {
+      byStatus = leads.filter((l) => l.status === "Completed" && l.outcome_badge === "Sold");
+    } else if (filter === "Not Sold") {
+      byStatus = leads.filter((l) => l.status === "Completed" && l.outcome_badge === "Not Sold");
+    } else {
+      byStatus = leads.filter((l) => l.status === filter);
+    }
+    // Sub-filter within Needs Follow-Up
+    const bySub = (filter === "Called / No Response" && subFilter && subFilter !== "All")
       ? byStatus.filter((l) => {
+          if (subFilter === "No Contact Yet") return !l.follow_up_result;
+          return l.follow_up_result === subFilter;
+        })
+      : byStatus;
+    const byPerson = salespersonFilter
+      ? bySub.filter((l) => {
           const p = (l.sales_person ?? "").trim();
           if (salespersonFilter === UNASSIGNED) return p === "";
           return p.toLowerCase() === salespersonFilter.toLowerCase();
         })
-      : byStatus;
+      : bySub;
     const q = search.trim().toLowerCase();
     if (!q) return byPerson;
     return byPerson.filter((l) =>
@@ -187,7 +216,7 @@ export default function LeadTable({
         return typeof v === "string" && v.toLowerCase().includes(q);
       })
     );
-  }, [leads, search, filter, salespersonFilter]);
+  }, [leads, search, filter, subFilter, salespersonFilter]);
 
   async function savePatch(id: string, patch: LeadPatch): Promise<boolean> {
     // Send the row's current `updated_at` so the server can reject
@@ -209,20 +238,10 @@ export default function LeadTable({
     // router.refresh() once the write actually lands.
     if (res.headers.get("x-offline-queued") === "1") {
       setLeads((prev) => {
-        const counts: LeadCounts = {
-          All: 0,
-          New: 0,
-          "Called / No Response": 0,
-          Scheduled: 0,
-          Completed: 0,
-          Lost: 0,
-        };
         const next = prev.map((l) =>
           l.id === id ? applyOptimisticPatch(l, patch) : l
         );
-        counts.All = next.length;
-        for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
-        onCounts?.(counts);
+        onCounts?.(computeCounts(next));
         return next;
       });
       if ("scheduled_time" in patch || "scheduled_day" in patch) {
@@ -237,18 +256,8 @@ export default function LeadTable({
       // if its status changed. No need to re-fetch the whole list.
       setLeads((prev) => {
         const updated: Lead = json.lead;
-        const counts: LeadCounts = {
-          All: 0,
-          New: 0,
-          "Called / No Response": 0,
-          Scheduled: 0,
-          Completed: 0,
-          Lost: 0,
-        };
         const next = prev.map((l) => (l.id === id ? updated : l));
-        counts.All = next.length;
-        for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
-        onCounts?.(counts);
+        onCounts?.(computeCounts(next));
         return next;
       });
       // Any edit that touches the day or time of a lead may rearrange the
@@ -277,18 +286,8 @@ export default function LeadTable({
     if (res.status === 409 && json.reason === "stale_write" && json.lead) {
       const updated: Lead = json.lead;
       setLeads((prev) => {
-        const counts: LeadCounts = {
-          All: 0,
-          New: 0,
-          "Called / No Response": 0,
-          Scheduled: 0,
-          Completed: 0,
-          Lost: 0,
-        };
         const next = prev.map((l) => (l.id === id ? updated : l));
-        counts.All = next.length;
-        for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
-        onCounts?.(counts);
+        onCounts?.(computeCounts(next));
         return next;
       });
       toast({
@@ -322,9 +321,7 @@ export default function LeadTable({
     // like Gmail archive instead of a modal confirm dialog.
     setLeads((prev) => {
       const next = prev.filter((l) => l.id !== id);
-      const counts: LeadCounts = { All: next.length, New: 0, "Called / No Response": 0, Scheduled: 0, Completed: 0, Lost: 0 };
-      for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
-      onCounts?.(counts);
+      onCounts?.(computeCounts(next));
       return next;
     });
     const timer = setTimeout(async () => {
@@ -373,9 +370,7 @@ export default function LeadTable({
           setLeads((prev) => {
             if (prev.some((l) => l.id === id)) return prev;
             const next = [lead, ...prev];
-            const counts: LeadCounts = { All: next.length, New: 0, "Called / No Response": 0, Scheduled: 0, Completed: 0, Lost: 0 };
-            for (const l of next) counts[l.status] = (counts[l.status] ?? 0) + 1;
-            onCounts?.(counts);
+            onCounts?.(computeCounts(next));
             return next;
           });
         },
@@ -471,9 +466,13 @@ export default function LeadTable({
         <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center text-[var(--muted)]">
           {filter === "All"
             ? "No leads yet. Upload a screenshot on the home page."
+            : filter === "Sold"
+            ? "No sold leads yet."
+            : filter === "Not Sold"
+            ? "No not-sold leads yet."
             : filter === "Completed"
             ? "No completed leads yet."
-            : `No leads in "${LEAD_STATUS_LABELS[filter]}" yet.`}
+            : `No leads in "${LEAD_STATUS_LABELS[filter as LeadStatus]}" yet.`}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

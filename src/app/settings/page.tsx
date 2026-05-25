@@ -409,6 +409,37 @@ export default function SettingsPage() {
         </p>
       </Panel>
 
+      {/* Lead aging */}
+      <Panel
+        title="Lead aging"
+        description="Automatically move stale leads so nothing falls through the cracks."
+      >
+        <Field label="Days before new leads are marked Lost">
+          <NumberField
+            value={s.days_until_lost}
+            min={1}
+            max={365}
+            onCommit={(n) => update("days_until_lost", n)}
+          />
+        </Field>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          New leads with no contact after this many days are automatically
+          moved to Lost.
+        </p>
+        <Field label="Days before follow-ups are marked Not Sold">
+          <NumberField
+            value={s.days_until_not_sold}
+            min={1}
+            max={365}
+            onCommit={(n) => update("days_until_not_sold", n)}
+          />
+        </Field>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Leads in Needs Follow-Up with no status update after this many days
+          are automatically moved to Not Sold.
+        </p>
+      </Panel>
+
       {/*
         Spacer under the sticky save bar so the last panel isn't
         hidden behind the bar on mobile.

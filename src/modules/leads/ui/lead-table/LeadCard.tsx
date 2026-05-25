@@ -31,7 +31,8 @@ import { InlineField } from "./InlineField";
 import { LifecycleTimeline } from "./LifecycleTimeline";
 import { SalespersonPicker } from "./SalespersonPicker";
 import { Section } from "./Section";
-import { StatusPill } from "./StatusPill";
+import { StatusPill, type StatusTransition } from "./StatusPill";
+import { FollowUpModal } from "./FollowUpModal";
 import { LeadSourceBadge } from "./LeadSourceBadge";
 import { LeadTypePill } from "./LeadTypePill";
 import { OutcomeBadge } from "./OutcomeBadge";
@@ -53,6 +54,7 @@ export function LeadCard({
   onAISchedule: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { settings } = useAppSettings();
   // Bumped after a call/text is logged so the timeline (if expanded)
@@ -94,11 +96,28 @@ export function LeadCard({
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           <StatusPill
             status={lead.status}
-            onChange={(next) => {
-              if (next === "Completed" && lead.status !== "Completed") {
-                onToggleComplete();
-              } else {
-                onPatch({ status: next });
+            outcomeBadge={lead.outcome_badge}
+            onChange={(t: StatusTransition) => {
+              switch (t.kind) {
+                case "sold":
+                  onPatch({ status: "Completed", estimate_outcome: "Sold", outcome_badge: "Sold" });
+                  break;
+                case "not_sold":
+                  onPatch({ status: "Completed", estimate_outcome: "Not Sold", outcome_badge: "Not Sold" });
+                  break;
+                case "needs_follow_up":
+                  setFollowUpModalOpen(true);
+                  break;
+                case "completed":
+                  onToggleComplete();
+                  break;
+                case "simple":
+                  if (t.status === "Completed" && lead.status !== "Completed") {
+                    onToggleComplete();
+                  } else {
+                    onPatch({ status: t.status });
+                  }
+                  break;
               }
             }}
           />
@@ -394,6 +413,17 @@ export function LeadCard({
           Mark as completed
         </label>
       </div>
+
+      {followUpModalOpen && (
+        <FollowUpModal
+          leadName={lead.client?.trim() || "Lead"}
+          onSubmit={async (patch) => {
+            onPatch(patch);
+            setFollowUpModalOpen(false);
+          }}
+          onCancel={() => setFollowUpModalOpen(false)}
+        />
+      )}
     </article>
   );
 }

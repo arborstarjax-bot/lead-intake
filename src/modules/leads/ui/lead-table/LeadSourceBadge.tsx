@@ -19,6 +19,8 @@ const SOURCE_STYLES: Record<string, { bg: string; fg: string; border: string }> 
   Angi:                  { bg: "bg-red-50",     fg: "text-red-700",    border: "border-red-200" },
   Email:                 { bg: "bg-sky-50",     fg: "text-sky-700",    border: "border-sky-200" },
   Referral:              { bg: "bg-indigo-50",  fg: "text-indigo-700", border: "border-indigo-200" },
+  "Tree Letter":         { bg: "bg-amber-50",   fg: "text-amber-700",  border: "border-amber-200" },
+  "Direct Mail":         { bg: "bg-cyan-50",    fg: "text-cyan-700",   border: "border-cyan-200" },
   Other:                 { bg: "bg-gray-50",    fg: "text-gray-600",   border: "border-gray-200" },
 };
 
