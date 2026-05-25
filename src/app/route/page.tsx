@@ -289,6 +289,7 @@ function RoutePageInner() {
           leadUpdatedAt={data.ghost.updatedAt}
           selectedDay={selectedDay}
           previewSlot={previewSlot}
+          routeData={data}
           onPreview={setPreviewSlot}
           onHeightChange={setPanelHeight}
           onReload={reload}
