@@ -52,6 +52,13 @@ function buildPendingLead(): Lead {
     intake_source: "manual",
     intake_status: "ready",
     lead_source: null,
+    lead_type: null,
+    estimate_outcome: null,
+    no_proposal_reason: null,
+    no_proposal_notes: null,
+    follow_up_result: null,
+    follow_up_notes: null,
+    outcome_badge: null,
   };
 }
 

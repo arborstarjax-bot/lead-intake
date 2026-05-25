@@ -33,6 +33,8 @@ import { SalespersonPicker } from "./SalespersonPicker";
 import { Section } from "./Section";
 import { StatusPill } from "./StatusPill";
 import { LeadSourceBadge } from "./LeadSourceBadge";
+import { LeadTypePill } from "./LeadTypePill";
+import { OutcomeBadge } from "./OutcomeBadge";
 import { formatDateHuman, formatScheduleDisplay } from "./lead-table-helpers";
 
 export function LeadCard({
@@ -101,6 +103,7 @@ export function LeadCard({
             }}
           />
           <LeadSourceBadge lead={lead} onPatch={onPatch} />
+          <LeadTypePill lead={lead} onPatch={onPatch} />
         </div>
         <div className="relative" ref={menuRef}>
           <button
@@ -167,6 +170,11 @@ export function LeadCard({
             </>
           )}
         </div>
+        {lead.outcome_badge && (
+          <div className="mt-2">
+            <OutcomeBadge badge={lead.outcome_badge} />
+          </div>
+        )}
       </div>
 
       {/* Contact: phone + email */}

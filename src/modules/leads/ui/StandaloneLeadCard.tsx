@@ -10,6 +10,7 @@ import { fetchWithOfflineQueue } from "@/modules/offline";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
 import type { DuplicateMatch } from "@/modules/leads";
 import type { Lead, LeadPatch } from "@/modules/leads/model";
+import { EstimateOutcomeModal } from "@/modules/leads/ui/lead-table/EstimateOutcomeModal";
 
 /**
  * Renders a single LeadCard outside the /leads table (e.g. right after
@@ -53,6 +54,7 @@ export default function StandaloneLeadCard({
   // the banner from the ingest response — but that's fine since the
   // banner is only ever rendered on the just-uploaded card.
   const [dupesDismissed, setDupesDismissed] = useState(false);
+  const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The parent tracks manual leads by their original `pending-xxx` id.
   // After the first POST swaps it for the server UUID the parent can no
@@ -286,7 +288,7 @@ export default function StandaloneLeadCard({
         onPatch={savePatch}
         onDelete={onDelete}
         onAddCalendar={onAddCalendar}
-        onToggleComplete={() => savePatch({ status: "Completed" })}
+        onToggleComplete={() => setShowOutcomeModal(true)}
         onAISchedule={() => {
           if (isPending) {
             toast({
@@ -301,6 +303,16 @@ export default function StandaloneLeadCard({
           router.push(`/route?${qs.toString()}`);
         }}
       />
+      {showOutcomeModal && (
+        <EstimateOutcomeModal
+          leadName={lead.client?.trim() || "Lead"}
+          onSubmit={async (patch) => {
+            await savePatch(patch);
+            setShowOutcomeModal(false);
+          }}
+          onCancel={() => setShowOutcomeModal(false)}
+        />
+      )}
     </div>
   );
 }
