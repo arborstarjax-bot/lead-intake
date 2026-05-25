@@ -7,7 +7,8 @@ import {
   CalendarCheck,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import { RouteMap, type RouteMapMode, type RouteMapStop } from "@/modules/routing";
+import { RouteMap, type RouteMapMode, type RouteMapStop, type RouteMapFlexStop } from "@/modules/routing";
+import { LEAD_FLEX_WINDOW_DISPLAY } from "@/modules/leads/model";
 import {
   addDaysIso,
   formatDateLong,
@@ -152,6 +153,18 @@ function RoutePageInner() {
     };
   }, [data]);
 
+  const flexForMap: RouteMapFlexStop[] = useMemo(() => {
+    if (!data?.flexStops?.length) return [];
+    return data.flexStops.map((fs) => ({
+      id: fs.id,
+      label: fs.label,
+      address: fs.address,
+      lat: fs.lat,
+      lng: fs.lng,
+      flexLabel: LEAD_FLEX_WINDOW_DISPLAY[fs.flexWindow],
+    }));
+  }, [data]);
+
   const reload = useCallback(() => {
     load(selectedDay, scheduleLeadId);
   }, [load, selectedDay, scheduleLeadId]);
@@ -227,6 +240,7 @@ function RoutePageInner() {
       <RouteMap
         home={data?.home ?? null}
         stops={data?.stops ?? []}
+        flexStops={flexForMap}
         mode={mode}
         ghost={ghostForMap}
         previewStopTime={previewSlot?.startTime ?? null}

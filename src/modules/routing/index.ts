@@ -11,6 +11,7 @@ export { loadGoogleMaps } from "./client/maps-loader";
 export { default as RouteMap } from "./ui/RouteMap";
 export type {
   RouteMapStop,
+  RouteMapFlexStop,
   RouteMapHome,
   RouteMapMode,
 } from "./ui/RouteMap";

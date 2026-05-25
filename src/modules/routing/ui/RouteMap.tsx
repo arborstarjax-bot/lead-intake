@@ -13,6 +13,15 @@ export type RouteMapStop = {
   startTime: string;
 };
 
+export type RouteMapFlexStop = {
+  id: string;
+  label: string;
+  address: string;
+  lat: number;
+  lng: number;
+  flexLabel: string;
+};
+
 export type RouteMapHome = {
   address: string;
   lat: number;
@@ -24,6 +33,7 @@ export type RouteMapMode = "pins" | "route";
 type Props = {
   home: RouteMapHome | null;
   stops: RouteMapStop[];
+  flexStops?: RouteMapFlexStop[];
   mode: RouteMapMode;
   /** If set, a faint amber "ghost" pin is drawn to preview a prospective
    *  slot (not yet booked). */
@@ -38,6 +48,7 @@ type Props = {
 const ROUTE_COLOR = "#2563eb";
 const HIGHLIGHT_COLOR = "#f59e0b";
 const DIMMED_COLOR = "#94a3b8";
+const FLEX_COLOR = "#7c3aed";
 // House silhouette centered at (0, 0) tip-anchored on the base so it plants
 // on the exact marker position. Dimensions tuned for ~28 px rendered height.
 const HOUSE_PATH =
@@ -56,6 +67,7 @@ function formatClock(t: string): string {
 export default function RouteMap({
   home,
   stops,
+  flexStops,
   mode,
   ghost,
   previewStopTime,
@@ -273,6 +285,41 @@ export default function RouteMap({
       anyPoint = true;
     }
 
+    // Flex-window stops — purple "F" pins. These aren't part of the
+    // sequenced route but show where the flex leads are located.
+    if (flexStops?.length) {
+      for (const fs of flexStops) {
+        const marker = new google.maps.Marker({
+          position: { lat: fs.lat, lng: fs.lng },
+          map,
+          label: {
+            text: "F",
+            color: "#fff",
+            fontSize: "11px",
+            fontWeight: "700",
+          },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 12,
+            fillColor: FLEX_COLOR,
+            fillOpacity: 0.85,
+            strokeColor: "#fff",
+            strokeWeight: 2,
+          },
+          title: `${fs.label} · ${fs.flexLabel}`,
+        });
+        marker.addListener("click", () => {
+          infoWindowRef.current?.setContent(
+            `<div style="font-size:12px"><strong>${escapeHtml(fs.label)}</strong><br/>${fs.flexLabel}<br/>${escapeHtml(fs.address)}</div>`
+          );
+          infoWindowRef.current?.open({ map, anchor: marker });
+        });
+        markersRef.current.push(marker);
+        bounds.extend(marker.getPosition()!);
+        anyPoint = true;
+      }
+    }
+
     // Route mode: draw one polyline per leg so individual legs can be
     // recolored without redrawing the whole route. When previewing a new
     // pin, insert the ghost chronologically and highlight only the inbound
@@ -334,7 +381,7 @@ export default function RouteMap({
     // via `selectedLegRef` inside `getLegColor` so leg clicks don't
     // trigger a full Directions refetch + marker rebuild. The dedicated
     // recolor effect below mutates stroke colors in place.
-  }, [status, home, stops, mode, ghost, previewStopTime, previewing]);
+  }, [status, home, stops, flexStops, mode, ghost, previewStopTime, previewing]);
 
   // Cheap recolor pass. Updates existing polyline stroke colors in place
   // when `selectedLeg` changes — no Directions API call, no marker rebuild,
