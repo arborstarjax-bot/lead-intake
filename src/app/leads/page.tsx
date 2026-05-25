@@ -2,18 +2,31 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LeadTable, type LeadFilter, type LeadCounts } from "@/modules/leads";
+import {
+  LeadTable,
+  type LeadFilter,
+  type FollowUpSubFilter,
+  type LeadCounts,
+  FOLLOW_UP_RESULTS,
+} from "@/modules/leads";
 import NotificationAcknowledge from "@/components/NotificationAcknowledge";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 
 const TABS: { id: LeadFilter; label: string }[] = [
   { id: "New", label: "New" },
-  { id: "Called / No Response", label: "Needs Followup" },
+  { id: "Called / No Response", label: "Needs Follow-Up" },
   { id: "Scheduled", label: "Scheduled" },
-  { id: "Completed", label: "Completed" },
+  { id: "Sold", label: "Sold" },
+  { id: "Not Sold", label: "Not Sold" },
   { id: "Lost", label: "Lost" },
   { id: "All", label: "All" },
+];
+
+const SUB_FILTER_OPTIONS: { id: FollowUpSubFilter; label: string }[] = [
+  { id: "All", label: "All" },
+  { id: "No Contact Yet", label: "No Contact Yet" },
+  ...FOLLOW_UP_RESULTS.map((r) => ({ id: r as FollowUpSubFilter, label: r })),
 ];
 
 const EMPTY_COUNTS: LeadCounts = {
@@ -23,6 +36,8 @@ const EMPTY_COUNTS: LeadCounts = {
   Scheduled: 0,
   Completed: 0,
   Lost: 0,
+  Sold: 0,
+  "Not Sold": 0,
 };
 
 export default function LeadsPage() {
@@ -52,6 +67,10 @@ function paramFor(id: LeadFilter): string {
       return "completed";
     case "Lost":
       return "lost";
+    case "Sold":
+      return "sold";
+    case "Not Sold":
+      return "not-sold";
   }
 }
 
@@ -60,10 +79,12 @@ function LeadsPageInner() {
   const params = useSearchParams();
   const initial = filterFromParam(params.get("status"));
   const [filter, setFilter] = useState<LeadFilter>(initial);
+  const [subFilter, setSubFilter] = useState<FollowUpSubFilter>("All");
   const [counts, setCounts] = useState<LeadCounts>(EMPTY_COUNTS);
 
   function switchFilter(next: LeadFilter) {
     setFilter(next);
+    setSubFilter("All");
     const q = paramFor(next);
     router.replace(q === "new" ? "/leads" : `/leads?status=${q}`, { scroll: false });
   }
@@ -91,7 +112,32 @@ function LeadsPageInner() {
         </div>
       </nav>
 
-      <LeadTable filter={filter} onCounts={setCounts} />
+      {filter === "Called / No Response" && (
+        <div className="-mx-4 sm:mx-0 overflow-x-auto no-scrollbar">
+          <div className="inline-flex min-w-full gap-1.5 px-4 sm:px-0">
+            {SUB_FILTER_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => setSubFilter(o.id)}
+                className={cn(
+                  "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors border",
+                  subFilter === o.id
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--fg)]"
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <LeadTable
+        filter={filter}
+        subFilter={filter === "Called / No Response" ? subFilter : undefined}
+        onCounts={setCounts}
+      />
     </main>
   );
 }

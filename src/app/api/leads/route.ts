@@ -8,31 +8,51 @@ import {
   normalizeZip,
 } from "@/modules/shared/format";
 import { getSettings } from "@/lib/settings";
-import { LOST_AFTER_DAYS } from "@/modules/leads/model";
 import { requireMembership } from "@/modules/auth/server";
 
 export const runtime = "nodejs";
 
 /**
- * Best-effort sweep: promote any "Called / No Response" lead whose status
- * hasn't changed in >= LOST_AFTER_DAYS to "Lost". Runs before every list
- * fetch so the UI stays consistent without a scheduled job. Scoped to the
- * caller's workspace so one workspace's stale leads never affect another.
+ * Best-effort sweep that runs before every list fetch:
+ *
+ * 1. New leads older than `days_until_lost` → Lost (never contacted)
+ * 2. Needs Follow-Up leads older than `days_until_not_sold` → Completed / Not Sold
+ *    (contacted but no resolution — auto-closed)
+ *
+ * Both thresholds come from `app_settings`; fallback to 30 days when the
+ * columns haven't been added yet (graceful rollout).
  */
-async function sweepLostLeads(
+async function sweepStaleLeads(
   supabase: ReturnType<typeof createAdminClient>,
-  workspaceId: string
+  workspaceId: string,
+  daysUntilLost: number,
+  daysUntilNotSold: number,
 ): Promise<void> {
-  const cutoff = new Date(
-    Date.now() - LOST_AFTER_DAYS * 24 * 60 * 60 * 1000
+  const lostCutoff = new Date(
+    Date.now() - daysUntilLost * 24 * 60 * 60 * 1000
+  ).toISOString();
+  const notSoldCutoff = new Date(
+    Date.now() - daysUntilNotSold * 24 * 60 * 60 * 1000
   ).toISOString();
   try {
+    // New leads with no contact → Lost
     await supabase
       .from("leads")
       .update({ status: "Lost" })
       .eq("workspace_id", workspaceId)
+      .eq("status", "New")
+      .lt("status_changed_at", lostCutoff);
+    // Needs Follow-Up leads with no outcome → Not Sold
+    await supabase
+      .from("leads")
+      .update({
+        status: "Completed",
+        estimate_outcome: "Not Sold",
+        outcome_badge: "Not Sold",
+      })
+      .eq("workspace_id", workspaceId)
       .eq("status", "Called / No Response")
-      .lt("status_changed_at", cutoff);
+      .lt("status_changed_at", notSoldCutoff);
   } catch {
     // column missing or other transient error — ignore; sweep resumes next request
   }
@@ -43,7 +63,13 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createAdminClient();
-  await sweepLostLeads(supabase, auth.workspaceId);
+  const settings = await getSettings(auth.workspaceId);
+  await sweepStaleLeads(
+    supabase,
+    auth.workspaceId,
+    settings.days_until_lost ?? 30,
+    settings.days_until_not_sold ?? 30,
+  );
 
   const view = req.nextUrl.searchParams.get("view") ?? "active";
   let query = supabase

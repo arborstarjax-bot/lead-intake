@@ -19,6 +19,8 @@ export type ClientAppSettings = {
   default_job_minutes: number;
   travel_buffer_minutes: number;
   min_time_between_appointments: number;
+  days_until_lost: number;
+  days_until_not_sold: number;
 
   company_name: string | null;
   company_phone: string | null;
@@ -47,6 +49,8 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
   default_job_minutes: 60,
   travel_buffer_minutes: 15,
   min_time_between_appointments: 60,
+  days_until_lost: 30,
+  days_until_not_sold: 30,
   company_name: null,
   company_phone: null,
   company_email: null,
