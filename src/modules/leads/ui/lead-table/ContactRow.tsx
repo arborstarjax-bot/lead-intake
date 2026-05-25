@@ -1,5 +1,5 @@
 import type React from "react";
-import { MessageSquare, Truck } from "lucide-react";
+import { MessageSquare, Navigation } from "lucide-react";
 import type { Lead, LeadPatch } from "@/modules/leads/model";
 import type { ClientAppSettings } from "@/lib/client-settings";
 import { ActionIconLink } from "./ActionIconLink";
@@ -8,7 +8,7 @@ import { logContactActivity } from "./LifecycleTimeline";
 import {
   buildMailtoHref,
   buildSmsHref,
-  buildEnrouteSmsHref,
+  buildNavigationHref,
 } from "./lead-table-helpers";
 
 export function ContactRow({
@@ -41,7 +41,7 @@ export function ContactRow({
     ? buildMailtoHref(trimmed, lead, settings)
     : undefined;
   const smsHref = tel && trimmed ? buildSmsHref(trimmed, lead, settings) : undefined;
-  const enrouteHref = tel && trimmed ? buildEnrouteSmsHref(trimmed, lead, settings) : undefined;
+  const navHref = tel ? buildNavigationHref(lead) : undefined;
 
   // The browser CAN'T tell us whether a tel: call was answered or missed —
   // that event lives on the phone's dialer, not in the web view. So we log
@@ -82,11 +82,11 @@ export function ContactRow({
       )}
       {tel && (
         <ActionIconLink
-          href={enrouteHref}
-          title="Send 'on my way' text message"
-          onClick={logText("enroute")}
+          href={navHref}
+          title="Navigate to address"
+          className="gps"
         >
-          <Truck className="h-4 w-4" />
+          <Navigation className="h-4 w-4" />
         </ActionIconLink>
       )}
       <InlineField

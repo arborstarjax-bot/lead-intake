@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { EDITABLE_COLUMNS, LEAD_STATUSES } from "@/modules/leads/model";
 import { displayName, normalizeEmail, normalizePhone, normalizeState, normalizeZip } from "@/modules/shared/format";
+import { getSettings } from "@/lib/settings";
 import { getAccessToken } from "@/modules/calendar/server";
 import {
   deleteCalendarEvent,
@@ -241,16 +242,24 @@ export async function PATCH(
       : existing.scheduled_time;
   const allowDoubleBook = req.headers.get("x-allow-double-book") === "1";
   if (changingSchedule && finalDay && finalTime && !allowDoubleBook) {
-    const { data: conflicts } = await supabase
+    const appSettings = await getSettings(auth.workspaceId);
+    const minGap = appSettings.min_time_between_appointments;
+    const { data: sameDayLeads } = await supabase
       .from("leads")
-      .select("id, client, first_name, last_name, sales_person, status")
+      .select("id, client, first_name, last_name, sales_person, status, scheduled_time")
       .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", finalDay)
-      .eq("scheduled_time", finalTime)
+      .not("scheduled_time", "is", null)
       .neq("id", id)
       .not("status", "in", '("Completed","Lost")')
-      .limit(5);
-    if (conflicts && conflicts.length > 0) {
+      .limit(50);
+    const finalMinutes = parseTimeToMinutes(finalTime);
+    const conflicts = (sameDayLeads ?? []).filter((c) => {
+      if (!c.scheduled_time) return false;
+      const otherMinutes = parseTimeToMinutes(c.scheduled_time);
+      return Math.abs(finalMinutes - otherMinutes) < minGap;
+    });
+    if (conflicts.length > 0) {
       const first = conflicts[0];
       const label =
         (first.client ?? "").trim() ||
@@ -258,8 +267,9 @@ export async function PATCH(
         "another lead";
       return NextResponse.json(
         {
-          error: `Double-booking blocked: ${label} is already scheduled for ${finalDay} at ${finalTime}. Pick a different time, or resend with header "x-allow-double-book: 1" to override.`,
-          reason: "double_booking",
+          error: `Timing conflict: ${label} is scheduled at ${first.scheduled_time} on ${finalDay}. Minimum ${minGap} min gap required. Override with header "x-allow-double-book: 1".`,
+          reason: "timing_conflict",
+          minGapMinutes: minGap,
           conflicts: conflicts.map((c) => ({
             id: c.id,
             label:
@@ -268,6 +278,7 @@ export async function PATCH(
               "(unnamed lead)",
             salesPerson: c.sales_person ?? null,
             status: c.status,
+            scheduledTime: c.scheduled_time,
           })),
         },
         { status: 409 }
@@ -350,6 +361,11 @@ export async function PATCH(
   }
 
   return NextResponse.json({ lead: data });
+}
+
+function parseTimeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
 }
 
 export async function DELETE(

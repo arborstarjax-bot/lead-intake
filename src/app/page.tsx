@@ -51,6 +51,7 @@ function buildPendingLead(): Lead {
     calendar_scheduled_time: null,
     intake_source: "manual",
     intake_status: "ready",
+    lead_source: null,
   };
 }
 

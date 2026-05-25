@@ -41,6 +41,7 @@ export const EDITABLE_KEYS = [
   "work_days",
   "default_job_minutes",
   "travel_buffer_minutes",
+  "min_time_between_appointments",
 ] as const satisfies ReadonlyArray<keyof ClientAppSettings>;
 
 /**

@@ -14,6 +14,7 @@ export type AppSettings = {
   work_days: number[];
   default_job_minutes: number;
   travel_buffer_minutes: number;
+  min_time_between_appointments: number;
 
   // Tailoring: company identity, salespeople roster, and per-channel
   // message templates. Nullable templates mean "fall back to the built-in
@@ -45,6 +46,7 @@ export type AppSettingsPatch = Partial<
     | "work_days"
     | "default_job_minutes"
     | "travel_buffer_minutes"
+    | "min_time_between_appointments"
     | "company_name"
     | "company_phone"
     | "company_email"
@@ -71,6 +73,7 @@ export function defaultSettings(workspaceId: string): AppSettings {
     work_days: [1, 2, 3, 4, 5, 6],
     default_job_minutes: 60,
     travel_buffer_minutes: 15,
+    min_time_between_appointments: 60,
     company_name: null,
     company_phone: null,
     company_email: null,

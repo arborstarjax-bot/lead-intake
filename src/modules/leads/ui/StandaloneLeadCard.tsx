@@ -92,7 +92,7 @@ export default function StandaloneLeadCard({
     patch: LeadPatch,
     prev: Lead
   ): Promise<void> {
-    const res = await patchLead(id, patch, prev, {
+    const res = await patchLead(id, patch, prev, undefined, {
       offlineQueue: true,
       label: `Edit lead ${id.slice(0, 6)}`,
     });

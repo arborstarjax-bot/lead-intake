@@ -25,6 +25,7 @@ export type ExtractedLead = {
   scheduled_day: string | null;
   scheduled_time: string | null;
   notes: string | null;
+  lead_source: string | null;
   confidence: Record<string, number>;
 };
 
@@ -70,6 +71,25 @@ Rules:
   before calling: job description/requested service, urgency, best time to
   call, scheduling preferences, gate codes, referral source, apartment #,
   pets, access notes. Do NOT restate fields already captured above.
+- Lead source: determine WHERE this lead originated by deeply analyzing the
+  screenshot. Examine:
+    • Platform/UI chrome: status bars, navigation menus, app headers.
+    • Message bubbles and layout (iMessage blue/green, FB Messenger purple,
+      Instagram gradient, WhatsApp green).
+    • Logos, branding, watermarks, favicons.
+    • Text patterns: "via Facebook", "Sent from Craigslist", Google Ads
+      click-to-call cards, Thumbtack/Angi quote request formats.
+    • SMS formatting (short codes, "Reply STOP", carrier labels).
+    • Contact card styling (vCard, embedded metadata).
+    • Email headers ("From:", mail client UI, newsletter footers).
+    • Web form submission confirmations, "Thank you" landing pages.
+  Return one of these exact values (case-sensitive):
+    "Facebook", "Craigslist", "Instagram", "Close AI",
+    "Certified Lead Kings", "Text Message", "Google Ads",
+    "Website Form", "Nextdoor", "Thumbtack", "Angi",
+    "Email", "Referral", "Other"
+  If the source is uncertain, return your best guess with a lower confidence.
+  Only return null if you truly cannot determine the source at all.
 - Confidence: 0.0–1.0 for each field, reflecting how certain you are from the
   image. A field that is absent from the image should be null with confidence 0.
 
@@ -92,6 +112,7 @@ const SCHEMA = {
     scheduled_day: { type: ["string", "null"] },
     scheduled_time: { type: ["string", "null"] },
     notes: { type: ["string", "null"] },
+    lead_source: { type: ["string", "null"] },
     confidence: {
       type: "object",
       additionalProperties: { type: "number" },
@@ -109,6 +130,7 @@ const SCHEMA = {
         scheduled_day: { type: "number" },
         scheduled_time: { type: "number" },
         notes: { type: "number" },
+        lead_source: { type: "number" },
       },
       required: [
         "date",
@@ -124,6 +146,7 @@ const SCHEMA = {
         "scheduled_day",
         "scheduled_time",
         "notes",
+        "lead_source",
       ],
     },
   },
@@ -141,6 +164,7 @@ const SCHEMA = {
     "scheduled_day",
     "scheduled_time",
     "notes",
+    "lead_source",
     "confidence",
   ],
 } as const;

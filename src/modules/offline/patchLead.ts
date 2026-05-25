@@ -16,13 +16,14 @@ export async function patchLead(
   id: string,
   patch: LeadPatch,
   snapshot: { updated_at?: string | null } | null | undefined,
+  extraHeaders?: Record<string, string>,
   options: { offlineQueue?: boolean; label?: string } = {}
 ): Promise<Response> {
   const body: LeadPatch = { ...patch };
   if (snapshot?.updated_at) body.expected_updated_at = snapshot.updated_at;
   const init: RequestInit = {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body: JSON.stringify(body),
   };
   if (options.offlineQueue) {
@@ -46,12 +47,13 @@ export function formatLeadPatchError(
   if (res.status === 409 && json?.reason === "stale_write") {
     return "Someone else just edited this lead — refresh and try again.";
   }
-  if (res.status === 409 && json?.reason === "double_booking") {
-    // Prefer the server's detailed message (it names the conflicting lead)
-    // but fall back to a readable explanation if it's missing.
+  if (
+    res.status === 409 &&
+    (json?.reason === "double_booking" || json?.reason === "timing_conflict")
+  ) {
     return (
       json?.error ??
-      "Another lead is already scheduled for that day and time — pick a different slot."
+      "Another lead is already scheduled too close to that time — pick a different slot."
     );
   }
   return json?.error ?? fallback;

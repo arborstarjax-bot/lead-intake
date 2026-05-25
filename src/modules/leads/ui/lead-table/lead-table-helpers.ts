@@ -68,6 +68,19 @@ export function buildMailtoHref(email: string, lead: Lead, settings: ClientAppSe
   return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+/**
+ * Build a Google Maps navigation link for the lead's address.
+ * Works on both iOS (opens Apple Maps or Google Maps) and Android.
+ */
+export function buildNavigationHref(lead: Lead): string | undefined {
+  const parts = [lead.address, lead.city, lead.state, lead.zip]
+    .map((p) => (p ?? "").trim())
+    .filter(Boolean);
+  if (parts.length === 0) return undefined;
+  const q = encodeURIComponent(parts.join(", "));
+  return `https://www.google.com/maps/dir/?api=1&destination=${q}`;
+}
+
 export function formatDateHuman(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -77,6 +90,40 @@ export function formatDateHuman(iso: string | null): string {
     day: "numeric",
     year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
   });
+}
+
+/**
+ * Human-friendly schedule display for the compact confirmation strip.
+ * Handles day + time, day + flex window, and day-only states.
+ */
+export function formatScheduleDisplay(
+  day: string | null,
+  time: string | null,
+  flexWindow: Lead["flex_window"]
+): string {
+  if (!day) return time ? `Time: ${formatTime12(time)}` : "Not scheduled";
+  const d = new Date(day + "T12:00:00");
+  const dayStr = isNaN(d.getTime())
+    ? day
+    : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  if (time) return `${dayStr} · ${formatTime12(time)}`;
+  if (flexWindow) {
+    const labels: Record<string, string> = {
+      all_day: "All Day",
+      am: "AM",
+      pm: "PM",
+    };
+    return `${dayStr} · Flex ${labels[flexWindow] ?? flexWindow}`;
+  }
+  return dayStr;
+}
+
+function formatTime12(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return hhmm;
+  const suffix = h >= 12 ? "PM" : "AM";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
 export type FieldDef = {
