@@ -12,11 +12,11 @@ import {
   Phone,
   User,
 } from "lucide-react";
-import { useConfirm } from "@/components/ConfirmDialog";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
-import { LEAD_FLEX_WINDOW_DISPLAY } from "@/modules/leads/model";
+import { LEAD_FLEX_WINDOW_DISPLAY, type LeadPatch } from "@/modules/leads/model";
+import { EstimateOutcomeModal } from "@/modules/leads";
 import { formatDateLong, type FlexStop } from "../route-helpers";
 
 /**
@@ -44,8 +44,8 @@ export function FlexEstimateRow({
 }) {
   const router = useRouter();
   const { settings } = useAppSettings();
-  const confirmDialog = useConfirm();
   const [completing, setCompleting] = useState(false);
+  const [showOutcomeModal, setShowOutcomeModal] = useState(false);
 
   const flexLabel = LEAD_FLEX_WINDOW_DISPLAY[stop.flexWindow];
 
@@ -90,26 +90,25 @@ export function FlexEstimateRow({
     stop.address
   )}`;
 
-  async function handleMarkComplete() {
-    const ok = await confirmDialog({
-      title: "Mark complete?",
-      message: `Mark "${stop.label}" as completed. It will be removed from today's route and the calendar event will be deleted.`,
-      confirmLabel: "Mark complete",
-    });
-    if (!ok) return;
+  function handleMarkComplete() {
+    setShowOutcomeModal(true);
+  }
+
+  async function submitOutcome(patch: LeadPatch) {
     setCompleting(true);
     try {
       const res = await patchLead(
         stop.id,
-        { status: "Completed" },
+        patch,
         { updated_at: stop.updatedAt }
       );
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         onFlash(formatLeadPatchError(res, json, `Failed to mark complete (${res.status})`));
         if (res.status === 409) onReload();
-        return;
+        throw new Error("Save failed");
       }
+      setShowOutcomeModal(false);
       onFlash(`Marked "${stop.label}" complete`);
       onReload();
     } catch (e) {
@@ -210,6 +209,13 @@ export function FlexEstimateRow({
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
+    {showOutcomeModal && (
+      <EstimateOutcomeModal
+        leadName={stop.label}
+        onSubmit={submitOutcome}
+        onCancel={() => setShowOutcomeModal(false)}
+      />
+    )}
     </li>
   );
 }

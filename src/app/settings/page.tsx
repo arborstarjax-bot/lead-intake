@@ -392,26 +392,21 @@ export default function SettingsPage() {
       {/* Job timing */}
       <Panel
         title="Job timing"
-        description="Defaults for scheduling math. Per-lead overrides come later."
+        description="Minimum gap enforced between appointments. You can override this per booking."
       >
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Default job length (min)">
-            <NumberField
-              value={s.default_job_minutes}
-              min={5}
-              max={600}
-              onCommit={(n) => update("default_job_minutes", n)}
-            />
-          </Field>
-          <Field label="Travel buffer (min)">
-            <NumberField
-              value={s.travel_buffer_minutes}
-              min={0}
-              max={120}
-              onCommit={(n) => update("travel_buffer_minutes", n)}
-            />
-          </Field>
-        </div>
+        <Field label="Minimum time between appointments (min)">
+          <NumberField
+            value={s.min_time_between_appointments}
+            min={15}
+            max={480}
+            onCommit={(n) => update("min_time_between_appointments", n)}
+          />
+        </Field>
+        <p className="mt-2 text-xs text-[var(--muted)]">
+          Example: 60 min means appointments can only be scheduled in 1-hour
+          increments (10:00 AM → 11:00 AM → 12:00 PM). A confirmation popup
+          lets you override conflicts when needed.
+        </p>
       </Panel>
 
       {/*

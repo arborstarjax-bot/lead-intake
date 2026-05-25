@@ -16,10 +16,11 @@ import {
   Phone,
   User,
 } from "lucide-react";
-import { useConfirm } from "@/components/ConfirmDialog";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
+import type { LeadPatch } from "@/modules/leads/model";
+import { EstimateOutcomeModal } from "@/modules/leads";
 import { formatClock, formatDateLong, type Stop } from "../route-helpers";
 
 type Mode = "normal" | "reorder" | "preview";
@@ -49,10 +50,10 @@ export function EstimateRow({
   onReload?: () => void;
   onFlash?: (msg: string) => void;
 }) {
-  const confirmDialog = useConfirm();
   const router = useRouter();
   const { settings } = useAppSettings();
   const [completing, setCompleting] = useState(false);
+  const [showOutcomeModal, setShowOutcomeModal] = useState(false);
 
   function openReschedule() {
     // Navigating with ?scheduleLead pops the SchedulePanel for this stop on
@@ -116,27 +117,25 @@ export function EstimateRow({
       : `${distance}${min} min from prev stop`;
   })();
 
-  async function handleMarkComplete() {
-    const ok = await confirmDialog({
-      title: "Mark complete?",
-      message: `Mark "${stop.label}" as completed. It will be removed from today's route and the calendar event will be deleted.`,
-      confirmLabel: "Mark complete",
-    });
-    if (!ok) return;
+  function handleMarkComplete() {
+    setShowOutcomeModal(true);
+  }
+
+  async function submitOutcome(patch: LeadPatch) {
     setCompleting(true);
     try {
       const res = await patchLead(
         stop.id,
-        { status: "Completed" },
+        patch,
         { updated_at: stop.updatedAt }
       );
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         onFlash?.(formatLeadPatchError(res, json, `Failed to mark complete (${res.status})`));
-        // Refresh on 409 so the user sees the stop's current state.
         if (res.status === 409) onReload?.();
-        return;
+        throw new Error("Save failed");
       }
+      setShowOutcomeModal(false);
       onFlash?.(`Marked "${stop.label}" complete`);
       onReload?.();
     } catch (e) {
@@ -310,6 +309,13 @@ export function EstimateRow({
           </Link>
         </div>
       )}
+    {showOutcomeModal && (
+      <EstimateOutcomeModal
+        leadName={stop.label}
+        onSubmit={submitOutcome}
+        onCancel={() => setShowOutcomeModal(false)}
+      />
+    )}
     </li>
   );
 }

@@ -16,17 +16,15 @@ import {
   User,
   Clock,
   AlertTriangle,
-  Sparkles,
+  CalendarDays,
 } from "lucide-react";
 import {
-  LEAD_FLEX_WINDOW_DISPLAY,
-  LEAD_FLEX_WINDOW_LABELS,
-  LEAD_FLEX_WINDOWS,
   type Lead,
   type LeadPatch,
 } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/components/SettingsProvider";
+import { AddressAutocomplete } from "./AddressAutocomplete";
 import { AddressIntelligence } from "./AddressIntelligence";
 import { ContactRow } from "./ContactRow";
 import { InlineField } from "./InlineField";
@@ -34,7 +32,10 @@ import { LifecycleTimeline } from "./LifecycleTimeline";
 import { SalespersonPicker } from "./SalespersonPicker";
 import { Section } from "./Section";
 import { StatusPill } from "./StatusPill";
-import { formatDateHuman } from "./lead-table-helpers";
+import { LeadSourceBadge } from "./LeadSourceBadge";
+import { LeadTypePill } from "./LeadTypePill";
+import { OutcomeBadge } from "./OutcomeBadge";
+import { formatDateHuman, formatScheduleDisplay } from "./lead-table-helpers";
 
 export function LeadCard({
   lead,
@@ -88,18 +89,22 @@ export function LeadCard({
         needsReview ? "border-amber-300" : "border-[var(--border)]"
       )}
     >
-      {/* Header: status pill + actions menu */}
+      {/* Header: status pill + lead source + actions menu */}
       <div className="flex items-center justify-between gap-2 px-4 pt-4">
-        <StatusPill
-          status={lead.status}
-          onChange={(next) => {
-            if (next === "Completed" && lead.status !== "Completed") {
-              onToggleComplete();
-            } else {
-              onPatch({ status: next });
-            }
-          }}
-        />
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <StatusPill
+            status={lead.status}
+            onChange={(next) => {
+              if (next === "Completed" && lead.status !== "Completed") {
+                onToggleComplete();
+              } else {
+                onPatch({ status: next });
+              }
+            }}
+          />
+          <LeadSourceBadge lead={lead} onPatch={onPatch} />
+          <LeadTypePill lead={lead} onPatch={onPatch} />
+        </div>
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen((v) => !v)}
@@ -165,6 +170,11 @@ export function LeadCard({
             </>
           )}
         </div>
+        {lead.outcome_badge && (
+          <div className="mt-2">
+            <OutcomeBadge badge={lead.outcome_badge} />
+          </div>
+        )}
       </div>
 
       {/* Contact: phone + email */}
@@ -190,14 +200,7 @@ export function LeadCard({
 
       {/* Location */}
       <Section label="Location" icon={<MapPin className="h-4 w-4" />}>
-        <InlineField
-          value={lead.address ?? ""}
-          placeholder="Street address"
-          lead={lead}
-          field="address"
-          onPatch={onPatch}
-          className="field-input"
-        />
+        <AddressAutocomplete lead={lead} onPatch={onPatch} />
         <div className="grid grid-cols-[1fr_72px_100px] gap-1 mt-1">
           <InlineField
             value={lead.city ?? ""}
@@ -233,192 +236,118 @@ export function LeadCard({
         <AddressIntelligence lead={lead} onPatch={onPatch} />
       </Section>
 
-      {/* Appointment */}
+      {/* Appointment — simplified scheduling flow */}
       <Section label="Appointment" icon={<Clock className="h-4 w-4" />}>
-        <div className="grid grid-cols-2 gap-2">
-          <InlineField
-            value={lead.scheduled_day ?? ""}
-            lead={lead}
-            field="scheduled_day"
-            onPatch={onPatch}
-            type="date"
-            className="field-input"
-            placeholder="Day"
-          />
-          {lead.flex_window ? (
-            // When a flex window is set, the specific time is intentionally
-            // unset — the route optimizer assigns one later. Show the flex
-            // label in the time slot so the card isn't visually "empty" and
-            // the operator can see at a glance which window applies.
-            <div
-              className="field-input flex items-center justify-center text-[13px] font-semibold text-[var(--accent)] bg-[var(--accent-soft)] border-[var(--accent)]/40 select-none"
-              aria-label={`Time: ${LEAD_FLEX_WINDOW_DISPLAY[lead.flex_window]}`}
-              title="Clear the flex window (below) to set a specific time"
-            >
-              {LEAD_FLEX_WINDOW_DISPLAY[lead.flex_window]}
+        {lead.scheduled_day || lead.scheduled_time || lead.flex_window ? (
+          <>
+            {/* Compact scheduled confirmation strip */}
+            <div className="flex items-center justify-between gap-2 rounded-xl bg-[var(--success-soft)] border border-green-200 px-3.5 py-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-green-200/60 text-[var(--success)] shrink-0">
+                  <CalendarCheck className="h-[18px] w-[18px]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-[var(--success)] truncate">
+                    {formatScheduleDisplay(lead.scheduled_day, lead.scheduled_time, lead.flex_window)}
+                  </div>
+                  <div className="text-[11px] text-green-700/70 mt-0.5">
+                    {scheduledInSync ? "Synced to calendar" : needsResync ? "Calendar out of sync" : "Not yet on calendar"}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={onAISchedule}
+                  className="text-xs font-semibold text-[var(--accent)] underline underline-offset-2 hover:text-[var(--accent-hover)] transition"
+                >
+                  Reschedule
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onPatch({
+                      scheduled_day: null,
+                      scheduled_time: null,
+                      flex_window: null,
+                    })
+                  }
+                  className="text-[var(--muted)] hover:text-[var(--danger)] transition"
+                  title="Clear schedule"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-          ) : (
-            <InlineField
-              value={lead.scheduled_time ?? ""}
-              lead={lead}
-              field="scheduled_time"
-              onPatch={onPatch}
-              type="time"
-              className="field-input"
-              placeholder="Time"
-            />
-          )}
-        </div>
-        {(lead.scheduled_day || lead.scheduled_time || lead.flex_window) && (
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onAISchedule}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--accent)]/40 bg-[var(--accent-soft)] text-[var(--accent)] px-3 h-8 text-xs font-semibold hover:bg-[var(--accent)]/15 transition active:scale-[0.98]"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Reschedule
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onPatch({
-                  scheduled_day: null,
-                  scheduled_time: null,
-                  flex_window: null,
-                })
-              }
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--danger)]/40 bg-rose-50 text-[var(--danger)] px-3 h-8 text-xs font-semibold hover:bg-rose-100 transition active:scale-[0.98]"
-              title="Clear the day, time, and flex window on this lead"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear date &amp; time
-            </button>
-          </div>
+            {/* Calendar + Route actions when scheduled */}
+            <div className="mt-2 flex flex-col sm:flex-row gap-2">
+              {(() => {
+                const isScheduled = lead.status === "Scheduled";
+                const disabled = !lead.scheduled_day;
+                return (
+                  <Link
+                    href={lead.scheduled_day ? `/route?day=${lead.scheduled_day}` : "#"}
+                    onClick={(e) => {
+                      if (disabled) {
+                        e.preventDefault();
+                        return;
+                      }
+                      if (!isScheduled) onPatch({ status: "Scheduled" });
+                    }}
+                    aria-disabled={disabled}
+                    className={cn(
+                      "inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto transition active:scale-[0.98]",
+                      disabled
+                        ? "bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed pointer-events-none"
+                        : "bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft-hover,var(--accent-soft))] border border-[var(--accent)]/30"
+                    )}
+                  >
+                    <Route className="h-4 w-4" />
+                    {isScheduled ? "Update in Route" : "Add to Route"}
+                  </Link>
+                );
+              })()}
+              {scheduledInSync ? (
+                <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--success-soft)] text-[var(--success)] px-3 h-11 text-sm font-medium w-full justify-center sm:w-auto">
+                  <CalendarCheck className="h-4 w-4" />
+                  Lead Scheduled
+                </span>
+              ) : (
+                <button
+                  onClick={onAddCalendar}
+                  disabled={!lead.scheduled_day}
+                  className={cn(
+                    "inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto transition active:scale-[0.98]",
+                    needsResync
+                      ? "bg-[var(--warning-soft)] text-[var(--warning)] hover:bg-amber-200"
+                      : lead.scheduled_day
+                      ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
+                      : "bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed"
+                  )}
+                >
+                  <CalendarPlus className="h-4 w-4" />
+                  {needsResync ? "Update calendar event" : "Add to Calendar"}
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          /* Single Schedule button for unscheduled leads */
+          <button
+            onClick={onAISchedule}
+            className="flex items-center justify-center gap-2 w-full h-12 rounded-xl bg-[var(--accent)] text-white text-[15px] font-semibold hover:bg-[var(--accent-hover)] transition active:scale-[0.98]"
+          >
+            <CalendarDays className="h-[18px] w-[18px]" />
+            Schedule
+          </button>
         )}
-
-        {/* Flex windows — let a lead be grouped onto a day without pinning a
-            specific time. Setting a flex window clears any scheduled_time;
-            choosing a specific time (via AI scheduler) clears the flex
-            window. Both states still use scheduled_day as the anchor. */}
-        <div className="mt-2">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1">
-            Flex window
-          </div>
-          <div className="grid grid-cols-4 gap-1">
-            <FlexWindowChip
-              active={!lead.flex_window}
-              onClick={() =>
-                lead.flex_window && onPatch({ flex_window: null })
-              }
-              label="Specific"
-            />
-            {LEAD_FLEX_WINDOWS.map((w) => (
-              <FlexWindowChip
-                key={w}
-                active={lead.flex_window === w}
-                onClick={() =>
-                  onPatch({
-                    flex_window: lead.flex_window === w ? null : w,
-                    // Flex is "any time" — wipe a pinned time so the route
-                    // optimizer can pick one. The day stays.
-                    scheduled_time:
-                      lead.flex_window === w ? lead.scheduled_time : null,
-                  })
-                }
-                label={LEAD_FLEX_WINDOW_LABELS[w].replace(" Flex", "")}
-              />
-            ))}
-          </div>
-          {lead.flex_window && (
-            <div className="mt-1 text-[11px] text-[var(--muted)]">
-              Any {LEAD_FLEX_WINDOW_LABELS[lead.flex_window].toLowerCase()} slot
-              — route optimizer will assign a time.
-            </div>
-          )}
-        </div>
-        <div className="mt-1 flex items-start gap-1 text-[var(--muted)]">
+        <div className="mt-2 flex items-start gap-1 text-[var(--muted)]">
           <User className="h-4 w-4 ml-2 mt-3 shrink-0" />
           <SalespersonPicker
             value={lead.sales_person ?? ""}
             roster={settings.salespeople}
             onPatch={onPatch}
           />
-        </div>
-        <div className="mt-2 flex flex-col sm:flex-row gap-2">
-          {/* Route button. Two modes:
-                 • Add to Route  — when status !== "Scheduled". Patches the
-                   lead to "Scheduled" and deep-links to the route day.
-                 • Update in Route — when status === "Scheduled". Pure
-                   deep-link; no status patch (already scheduled). Useful
-                   after the day or time changes so the operator can jump
-                   straight to the route view and reorder/retime the stop.
-              Requires a scheduled_day in either mode (the route page is
-              day-scoped). */}
-          {(() => {
-            const isScheduled = lead.status === "Scheduled";
-            const disabled = !lead.scheduled_day;
-            return (
-              <Link
-                href={lead.scheduled_day ? `/route?day=${lead.scheduled_day}` : "#"}
-                onClick={(e) => {
-                  if (disabled) {
-                    e.preventDefault();
-                    return;
-                  }
-                  if (!isScheduled) onPatch({ status: "Scheduled" });
-                }}
-                aria-disabled={disabled}
-                className={cn(
-                  "inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto transition active:scale-[0.98]",
-                  disabled
-                    ? "bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed pointer-events-none"
-                    : "bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft-hover,var(--accent-soft))] border border-[var(--accent)]/30"
-                )}
-              >
-                <Route className="h-4 w-4" />
-                {isScheduled ? "Update in Route" : "Add to Route"}
-              </Link>
-            );
-          })()}
-          {scheduledInSync ? (
-            <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--success-soft)] text-[var(--success)] px-3 h-11 text-sm font-medium w-full justify-center sm:w-auto">
-              <CalendarCheck className="h-4 w-4" />
-              Lead Scheduled
-            </span>
-          ) : (
-            <button
-              onClick={onAddCalendar}
-              disabled={!lead.scheduled_day}
-              className={cn(
-                "inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto transition active:scale-[0.98]",
-                needsResync
-                  ? "bg-[var(--warning-soft)] text-[var(--warning)] hover:bg-amber-200"
-                  : lead.scheduled_day
-                  ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
-                  : "bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed"
-              )}
-            >
-              <CalendarPlus className="h-4 w-4" />
-              {needsResync ? "Update calendar event" : "Add to Calendar"}
-            </button>
-          )}
-          {/* Only show the "Find best day & time" CTA when the lead has
-              no schedule yet. Once a day or flex window is set, the
-              Reschedule button near the Appointment fields handles the
-              same entry point — avoid the duplicate button in the row. */}
-          {!scheduledInSync &&
-            !lead.scheduled_day &&
-            !lead.scheduled_time &&
-            !lead.flex_window && (
-              <button
-                onClick={onAISchedule}
-                className="inline-flex items-center justify-center gap-2 rounded-lg px-3 h-11 text-sm font-medium w-full sm:w-auto border border-[var(--accent)] text-[var(--accent)] bg-white hover:bg-[var(--accent-soft)] transition active:scale-[0.98]"
-              >
-                <Sparkles className="h-4 w-4" />
-                Find best day &amp; time
-              </button>
-            )}
         </div>
       </Section>
 
@@ -482,27 +411,4 @@ function statusFingerprint(status: string): number {
   return h * 1000;
 }
 
-function FlexWindowChip({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "h-9 rounded-lg text-xs font-medium border transition",
-        active
-          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-          : "border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)]"
-      )}
-    >
-      {label}
-    </button>
-  );
-}
+

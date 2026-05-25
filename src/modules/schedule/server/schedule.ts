@@ -144,7 +144,8 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
 
   const workStart = parseHHMM(settings.work_start_time);
   const workEnd = parseHHMM(settings.work_end_time);
-  const duration = settings.default_job_minutes;
+  const minGapMinutes = settings.min_time_between_appointments;
+  const duration = minGapMinutes;
   const buffer = settings.travel_buffer_minutes;
 
   const existing: ExistingStop[] = [];

@@ -9,6 +9,7 @@ import { fetchWithOfflineQueue } from "@/modules/offline";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { LeadCard } from "./lead-table/LeadCard";
+import { EstimateOutcomeModal } from "./lead-table/EstimateOutcomeModal";
 
 const UNASSIGNED = "__unassigned__";
 
@@ -63,6 +64,7 @@ export default function LeadTable({
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [outcomeModalLead, setOutcomeModalLead] = useState<Lead | null>(null);
   // Salesperson filter: "" = all, UNASSIGNED = leads with no salesperson,
   // any other string = exact (case-insensitive) match against sales_person.
   const [salespersonFilter, setSalespersonFilter] = useState<string>("");
@@ -301,25 +303,15 @@ export default function LeadTable({
     return false;
   }
 
-  async function onMarkCompleted(lead: Lead) {
-    const prev = lead.status;
-    const ok = await savePatch(lead.id, { status: "Completed" });
-    // savePatch surfaces its own error toast on failure; don't stack a
-    // contradictory "Marked Completed" success on top of it.
-    if (!ok) return;
-    toast({
-      kind: "success",
-      message: "Marked Completed",
-      action: {
-        label: "Undo",
-        onClick: () => {
-          savePatch(lead.id, {
-            status: prev === "Completed" ? "New" : prev,
-          });
-        },
-      },
-      duration: 6000,
-    });
+  function onMarkCompleted(lead: Lead) {
+    setOutcomeModalLead(lead);
+  }
+
+  async function submitEstimateOutcome(leadId: string, patch: LeadPatch) {
+    const ok = await savePatch(leadId, patch);
+    if (!ok) throw new Error("Save failed");
+    setOutcomeModalLead(null);
+    toast({ kind: "success", message: "Estimate completed", duration: 4000 });
   }
 
   function onDelete(id: string) {
@@ -508,6 +500,13 @@ export default function LeadTable({
         </div>
       )}
 
+      {outcomeModalLead && (
+        <EstimateOutcomeModal
+          leadName={outcomeModalLead.client?.trim() || "Lead"}
+          onSubmit={(patch) => submitEstimateOutcome(outcomeModalLead.id, patch)}
+          onCancel={() => setOutcomeModalLead(null)}
+        />
+      )}
     </div>
   );
 }

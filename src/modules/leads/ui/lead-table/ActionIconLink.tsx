@@ -6,6 +6,7 @@ export function ActionIconLink({
   title,
   onClick,
   children,
+  className: extraCls,
 }: {
   href: string | undefined;
   title: string;
@@ -14,6 +15,7 @@ export function ActionIconLink({
    *  we only fire navigation when `href` is set. */
   onClick?: () => void;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <a
@@ -31,7 +33,9 @@ export function ActionIconLink({
       className={cn(
         "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border transition",
         href
-          ? "border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+          ? extraCls === "gps"
+            ? "border-[var(--brand-bright)] text-[var(--brand-bright)] hover:bg-[#ecfccb]"
+            : "border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-soft)]"
           : "border-[var(--border)] text-[var(--subtle)] opacity-50 cursor-not-allowed"
       )}
     >

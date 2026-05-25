@@ -3,7 +3,7 @@ import { extractLeadFromImage, type ExtractedLead } from "./ai/extract";
 import { findDuplicates, isSaveable } from "@/modules/leads";
 import { displayName, normalizeState, normalizeZip } from "@/modules/shared/format";
 import { inferAddress, MapsUnavailableError } from "@/modules/routing/server";
-import type { Lead, LeadIntakeSource } from "@/modules/leads/model";
+import { LEAD_SOURCES, type Lead, type LeadIntakeSource, type LeadSource } from "@/modules/leads/model";
 
 type IngestArgs = {
   workspaceId: string;
@@ -85,6 +85,11 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   //     still has the existing "Autofill" button as a manual fallback.
   await backfillMissingAddressParts(extracted);
 
+  const validatedSource: LeadSource | null =
+    extracted.lead_source && (LEAD_SOURCES as readonly string[]).includes(extracted.lead_source)
+      ? (extracted.lead_source as LeadSource)
+      : null;
+
   // Duplicate detection against currently-active leads in THIS workspace.
   const { data: activeLeads } = await admin
     .from("leads")
@@ -107,7 +112,7 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
     ([k, v]) =>
       (k === "phone_number" || k === "email") && v != null && v < 0.6 && (extracted as Record<string, unknown>)[k]
   );
-  const saveable = isSaveable(extracted);
+  const saveable = isSaveable(extracted as unknown as Partial<Lead>);
   const intakeStatus: Lead["intake_status"] =
     !saveable || lowConf || duplicates.length > 0 ? "needs_review" : "ready";
 
@@ -136,6 +141,7 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
       scheduled_day: extracted.scheduled_day,
       scheduled_time: extracted.scheduled_time,
       notes: extracted.notes,
+      lead_source: validatedSource,
       extraction_confidence: extracted.confidence,
       intake_source: args.source,
       intake_status: intakeStatus,
@@ -154,7 +160,7 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   // dupe warning instead of the new row silently going "ready".
   let postInsertDuplicates: ReturnType<typeof findDuplicates> = duplicates;
   let finalIntakeStatus: Lead["intake_status"] = inserted.intake_status;
-  if (isSaveable(extracted) && intakeStatus === "ready") {
+  if (isSaveable(extracted as unknown as Partial<Lead>) && intakeStatus === "ready") {
     const { data: after } = await admin
       .from("leads")
       .select("id, first_name, last_name, phone_number, email, address, status, created_at")

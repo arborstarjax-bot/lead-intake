@@ -120,6 +120,7 @@ export function loadGoogleMaps(): Promise<GoogleMapsNamespace> {
       window.google.maps.importLibrary("maps"),
       window.google.maps.importLibrary("marker"),
       window.google.maps.importLibrary("routes"),
+      window.google.maps.importLibrary("places"),
     ]);
     return window.google;
   })();

@@ -45,6 +45,71 @@ export const LEAD_INTAKE_STATUSES = [
 ] as const;
 export type LeadIntakeStatus = (typeof LEAD_INTAKE_STATUSES)[number];
 
+export const LEAD_SOURCES = [
+  "Facebook",
+  "Craigslist",
+  "Instagram",
+  "Close AI",
+  "Certified Lead Kings",
+  "Text Message",
+  "Google Ads",
+  "Website Form",
+  "Nextdoor",
+  "Thumbtack",
+  "Angi",
+  "Email",
+  "Referral",
+  "Other",
+] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+/* ── Lead type ───────────────────────────────────────────────── */
+
+export const LEAD_TYPES = ["Residential", "Commercial", "Government"] as const;
+export type LeadType = (typeof LEAD_TYPES)[number];
+
+/* ── Estimate outcome tracking ────────────────────────────────── */
+
+export const ESTIMATE_OUTCOMES = [
+  "Sold",
+  "Not Sold",
+  "Needs Follow-Up",
+  "No Proposal Sent",
+] as const;
+export type EstimateOutcome = (typeof ESTIMATE_OUTCOMES)[number];
+
+export const NO_PROPOSAL_REASONS = [
+  "Not Within Scope",
+  "Did Not Meet Minimum",
+  "Other",
+] as const;
+export type NoProposalReason = (typeof NO_PROPOSAL_REASONS)[number];
+
+export const FOLLOW_UP_RESULTS = [
+  "Called — No Answer",
+  "Left Voicemail",
+  "Spoke With Customer",
+  "Waiting on Decision",
+  "Requested Callback",
+  "Reschedule Needed",
+  "Proposal Revision Requested",
+  "Other",
+] as const;
+export type FollowUpResult = (typeof FOLLOW_UP_RESULTS)[number];
+
+export const OUTCOME_BADGES = [
+  "Sold",
+  "Not Sold",
+  "Needs Follow-Up",
+  "No Proposal Sent",
+  "Not Within Scope",
+  "Did Not Meet Minimum",
+  "Proposal Revision Requested",
+  "Waiting on Decision",
+  "Requested Callback",
+] as const;
+export type OutcomeBadge = (typeof OUTCOME_BADGES)[number];
+
 export const LEAD_FLEX_WINDOWS = ["all_day", "am", "pm"] as const;
 export type LeadFlexWindow = (typeof LEAD_FLEX_WINDOWS)[number];
 
@@ -95,6 +160,14 @@ export type Lead = {
   calendar_scheduled_time: string | null;
   intake_source: LeadIntakeSource;
   intake_status: LeadIntakeStatus;
+  lead_source: LeadSource | null;
+  lead_type: LeadType | null;
+  estimate_outcome: EstimateOutcome | null;
+  no_proposal_reason: NoProposalReason | null;
+  no_proposal_notes: string | null;
+  follow_up_result: FollowUpResult | null;
+  follow_up_notes: string | null;
+  outcome_badge: OutcomeBadge | null;
 };
 
 export const LEAD_ACTIVITY_TYPES = [
@@ -159,4 +232,12 @@ export const EDITABLE_COLUMNS: (keyof Lead)[] = [
   "scheduled_time",
   "flex_window",
   "notes",
+  "lead_source",
+  "lead_type",
+  "estimate_outcome",
+  "no_proposal_reason",
+  "no_proposal_notes",
+  "follow_up_result",
+  "follow_up_notes",
+  "outcome_badge",
 ];

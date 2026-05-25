@@ -39,6 +39,18 @@ type DayPreview =
     }
   | { date: string; isWorkDay: false };
 
+type TimingConflict = {
+  slot: Slot;
+  minGapMinutes: number;
+  conflicts: {
+    id: string;
+    label: string;
+    salesPerson: string | null;
+    status: string;
+    scheduledTime: string;
+  }[];
+};
+
 export default function ScheduleModal({
   lead,
   onClose,
@@ -81,6 +93,10 @@ export default function ScheduleModal({
     time: string;
     htmlLink?: string;
   } | null>(null);
+
+  // Timing conflict override state
+  const [timingConflict, setTimingConflict] = useState<TimingConflict | null>(null);
+  const [overriding, setOverriding] = useState(false);
 
   const loadWeek = useCallback(async () => {
     setWeekLoading(true);
@@ -185,9 +201,14 @@ export default function ScheduleModal({
       );
       const patchJson = await patchRes.json();
       if (!patchRes.ok) {
-        // Double-booking: surface the server's specific message naming
-        // the conflicting lead so the operator knows who's already
-        // holding the slot.
+        if (patchRes.status === 409 && patchJson.reason === "timing_conflict") {
+          setTimingConflict({
+            slot,
+            minGapMinutes: patchJson.minGapMinutes ?? 60,
+            conflicts: patchJson.conflicts ?? [],
+          });
+          return;
+        }
         if (patchRes.status === 409 && patchJson.reason === "double_booking") {
           throw new Error(
             patchJson.error ??
@@ -241,6 +262,65 @@ export default function ScheduleModal({
     }
   }
 
+  async function bookWithOverride() {
+    if (!timingConflict || !selectedDay) return;
+    setOverriding(true);
+    setError(null);
+    try {
+      const patchBody: Record<string, string> = {
+        scheduled_time: timingConflict.slot.startTime,
+        scheduled_day: selectedDay,
+      };
+      const patchRes = await patchLead(
+        lead.id,
+        patchBody as Partial<Lead>,
+        { updated_at: lead.updated_at },
+        { "x-allow-double-book": "1" }
+      );
+      const patchJson = await patchRes.json();
+      if (!patchRes.ok) {
+        throw new Error(formatLeadPatchError(patchRes, patchJson, "Failed to override"));
+      }
+
+      const calRes = await fetch(`/api/leads/${lead.id}/calendar`, { method: "POST" });
+      const calJson = await calRes.json();
+      if (calRes.status === 428) {
+        toast({
+          kind: "info",
+          message: "Google Calendar isn't connected.",
+          duration: 6000,
+          action: {
+            label: "Connect",
+            onClick: () => { window.location.href = calJson.connectUrl; },
+          },
+        });
+        setTimingConflict(null);
+        return;
+      }
+      if (!calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
+
+      const freshRes = await fetch(`/api/leads`);
+      let updated: Lead = patchJson.lead as Lead;
+      if (freshRes.ok) {
+        const freshJson = await freshRes.json();
+        const found = (freshJson.leads as Lead[]).find((l) => l.id === lead.id);
+        if (found) updated = found;
+      }
+      onBooked(updated, calJson.htmlLink);
+      setBooked({
+        day: selectedDay,
+        time: timingConflict.slot.startTime,
+        htmlLink: calJson.htmlLink,
+      });
+      setTimingConflict(null);
+    } catch (e) {
+      setError((e as Error).message);
+      setTimingConflict(null);
+    } finally {
+      setOverriding(false);
+    }
+  }
+
   const leadName = lead.client?.trim() || "this lead";
 
   const headerTitle = useMemo(() => {
@@ -285,7 +365,58 @@ export default function ScheduleModal({
           </button>
         </header>
 
-        {booked ? (
+        {/* Timing conflict override overlay */}
+        {timingConflict && (
+          <div className="p-4 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-amber-100 text-amber-600 shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="font-semibold text-[15px]">Timing Conflict</div>
+                <p className="text-sm text-[var(--muted)] mt-1">
+                  Minimum {timingConflict.minGapMinutes} min gap required between
+                  appointments. The following are too close:
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {timingConflict.conflicts.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{c.label}</div>
+                    {c.salesPerson && (
+                      <div className="text-xs text-[var(--muted)]">{c.salesPerson}</div>
+                    )}
+                  </div>
+                  <div className="text-sm font-semibold text-amber-700 shrink-0 ml-2">
+                    {c.scheduledTime}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTimingConflict(null)}
+                className="flex-1 h-11 rounded-lg border border-[var(--border)] text-sm font-medium hover:bg-[var(--surface-2)] transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={bookWithOverride}
+                disabled={overriding}
+                className="flex-1 h-11 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition disabled:opacity-50"
+              >
+                {overriding ? "Booking…" : "Override & Book"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {timingConflict ? null : booked ? (
           <BookedView
             lead={lead}
             day={booked.day}
