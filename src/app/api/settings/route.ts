@@ -20,6 +20,9 @@ const bodySchema = z
     work_days: z.array(z.number().int().min(0).max(6)).optional(),
     default_job_minutes: z.number().int().min(5).max(600).optional(),
     travel_buffer_minutes: z.number().int().min(0).max(120).optional(),
+    min_time_between_appointments: z.number().int().min(0).max(480).optional(),
+    days_until_lost: z.number().int().min(1).max(365).optional(),
+    days_until_not_sold: z.number().int().min(1).max(365).optional(),
 
     // Tailoring fields (see 2026-04-24 migration).
     company_name: z.string().trim().nullable().optional(),
