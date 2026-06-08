@@ -158,6 +158,9 @@ function detailSuffix(activity: LeadActivity): string {
   if (activity.type === "status_changed" && typeof d.to === "string") {
     return ` → ${d.to}`;
   }
+  if (activity.type === "proposal_sent" && typeof d.outcome === "string") {
+    return ` · ${d.outcome}`;
+  }
   return "";
 }
 

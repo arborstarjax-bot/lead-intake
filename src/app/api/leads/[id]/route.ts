@@ -369,9 +369,18 @@ export async function PATCH(
       });
     }
 
-    // Estimate outcome set to "Needs Follow-Up" with proposal sent context
-    if (patch.estimate_outcome === "Sold" && existing.estimate_outcome !== "Sold" && !activitiesToLog.some((a) => a.type === "marked_sold")) {
-      activitiesToLog.push({ type: "marked_sold", details: {} });
+    // Estimate outcome changed — log proposal_sent when first set, or
+    // marked_sold if the outcome flipped to Sold without a status change.
+    if (
+      typeof patch.estimate_outcome === "string" &&
+      patch.estimate_outcome !== existing.estimate_outcome
+    ) {
+      if (!existing.estimate_outcome && !activitiesToLog.some((a) => a.type === "marked_sold" || a.type === "marked_not_sold")) {
+        activitiesToLog.push({ type: "proposal_sent", details: { outcome: patch.estimate_outcome } });
+      }
+      if (patch.estimate_outcome === "Sold" && existing.estimate_outcome !== "Sold" && !activitiesToLog.some((a) => a.type === "marked_sold")) {
+        activitiesToLog.push({ type: "marked_sold", details: {} });
+      }
     }
 
     if (activitiesToLog.length > 0) {
