@@ -10,10 +10,13 @@ SET status         = 'Pending',
     status_changed_at = COALESCE(status_changed_at, updated_at, NOW())
 WHERE outcome_badge = 'Waiting on Decision';
 
--- Also catch any with estimate_outcome still set to "Waiting on Decision"
+-- The old "Pending" flow wrote estimate_outcome = 'Needs Follow-Up' (not
+-- 'Waiting on Decision'). Target those rows where outcome_badge was just
+-- migrated to 'Pending' above so estimate_outcome is consistent.
 UPDATE leads
 SET estimate_outcome = 'Pending'
-WHERE estimate_outcome = 'Waiting on Decision';
+WHERE estimate_outcome = 'Needs Follow-Up'
+  AND outcome_badge = 'Pending';
 
 -- Catch follow_up_result references
 UPDATE leads

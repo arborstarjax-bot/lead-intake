@@ -251,7 +251,7 @@ export async function PATCH(
       .eq("scheduled_day", finalDay)
       .not("scheduled_time", "is", null)
       .neq("id", id)
-      .not("status", "in", '("Completed","Lost")')
+      .not("status", "in", '("Completed","Lost","Pending")')
       .limit(50);
     const finalMinutes = parseTimeToMinutes(finalTime);
     const conflicts = (sameDayLeads ?? []).filter((c) => {
