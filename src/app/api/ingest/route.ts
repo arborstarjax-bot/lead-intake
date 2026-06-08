@@ -107,39 +107,37 @@ export async function POST(req: NextRequest) {
       max_per_day: INGEST_LIMIT_PER_DAY,
     });
     if (rlErr) {
-      // Don't silently open the floodgates on an RPC error. Refund the
-      // in-memory slot, surface a 500 so the client retries.
-      refundRateLimit({ key: rlKey, cost: files.length });
-      return NextResponse.json(
-        { error: "Rate limiter unavailable — try again.", reason: "rate_limit_error" },
-        { status: 500 }
-      );
-    }
-    const row = Array.isArray(rlRows) ? rlRows[0] : rlRows;
-    const used = Number(row?.used ?? 0);
-    const remaining = Number(row?.remaining ?? 0);
-    if (!row?.ok) {
-      refundRateLimit({ key: rlKey, cost: files.length });
-      return NextResponse.json(
-        {
-          error:
-            remaining === 0
-              ? `Daily upload limit reached (${INGEST_LIMIT_PER_DAY}/day on Starter). Try again tomorrow or upgrade to Pro for unlimited uploads.`
-              : `Only ${remaining} upload${remaining === 1 ? "" : "s"} remaining today. Trying to upload ${files.length} — retry with ${remaining} or fewer, or upgrade to Pro for unlimited.`,
-          reason: "plan_cap",
-          plan: billing.plan,
-          limit: INGEST_LIMIT_PER_DAY,
-          used,
-          remaining,
-        },
-        {
-          status: 429,
-          headers: {
-            "X-RateLimit-Limit": String(INGEST_LIMIT_PER_DAY),
-            "X-RateLimit-Remaining": String(remaining),
+      // DB rate limiter unavailable (function may not exist yet).
+      // Fall back to the in-memory limit that already passed above
+      // rather than blocking the user entirely. Log for observability.
+      console.warn("[ingest] reserve_ingest_quota RPC failed, falling back to in-memory limit:", rlErr.message);
+    } else {
+      const row = Array.isArray(rlRows) ? rlRows[0] : rlRows;
+      const used = Number(row?.used ?? 0);
+      const remaining = Number(row?.remaining ?? 0);
+      if (!row?.ok) {
+        refundRateLimit({ key: rlKey, cost: files.length });
+        return NextResponse.json(
+          {
+            error:
+              remaining === 0
+                ? `Daily upload limit reached (${INGEST_LIMIT_PER_DAY}/day on Starter). Try again tomorrow or upgrade to Pro for unlimited uploads.`
+                : `Only ${remaining} upload${remaining === 1 ? "" : "s"} remaining today. Trying to upload ${files.length} — retry with ${remaining} or fewer, or upgrade to Pro for unlimited.`,
+            reason: "plan_cap",
+            plan: billing.plan,
+            limit: INGEST_LIMIT_PER_DAY,
+            used,
+            remaining,
           },
-        }
-      );
+          {
+            status: 429,
+            headers: {
+              "X-RateLimit-Limit": String(INGEST_LIMIT_PER_DAY),
+              "X-RateLimit-Remaining": String(remaining),
+            },
+          }
+        );
+      }
     }
     reservedCount = files.length;
   }
