@@ -4,6 +4,9 @@
 --   - Lost / Not Sold reason tracking (follow_up_result stores reason)
 --   - Proper outcome_badge alignment with status
 
+-- ADD VALUE cannot run inside a transaction, so this must come first.
+ALTER TYPE lead_status ADD VALUE IF NOT EXISTS 'Pending';
+
 BEGIN;
 
 -- 1. Leads with outcome_badge = 'Sold' but status != 'Completed' → fix status
