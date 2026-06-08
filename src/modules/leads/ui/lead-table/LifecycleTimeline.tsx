@@ -107,11 +107,21 @@ export function LifecycleTimeline({
   );
 }
 
+const LIFECYCLE_TYPES: LeadActivityType[] = [
+  "lead_intake",
+  "lead_scheduled",
+  "lead_completed",
+  "status_changed",
+  "follow_up_set",
+  "proposal_sent",
+  "marked_sold",
+  "marked_not_sold",
+  "marked_lost",
+  "marked_pending",
+];
+
 function TimelineRow({ activity }: { activity: LeadActivity }) {
-  const isLifecycle =
-    activity.type === "lead_intake" ||
-    activity.type === "lead_scheduled" ||
-    activity.type === "lead_completed";
+  const isLifecycle = LIFECYCLE_TYPES.includes(activity.type);
   const dotClass = cn(
     "h-2 w-2 rounded-full flex-none mt-1.5",
     isLifecycle
@@ -136,11 +146,17 @@ function TimelineRow({ activity }: { activity: LeadActivity }) {
 
 function detailSuffix(activity: LeadActivity): string {
   const d = activity.details ?? {};
-  if (
-    activity.type === "customer_called" &&
-    typeof d.outcome === "string"
-  ) {
+  if (activity.type === "customer_called" && typeof d.outcome === "string") {
     return ` · ${d.outcome}`;
+  }
+  if (
+    (activity.type === "marked_not_sold" || activity.type === "marked_lost" || activity.type === "follow_up_set") &&
+    typeof d.reason === "string" && d.reason
+  ) {
+    return ` · ${d.reason}`;
+  }
+  if (activity.type === "status_changed" && typeof d.to === "string") {
+    return ` → ${d.to}`;
   }
   return "";
 }

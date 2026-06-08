@@ -48,7 +48,7 @@ export async function PATCH(
   const { data: existing } = await supabase
     .from("leads")
     .select(
-      "id, workspace_id, status, calendar_event_id, first_name, last_name, client, updated_at, scheduled_day, scheduled_time, extraction_confidence"
+      "id, workspace_id, status, calendar_event_id, first_name, last_name, client, updated_at, scheduled_day, scheduled_time, extraction_confidence, follow_up_result, estimate_outcome"
     )
     .eq("id", id)
     .maybeSingle();
@@ -323,29 +323,69 @@ export async function PATCH(
   // A workspace member who has not connected their own calendar yet will
   // silently skip — the lead is still Completed / unscheduled locally.
   // Log lifecycle transitions. Fire-and-forget (errors swallowed) so an
-  // activity-log failure never blocks the actual lead update. Status
-  // changes drive the only auto-logged events — `lead_intake` is logged
-  // at row creation (see /api/leads POST and the backfill in the
-  // migration), so we don't need to log that here.
-  if (
-    typeof patch.status === "string" &&
-    patch.status !== existing.status
-  ) {
-    let activityType: "lead_scheduled" | "lead_completed" | null = null;
-    if (patch.status === "Scheduled") activityType = "lead_scheduled";
-    else if (patch.status === "Completed") activityType = "lead_completed";
-    if (activityType) {
-      try {
-        await supabase.from("lead_activities").insert({
-          workspace_id: auth.workspaceId,
-          lead_id: id,
-          type: activityType,
-          details: { from: existing.status, to: patch.status },
+  // activity-log failure never blocks the actual lead update.
+  try {
+    const activitiesToLog: { type: string; details: Record<string, unknown> }[] = [];
+
+    // Status change tracking
+    if (typeof patch.status === "string" && patch.status !== existing.status) {
+      if (patch.status === "Scheduled") {
+        activitiesToLog.push({ type: "lead_scheduled", details: { from: existing.status, to: patch.status } });
+      } else if (patch.status === "Completed" && patch.outcome_badge === "Sold") {
+        activitiesToLog.push({ type: "marked_sold", details: { from: existing.status } });
+      } else if (patch.status === "Completed" && patch.outcome_badge === "Not Sold") {
+        activitiesToLog.push({
+          type: "marked_not_sold",
+          details: { from: existing.status, reason: patch.follow_up_result ?? null },
         });
-      } catch {
-        // Non-blocking.
+      } else if (patch.status === "Completed") {
+        activitiesToLog.push({ type: "lead_completed", details: { from: existing.status, to: patch.status } });
+      } else if (patch.status === "Lost") {
+        activitiesToLog.push({
+          type: "marked_lost",
+          details: { from: existing.status, reason: patch.follow_up_result ?? null },
+        });
+      } else if (patch.status === "Pending") {
+        activitiesToLog.push({ type: "marked_pending", details: { from: existing.status } });
+      } else if (patch.status === "Called / No Response") {
+        activitiesToLog.push({
+          type: "follow_up_set",
+          details: { from: existing.status, reason: patch.follow_up_result ?? null },
+        });
+      } else {
+        activitiesToLog.push({ type: "status_changed", details: { from: existing.status, to: patch.status } });
       }
     }
+
+    // Follow-up result changed without a status change (e.g. updating the reason)
+    if (
+      !("status" in patch && patch.status !== existing.status) &&
+      typeof patch.follow_up_result === "string" &&
+      patch.follow_up_result !== existing.follow_up_result
+    ) {
+      activitiesToLog.push({
+        type: "follow_up_set",
+        details: { reason: patch.follow_up_result },
+      });
+    }
+
+    // Estimate outcome set to "Needs Follow-Up" with proposal sent context
+    if (patch.estimate_outcome === "Sold" && existing.estimate_outcome !== "Sold" && !activitiesToLog.some((a) => a.type === "marked_sold")) {
+      activitiesToLog.push({ type: "marked_sold", details: {} });
+    }
+
+    if (activitiesToLog.length > 0) {
+      await supabase.from("lead_activities").insert(
+        activitiesToLog.map((a) => ({
+          workspace_id: auth.workspaceId,
+          lead_id: id,
+          type: a.type,
+          details: a.details,
+        }))
+      );
+    }
+  } catch {
+    // Non-blocking — activity log failures never block the lead update.
   }
 
   if ((completing || unbookingCalendar) && hasRealCalendarEvent) {
