@@ -84,7 +84,7 @@ export default function CalendarPage() {
     const seen = new Map<string, string | null>();
     for (const l of leads) {
       if (!l.scheduled_day) continue;
-      if (l.status === "Completed" || l.status === "Lost") continue;
+      if (l.status === "Completed" || l.status === "Lost" || l.status === "Pending") continue;
       const key = salespersonGroupKey(l);
       if (!seen.has(key)) seen.set(key, l.sales_person ?? null);
     }
@@ -115,7 +115,7 @@ export default function CalendarPage() {
     const byDay = new Map<string, Lead[]>();
     for (const l of leads) {
       if (!l.scheduled_day) continue;
-      if (l.status === "Completed" || l.status === "Lost") continue;
+      if (l.status === "Completed" || l.status === "Lost" || l.status === "Pending") continue;
       if (
         selectedSalesperson !== ALL_SALESPEOPLE &&
         salespersonGroupKey(l) !== selectedSalesperson
