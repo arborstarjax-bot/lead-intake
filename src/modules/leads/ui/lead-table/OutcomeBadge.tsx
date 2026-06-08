@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 const BADGE_STYLES: Record<OutcomeBadgeType, { bg: string; fg: string; border: string }> = {
   "Sold":                        { bg: "bg-green-50",   fg: "text-green-700",  border: "border-green-200" },
   "Not Sold":                    { bg: "bg-rose-50",    fg: "text-rose-700",   border: "border-rose-200" },
+  "Lost":                        { bg: "bg-gray-100",   fg: "text-gray-700",   border: "border-gray-300" },
   "Needs Follow-Up":             { bg: "bg-blue-50",    fg: "text-blue-700",   border: "border-blue-200" },
   "No Proposal Sent":            { bg: "bg-amber-50",   fg: "text-amber-700",  border: "border-amber-200" },
   "Not Within Scope":            { bg: "bg-slate-100",  fg: "text-slate-600",  border: "border-slate-300" },

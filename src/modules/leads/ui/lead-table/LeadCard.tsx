@@ -33,6 +33,7 @@ import { SalespersonPicker } from "./SalespersonPicker";
 import { Section } from "./Section";
 import { StatusPill, type StatusTransition } from "./StatusPill";
 import { FollowUpModal } from "./FollowUpModal";
+import { OutcomeReasonModal } from "./OutcomeReasonModal";
 import { LeadSourceBadge } from "./LeadSourceBadge";
 import { LeadTypePill } from "./LeadTypePill";
 import { OutcomeBadge } from "./OutcomeBadge";
@@ -55,6 +56,8 @@ export function LeadCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
+  const [lostModalOpen, setLostModalOpen] = useState(false);
+  const [notSoldModalOpen, setNotSoldModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { settings } = useAppSettings();
   // Bumped after a call/text is logged so the timeline (if expanded)
@@ -97,13 +100,17 @@ export function LeadCard({
           <StatusPill
             status={lead.status}
             outcomeBadge={lead.outcome_badge}
+            followUpResult={lead.follow_up_result}
             onChange={(t: StatusTransition) => {
               switch (t.kind) {
                 case "sold":
                   onPatch({ status: "Completed", estimate_outcome: "Sold", outcome_badge: "Sold" });
                   break;
                 case "not_sold":
-                  onPatch({ status: "Completed", estimate_outcome: "Not Sold", outcome_badge: "Not Sold" });
+                  setNotSoldModalOpen(true);
+                  break;
+                case "lost":
+                  setLostModalOpen(true);
                   break;
                 case "needs_follow_up":
                   setFollowUpModalOpen(true);
@@ -422,6 +429,30 @@ export function LeadCard({
             setFollowUpModalOpen(false);
           }}
           onCancel={() => setFollowUpModalOpen(false)}
+        />
+      )}
+
+      {lostModalOpen && (
+        <OutcomeReasonModal
+          leadName={lead.client?.trim() || "Lead"}
+          outcomeLabel="Lost"
+          onSubmit={async (patch) => {
+            onPatch(patch);
+            setLostModalOpen(false);
+          }}
+          onCancel={() => setLostModalOpen(false)}
+        />
+      )}
+
+      {notSoldModalOpen && (
+        <OutcomeReasonModal
+          leadName={lead.client?.trim() || "Lead"}
+          outcomeLabel="Not Sold"
+          onSubmit={async (patch) => {
+            onPatch(patch);
+            setNotSoldModalOpen(false);
+          }}
+          onCancel={() => setNotSoldModalOpen(false)}
         />
       )}
     </article>

@@ -7,6 +7,7 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "New", label: "New" },
   { value: "Called / No Response", label: "Needs Follow-Up" },
   { value: "Scheduled", label: "Scheduled" },
+  { value: "Pending", label: "Pending" },
   { value: "Sold", label: "Sold" },
   { value: "Not Sold", label: "Not Sold" },
   { value: "Lost", label: "Lost" },
@@ -16,6 +17,7 @@ export type StatusTransition =
   | { kind: "simple"; status: LeadStatus }
   | { kind: "sold" }
   | { kind: "not_sold" }
+  | { kind: "lost" }
   | { kind: "needs_follow_up" }
   | { kind: "completed" };
 
@@ -30,6 +32,11 @@ const STYLE_MAP: Record<string, { bg: string; fg: string; dot: string }> = {
     bg: "bg-[var(--status-scheduled-bg)]",
     fg: "text-[var(--status-scheduled-fg)]",
     dot: "#4f9d25",
+  },
+  Pending: {
+    bg: "bg-purple-50",
+    fg: "text-purple-700",
+    dot: "#7c3aed",
   },
   Completed: {
     bg: "bg-[var(--status-completed-bg)]",
@@ -53,6 +60,16 @@ function resolveStyle(status: LeadStatus, outcomeBadge?: string | null) {
   return STYLE_MAP[status] ?? STYLE_MAP.New;
 }
 
+function resolveLostLabel(followUpResult?: string | null): string {
+  if (!followUpResult) return "Lost";
+  return `Lost (${followUpResult})`;
+}
+
+function resolveNotSoldLabel(followUpResult?: string | null): string {
+  if (!followUpResult) return "Not Sold";
+  return `Not Sold (${followUpResult})`;
+}
+
 function resolveDisplayValue(status: LeadStatus, outcomeBadge?: string | null): string {
   if (status === "Completed" && outcomeBadge === "Sold") return "Sold";
   if (status === "Completed" && outcomeBadge === "Not Sold") return "Not Sold";
@@ -60,17 +77,26 @@ function resolveDisplayValue(status: LeadStatus, outcomeBadge?: string | null): 
   return status;
 }
 
+function resolveFullDisplayLabel(status: LeadStatus, outcomeBadge?: string | null, followUpResult?: string | null): string {
+  if (status === "Lost") return resolveLostLabel(followUpResult);
+  if (status === "Completed" && outcomeBadge === "Not Sold") return resolveNotSoldLabel(followUpResult);
+  return resolveDisplayValue(status, outcomeBadge);
+}
+
 export function StatusPill({
   status,
   outcomeBadge,
+  followUpResult,
   onChange,
 }: {
   status: LeadStatus;
   outcomeBadge?: string | null;
+  followUpResult?: string | null;
   onChange: (transition: StatusTransition) => void;
 }) {
   const style = resolveStyle(status, outcomeBadge);
   const displayValue = resolveDisplayValue(status, outcomeBadge);
+  const fullLabel = resolveFullDisplayLabel(status, outcomeBadge, followUpResult);
 
   function handleChange(value: string) {
     switch (value) {
@@ -79,6 +105,12 @@ export function StatusPill({
         break;
       case "Not Sold":
         onChange({ kind: "not_sold" });
+        break;
+      case "Lost":
+        onChange({ kind: "lost" });
+        break;
+      case "Pending":
+        onChange({ kind: "simple", status: "Pending" as LeadStatus });
         break;
       case "Called / No Response":
         onChange({ kind: "needs_follow_up" });
@@ -97,6 +129,9 @@ export function StatusPill({
       )}
     >
       <span className="mr-1.5 h-2 w-2 rounded-full" style={{ backgroundColor: style.dot }} />
+      {fullLabel !== displayValue && (
+        <span className="mr-1 text-xs truncate max-w-[10rem]">{fullLabel}</span>
+      )}
       <select
         value={displayValue}
         onChange={(e) => handleChange(e.target.value)}

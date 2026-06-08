@@ -12,16 +12,14 @@ import {
 } from "lucide-react";
 import {
   NO_PROPOSAL_REASONS,
-  FOLLOW_UP_RESULTS,
   type EstimateOutcome,
   type NoProposalReason,
-  type FollowUpResult,
   type LeadPatch,
   type OutcomeBadge,
 } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 
-type Step = "primary" | "proposal_result" | "no_proposal_reason" | "follow_up";
+type Step = "primary" | "proposal_result" | "no_proposal_reason";
 
 export function EstimateOutcomeModal({
   leadName,
@@ -36,8 +34,6 @@ export function EstimateOutcomeModal({
   const [outcome, setOutcome] = useState<EstimateOutcome | null>(null);
   const [noProposalReason, setNoProposalReason] = useState<NoProposalReason | null>(null);
   const [noProposalNotes, setNoProposalNotes] = useState("");
-  const [followUpResult, setFollowUpResult] = useState<FollowUpResult | null>(null);
-  const [followUpNotes, setFollowUpNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   function deriveBadge(): OutcomeBadge {
@@ -48,10 +44,7 @@ export function EstimateOutcomeModal({
       if (noProposalReason === "Did Not Meet Minimum") return "Did Not Meet Minimum";
       return "No Proposal Sent";
     }
-    if (followUpResult === "Proposal Revision Requested") return "Proposal Revision Requested";
-    if (followUpResult === "Waiting on Decision") return "Waiting on Decision";
-    if (followUpResult === "Requested Callback") return "Requested Callback";
-    return "Needs Follow-Up";
+    return "Waiting on Decision";
   }
 
   async function handleSubmit() {
@@ -65,10 +58,6 @@ export function EstimateOutcomeModal({
       if (outcome === "No Proposal Sent") {
         patch.no_proposal_reason = noProposalReason;
         patch.no_proposal_notes = noProposalReason === "Other" ? noProposalNotes || null : null;
-      }
-      if (outcome === "Needs Follow-Up") {
-        patch.follow_up_result = followUpResult;
-        patch.follow_up_notes = followUpResult === "Other" ? followUpNotes || null : null;
       }
       await onSubmit(patch);
     } finally {
@@ -85,20 +74,23 @@ export function EstimateOutcomeModal({
     }
   }
 
-  async function selectProposalResult(r: "Sold" | "Not Sold" | "Needs Follow-Up") {
-    setOutcome(r);
-    if (r === "Needs Follow-Up") {
-      setStep("follow_up");
-      return;
-    }
-    // Sold / Not Sold auto-submit
+  async function selectProposalResult(r: "Sold" | "Not Sold" | "Pending") {
     setSubmitting(true);
     try {
-      await onSubmit({
-        status: "Completed",
-        estimate_outcome: r,
-        outcome_badge: r,
-      });
+      if (r === "Pending") {
+        await onSubmit({
+          status: "Pending",
+          estimate_outcome: "Needs Follow-Up",
+          outcome_badge: "Waiting on Decision",
+        });
+      } else {
+        setOutcome(r);
+        await onSubmit({
+          status: "Completed",
+          estimate_outcome: r,
+          outcome_badge: r,
+        });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -107,14 +99,12 @@ export function EstimateOutcomeModal({
   const canSubmit =
     (outcome === "Sold") ||
     (outcome === "Not Sold") ||
-    (outcome === "No Proposal Sent" && noProposalReason && (noProposalReason !== "Other" || noProposalNotes.trim())) ||
-    (outcome === "Needs Follow-Up" && followUpResult && (followUpResult !== "Other" || followUpNotes.trim()));
+    (outcome === "No Proposal Sent" && noProposalReason && (noProposalReason !== "Other" || noProposalNotes.trim()));
 
   const title =
     step === "primary" ? "Estimate Results" :
     step === "proposal_result" ? "Proposal Sent" :
-    step === "no_proposal_reason" ? "No Proposal Sent" :
-    "Follow-Up Details";
+    "No Proposal Sent";
 
   return (
     <div
@@ -206,15 +196,15 @@ export function EstimateOutcomeModal({
                 </div>
               </button>
               <button
-                onClick={() => selectProposalResult("Needs Follow-Up")}
-                className="flex items-center gap-3 w-full p-4 rounded-xl border border-[var(--border)] hover:border-blue-400 hover:bg-blue-50 transition text-left"
+                onClick={() => selectProposalResult("Pending")}
+                className="flex items-center gap-3 w-full p-4 rounded-xl border border-[var(--border)] hover:border-purple-400 hover:bg-purple-50 transition text-left"
               >
-                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 text-blue-600 shrink-0">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-purple-100 text-purple-600 shrink-0">
                   <Clock className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="font-semibold text-blue-700">Needs Follow-Up</div>
-                  <div className="text-xs text-[var(--muted)]">Customer needs more time or information</div>
+                  <div className="font-semibold text-purple-700">Pending</div>
+                  <div className="text-xs text-[var(--muted)]">Waiting on customer decision</div>
                 </div>
               </button>
             </>
@@ -254,39 +244,6 @@ export function EstimateOutcomeModal({
             </>
           )}
 
-          {step === "follow_up" && (
-            <>
-              <p className="text-sm text-[var(--muted)]">
-                Log the follow-up result:
-              </p>
-              <div className="space-y-1.5">
-                {FOLLOW_UP_RESULTS.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setFollowUpResult(r)}
-                    className={cn(
-                      "flex items-center w-full px-4 py-2.5 rounded-xl border text-left text-sm font-medium transition",
-                      followUpResult === r
-                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                        : "border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--surface-2)]"
-                    )}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-              {followUpResult === "Other" && (
-                <textarea
-                  value={followUpNotes}
-                  onChange={(e) => setFollowUpNotes(e.target.value)}
-                  placeholder="Describe the follow-up…"
-                  rows={3}
-                  className="w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)] resize-none"
-                  autoFocus
-                />
-              )}
-            </>
-          )}
         </div>
 
         {/* Footer — show submit button when we have enough data */}
@@ -296,7 +253,7 @@ export function EstimateOutcomeModal({
               onClick={() => {
                 if (step === "proposal_result") setStep("primary");
                 else if (step === "no_proposal_reason") setStep("primary");
-                else if (step === "follow_up") setStep("proposal_result");
+
               }}
               className="flex-1 h-11 rounded-lg border border-[var(--border)] text-sm font-medium hover:bg-[var(--surface-2)] transition"
             >

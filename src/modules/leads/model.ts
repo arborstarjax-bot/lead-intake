@@ -2,6 +2,7 @@ export const LEAD_STATUSES = [
   "New",
   "Called / No Response",
   "Scheduled",
+  "Pending",
   "Completed",
   "Lost",
 ] as const;
@@ -25,6 +26,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   New: "New",
   "Called / No Response": "Needs Followup",
   Scheduled: "Scheduled",
+  Pending: "Pending",
   Completed: "Completed",
   Lost: "Lost",
 };
@@ -102,6 +104,7 @@ export type FollowUpResult = (typeof FOLLOW_UP_RESULTS)[number];
 export const OUTCOME_BADGES = [
   "Sold",
   "Not Sold",
+  "Lost",
   "Needs Follow-Up",
   "No Proposal Sent",
   "Not Within Scope",
@@ -167,10 +170,27 @@ export type Lead = {
   estimate_outcome: EstimateOutcome | null;
   no_proposal_reason: NoProposalReason | null;
   no_proposal_notes: string | null;
-  follow_up_result: FollowUpResult | null;
+  follow_up_result: FollowUpResult | OutcomeReason | "Expired" | null;
   follow_up_notes: string | null;
   outcome_badge: OutcomeBadge | null;
 };
+
+/* ── Outcome reason tracking (Lost / Not Sold) ───────────────── */
+
+export const OUTCOME_REASONS = [
+  "No Response",
+  "Not Interested",
+  "Budget Issues",
+  "Went With Competitor",
+  "Bad Lead / Wrong Info",
+  "Out of Service Area",
+  "Did Not Meet Minimum",
+  "Not In Scope",
+  "Other",
+] as const;
+export type OutcomeReason = (typeof OUTCOME_REASONS)[number];
+
+export type OutcomeReasonSubFilter = "All" | OutcomeReason | "Expired";
 
 export const LEAD_ACTIVITY_TYPES = [
   "lead_intake",
