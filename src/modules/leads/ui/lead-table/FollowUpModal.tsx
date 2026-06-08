@@ -123,7 +123,6 @@ export function FollowUpModal({
 
 function deriveBadge(result: FollowUpResult): OutcomeBadge {
   if (result === "Proposal Revision Requested") return "Proposal Revision Requested";
-  if (result === "Waiting on Decision") return "Waiting on Decision";
   if (result === "Requested Callback") return "Requested Callback";
   return "Needs Follow-Up";
 }

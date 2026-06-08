@@ -12,7 +12,7 @@ const BADGE_STYLES: Record<OutcomeBadgeType, { bg: string; fg: string; border: s
   "Not Within Scope":            { bg: "bg-slate-100",  fg: "text-slate-600",  border: "border-slate-300" },
   "Did Not Meet Minimum":        { bg: "bg-orange-50",  fg: "text-orange-700", border: "border-orange-200" },
   "Proposal Revision Requested": { bg: "bg-violet-50",  fg: "text-violet-700", border: "border-violet-200" },
-  "Waiting on Decision":         { bg: "bg-cyan-50",    fg: "text-cyan-700",   border: "border-cyan-200" },
+  "Pending":                     { bg: "bg-cyan-50",    fg: "text-cyan-700",   border: "border-cyan-200" },
   "Requested Callback":          { bg: "bg-indigo-50",  fg: "text-indigo-700", border: "border-indigo-200" },
 };
 

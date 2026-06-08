@@ -127,6 +127,7 @@ export async function GET(req: Request) {
       .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", iso)
       .neq("status", "Completed")
+      .neq("status", "Pending")
       .order("scheduled_time", { ascending: true, nullsFirst: false }),
     ghostLeadId
       ? supabase
