@@ -44,7 +44,7 @@ export function EstimateOutcomeModal({
       if (noProposalReason === "Did Not Meet Minimum") return "Did Not Meet Minimum";
       return "No Proposal Sent";
     }
-    return "Waiting on Decision";
+    return "Pending";
   }
 
   async function handleSubmit() {
@@ -80,8 +80,8 @@ export function EstimateOutcomeModal({
       if (r === "Pending") {
         await onSubmit({
           status: "Pending",
-          estimate_outcome: "Needs Follow-Up",
-          outcome_badge: "Waiting on Decision",
+          estimate_outcome: "Pending",
+          outcome_badge: "Pending",
         });
       } else {
         setOutcome(r);

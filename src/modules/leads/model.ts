@@ -79,6 +79,7 @@ export const ESTIMATE_OUTCOMES = [
   "Not Sold",
   "Needs Follow-Up",
   "No Proposal Sent",
+  "Pending",
 ] as const;
 export type EstimateOutcome = (typeof ESTIMATE_OUTCOMES)[number];
 
@@ -93,7 +94,6 @@ export const FOLLOW_UP_RESULTS = [
   "Called — No Answer",
   "Left Voicemail",
   "Spoke With Customer",
-  "Waiting on Decision",
   "Requested Callback",
   "Reschedule Needed",
   "Proposal Revision Requested",
@@ -110,7 +110,7 @@ export const OUTCOME_BADGES = [
   "Not Within Scope",
   "Did Not Meet Minimum",
   "Proposal Revision Requested",
-  "Waiting on Decision",
+  "Pending",
   "Requested Callback",
 ] as const;
 export type OutcomeBadge = (typeof OUTCOME_BADGES)[number];
