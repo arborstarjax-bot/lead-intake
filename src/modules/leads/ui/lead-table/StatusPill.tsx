@@ -74,10 +74,17 @@ function resolveDisplayValue(status: LeadStatus, outcomeBadge?: string | null): 
   if (status === "Completed" && outcomeBadge === "Sold") return "Sold";
   if (status === "Completed" && outcomeBadge === "Not Sold") return "Not Sold";
   if (status === "Completed") return "Sold"; // fallback for completed without badge
+  if (status === "Called / No Response") return "Called / No Response";
   return status;
 }
 
+function resolveNeedsFollowUpLabel(followUpResult?: string | null): string {
+  if (!followUpResult) return "Needs Follow-Up";
+  return `Needs Follow-Up (${followUpResult})`;
+}
+
 function resolveFullDisplayLabel(status: LeadStatus, outcomeBadge?: string | null, followUpResult?: string | null): string {
+  if (status === "Called / No Response") return resolveNeedsFollowUpLabel(followUpResult);
   if (status === "Lost") return resolveLostLabel(followUpResult);
   if (status === "Completed" && outcomeBadge === "Not Sold") return resolveNotSoldLabel(followUpResult);
   return resolveDisplayValue(status, outcomeBadge);
@@ -120,6 +127,8 @@ export function StatusPill({
     }
   }
 
+  const hasReasonLabel = fullLabel !== displayValue;
+
   return (
     <div
       className={cn(
@@ -129,14 +138,15 @@ export function StatusPill({
       )}
     >
       <span className="mr-1.5 h-2 w-2 rounded-full" style={{ backgroundColor: style.dot }} />
-      {fullLabel !== displayValue && (
-        <span className="mr-1 text-xs truncate max-w-[10rem]">{fullLabel}</span>
-      )}
+      {hasReasonLabel ? (
+        <span className="pr-6 text-xs font-semibold truncate max-w-[14rem]">{fullLabel}</span>
+      ) : null}
       <select
         value={displayValue}
         onChange={(e) => handleChange(e.target.value)}
         className={cn(
           "appearance-none bg-transparent pr-6 focus:outline-none",
+          hasReasonLabel && "absolute inset-0 opacity-0 cursor-pointer",
           style.fg
         )}
       >

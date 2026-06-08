@@ -28,8 +28,8 @@ const TABS: { id: LeadFilter; label: string }[] = [
 
 const SUB_FILTER_OPTIONS: { id: FollowUpSubFilter; label: string }[] = [
   { id: "All", label: "All" },
-  { id: "No Contact Yet", label: "No Contact Yet" },
-  ...FOLLOW_UP_RESULTS.map((r) => ({ id: r as FollowUpSubFilter, label: r })),
+  { id: "No Contact Yet", label: "Called — No Answer" },
+  ...FOLLOW_UP_RESULTS.filter((r) => r !== "Called — No Answer").map((r) => ({ id: r as FollowUpSubFilter, label: r })),
 ];
 
 const OUTCOME_SUB_FILTER_OPTIONS: { id: OutcomeReasonSubFilter; label: string }[] = [

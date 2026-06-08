@@ -201,7 +201,7 @@ export default function LeadTable({
     // Sub-filter within Called / No Response
     let bySub = (filter === "Called / No Response" && subFilter && subFilter !== "All")
       ? byStatus.filter((l) => {
-          if (subFilter === "No Contact Yet") return !l.follow_up_result;
+          if (subFilter === "No Contact Yet") return !l.follow_up_result || l.follow_up_result === "Called — No Answer";
           return l.follow_up_result === subFilter;
         })
       : byStatus;

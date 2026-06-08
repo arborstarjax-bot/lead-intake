@@ -183,6 +183,7 @@ export const OUTCOME_REASONS = [
   "Budget Issues",
   "Went With Competitor",
   "Bad Lead / Wrong Info",
+  "Incorrect Contact Info",
   "Out of Service Area",
   "Did Not Meet Minimum",
   "Not In Scope",
