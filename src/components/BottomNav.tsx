@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Home, List, MapPin } from "lucide-react";
+import { BarChart3, CalendarDays, Home, List, MapPin } from "lucide-react";
 
 type Tab = {
   href: string;
@@ -35,6 +35,12 @@ const tabs: Tab[] = [
     label: "Route",
     Icon: MapPin,
     match: (p) => p.startsWith("/route"),
+  },
+  {
+    href: "/reporting",
+    label: "Reports",
+    Icon: BarChart3,
+    match: (p) => p.startsWith("/reporting"),
   },
 ];
 
