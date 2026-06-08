@@ -199,6 +199,13 @@ export const LEAD_ACTIVITY_TYPES = [
   "lead_completed",
   "customer_called",
   "customer_texted",
+  "status_changed",
+  "follow_up_set",
+  "proposal_sent",
+  "marked_sold",
+  "marked_not_sold",
+  "marked_lost",
+  "marked_pending",
 ] as const;
 export type LeadActivityType = (typeof LEAD_ACTIVITY_TYPES)[number];
 
@@ -208,6 +215,13 @@ export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
   lead_completed: "Lead completed",
   customer_called: "Customer called",
   customer_texted: "Customer texted",
+  status_changed: "Status changed",
+  follow_up_set: "Follow-up updated",
+  proposal_sent: "Proposal sent",
+  marked_sold: "Marked Sold",
+  marked_not_sold: "Marked Not Sold",
+  marked_lost: "Marked Lost",
+  marked_pending: "Moved to Pending",
 };
 
 export type LeadActivity = {
