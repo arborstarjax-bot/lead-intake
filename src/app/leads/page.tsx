@@ -7,7 +7,9 @@ import {
   type LeadFilter,
   type FollowUpSubFilter,
   type LeadCounts,
+  type OutcomeReasonSubFilter,
   FOLLOW_UP_RESULTS,
+  OUTCOME_REASONS,
 } from "@/modules/leads";
 import NotificationAcknowledge from "@/components/NotificationAcknowledge";
 import { PageHeader } from "@/components/PageHeader";
@@ -17,6 +19,7 @@ const TABS: { id: LeadFilter; label: string }[] = [
   { id: "New", label: "New" },
   { id: "Called / No Response", label: "Needs Follow-Up" },
   { id: "Scheduled", label: "Scheduled" },
+  { id: "Pending", label: "Pending" },
   { id: "Sold", label: "Sold" },
   { id: "Not Sold", label: "Not Sold" },
   { id: "Lost", label: "Lost" },
@@ -29,11 +32,22 @@ const SUB_FILTER_OPTIONS: { id: FollowUpSubFilter; label: string }[] = [
   ...FOLLOW_UP_RESULTS.map((r) => ({ id: r as FollowUpSubFilter, label: r })),
 ];
 
+const OUTCOME_SUB_FILTER_OPTIONS: { id: OutcomeReasonSubFilter; label: string }[] = [
+  { id: "All", label: "All" },
+  ...OUTCOME_REASONS.map((r) => ({ id: r as OutcomeReasonSubFilter, label: r })),
+];
+
+const LOST_SUB_FILTER_OPTIONS: { id: OutcomeReasonSubFilter; label: string }[] = [
+  ...OUTCOME_SUB_FILTER_OPTIONS,
+  { id: "Expired", label: "Expired" },
+];
+
 const EMPTY_COUNTS: LeadCounts = {
   All: 0,
   New: 0,
   "Called / No Response": 0,
   Scheduled: 0,
+  Pending: 0,
   Completed: 0,
   Lost: 0,
   Sold: 0,
@@ -63,6 +77,8 @@ function paramFor(id: LeadFilter): string {
       return "called";
     case "Scheduled":
       return "scheduled";
+    case "Pending":
+      return "pending";
     case "Completed":
       return "completed";
     case "Lost":
@@ -80,11 +96,13 @@ function LeadsPageInner() {
   const initial = filterFromParam(params.get("status"));
   const [filter, setFilter] = useState<LeadFilter>(initial);
   const [subFilter, setSubFilter] = useState<FollowUpSubFilter>("All");
+  const [outcomeSubFilter, setOutcomeSubFilter] = useState<OutcomeReasonSubFilter>("All");
   const [counts, setCounts] = useState<LeadCounts>(EMPTY_COUNTS);
 
   function switchFilter(next: LeadFilter) {
     setFilter(next);
     setSubFilter("All");
+    setOutcomeSubFilter("All");
     const q = paramFor(next);
     router.replace(q === "new" ? "/leads" : `/leads?status=${q}`, { scroll: false });
   }
@@ -133,9 +151,31 @@ function LeadsPageInner() {
         </div>
       )}
 
+      {(filter === "Lost" || filter === "Not Sold") && (
+        <div className="-mx-4 sm:mx-0 overflow-x-auto no-scrollbar">
+          <div className="inline-flex min-w-full gap-1.5 px-4 sm:px-0">
+            {(filter === "Lost" ? LOST_SUB_FILTER_OPTIONS : OUTCOME_SUB_FILTER_OPTIONS).map((o) => (
+              <button
+                key={o.id}
+                onClick={() => setOutcomeSubFilter(o.id)}
+                className={cn(
+                  "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors border",
+                  outcomeSubFilter === o.id
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--fg)]"
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <LeadTable
         filter={filter}
         subFilter={filter === "Called / No Response" ? subFilter : undefined}
+        outcomeSubFilter={(filter === "Lost" || filter === "Not Sold") ? outcomeSubFilter : undefined}
         onCounts={setCounts}
       />
     </main>

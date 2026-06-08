@@ -35,20 +35,21 @@ async function sweepStaleLeads(
     Date.now() - daysUntilNotSold * 24 * 60 * 60 * 1000
   ).toISOString();
   try {
-    // New leads with no contact → Lost
+    // New leads with no contact → Lost (Expired)
     await supabase
       .from("leads")
-      .update({ status: "Lost" })
+      .update({ status: "Lost", follow_up_result: "Expired" })
       .eq("workspace_id", workspaceId)
       .eq("status", "New")
       .lt("status_changed_at", lostCutoff);
-    // Needs Follow-Up leads with no outcome → Not Sold
+    // Needs Follow-Up leads with no outcome → Not Sold (Expired)
     await supabase
       .from("leads")
       .update({
         status: "Completed",
         estimate_outcome: "Not Sold",
         outcome_badge: "Not Sold",
+        follow_up_result: "Expired",
       })
       .eq("workspace_id", workspaceId)
       .eq("status", "Called / No Response")

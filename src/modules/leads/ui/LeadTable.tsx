@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
-import type { Lead, LeadPatch, LeadStatus, FollowUpResult } from "@/modules/leads/model";
+import type { Lead, LeadPatch, LeadStatus, FollowUpResult, OutcomeReasonSubFilter } from "@/modules/leads/model";
 import { EDITABLE_COLUMNS, LEAD_STATUS_LABELS } from "@/modules/leads/model";
 import { fetchWithOfflineQueue } from "@/modules/offline";
 import { useToast } from "@/components/Toast";
@@ -21,6 +21,7 @@ function computeCounts(list: Lead[]): LeadCounts {
     New: 0,
     "Called / No Response": 0,
     Scheduled: 0,
+    Pending: 0,
     Completed: 0,
     Lost: 0,
     Sold: 0,
@@ -65,16 +66,19 @@ function applyOptimisticPatch(lead: Lead, patch: LeadPatch): Lead {
 
 export type LeadFilter = "All" | LeadStatus | "Sold" | "Not Sold";
 export type FollowUpSubFilter = "All" | FollowUpResult | "No Contact Yet";
+export type { OutcomeReasonSubFilter } from "@/modules/leads/model";
 export type LeadCounts = Record<LeadFilter, number>;
 
 export default function LeadTable({
   filter,
   subFilter,
+  outcomeSubFilter,
   onCounts,
   onScheduleChange,
 }: {
   filter: LeadFilter;
   subFilter?: FollowUpSubFilter;
+  outcomeSubFilter?: OutcomeReasonSubFilter;
   onCounts?: (n: LeadCounts) => void;
   /** Fires when a lead gains/loses a scheduled_time so parents can refresh
    *  derived views (e.g. today's route). */
@@ -194,13 +198,20 @@ export default function LeadTable({
     } else {
       byStatus = leads.filter((l) => l.status === filter);
     }
-    // Sub-filter within Needs Follow-Up
-    const bySub = (filter === "Called / No Response" && subFilter && subFilter !== "All")
+    // Sub-filter within Called / No Response
+    let bySub = (filter === "Called / No Response" && subFilter && subFilter !== "All")
       ? byStatus.filter((l) => {
           if (subFilter === "No Contact Yet") return !l.follow_up_result;
           return l.follow_up_result === subFilter;
         })
       : byStatus;
+    // Sub-filter within Lost or Not Sold tabs
+    if ((filter === "Lost" || filter === "Not Sold") && outcomeSubFilter && outcomeSubFilter !== "All") {
+      bySub = bySub.filter((l) => {
+        if (outcomeSubFilter === "Expired") return l.follow_up_result === "Expired";
+        return l.follow_up_result === outcomeSubFilter;
+      });
+    }
     const byPerson = salespersonFilter
       ? bySub.filter((l) => {
           const p = (l.sales_person ?? "").trim();
@@ -216,7 +227,7 @@ export default function LeadTable({
         return typeof v === "string" && v.toLowerCase().includes(q);
       })
     );
-  }, [leads, search, filter, subFilter, salespersonFilter]);
+  }, [leads, search, filter, subFilter, outcomeSubFilter, salespersonFilter]);
 
   async function savePatch(id: string, patch: LeadPatch): Promise<boolean> {
     // Send the row's current `updated_at` so the server can reject
