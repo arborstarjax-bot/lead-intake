@@ -1,4 +1,5 @@
 import type React from "react";
+import { useState } from "react";
 import { MessageSquare, Navigation } from "lucide-react";
 import type { Lead, LeadPatch } from "@/modules/leads/model";
 import type { ClientAppSettings } from "@/lib/client-settings";
@@ -7,9 +8,10 @@ import { InlineField } from "./InlineField";
 import { logContactActivity } from "./LifecycleTimeline";
 import {
   buildMailtoHref,
-  buildSmsHref,
   buildNavigationHref,
+  templateVars,
 } from "./lead-table-helpers";
+import { SmsPickerModal } from "./SmsPickerModal";
 
 export function ContactRow({
   icon,
@@ -40,21 +42,17 @@ export function ContactRow({
     : email && trimmed
     ? buildMailtoHref(trimmed, lead, settings)
     : undefined;
-  const smsHref = tel && trimmed ? buildSmsHref(trimmed, lead, settings) : undefined;
   const navHref = tel ? buildNavigationHref(lead) : undefined;
+  const [showSmsPicker, setShowSmsPicker] = useState(false);
 
-  // The browser CAN'T tell us whether a tel: call was answered or missed —
-  // that event lives on the phone's dialer, not in the web view. So we log
-  // "Customer called" with an indeterminate outcome; if we ever add a
-  // native bridge (Capacitor, Expo) that surfaces CallKit / ConnectionService
-  // events we can upgrade `outcome` to answered/missed there.
   const logCall = () => {
     if (!tel || !trimmed) return;
     void logContactActivity(lead.id, "customer_called", {
       phone: trimmed,
     }).then(() => onActivityLogged?.());
   };
-  const logText = (kind: "intro" | "enroute") => () => {
+
+  const logText = (kind: "intro" | "confirm" | "enroute" | "blank") => {
     if (!tel || !trimmed) return;
     void logContactActivity(lead.id, "customer_texted", {
       phone: trimmed,
@@ -71,14 +69,15 @@ export function ContactRow({
       >
         {icon}
       </ActionIconLink>
-      {tel && (
-        <ActionIconLink
-          href={smsHref}
-          title="Send intro text message"
-          onClick={logText("intro")}
+      {tel && trimmed && (
+        <button
+          type="button"
+          onClick={() => setShowSmsPicker(true)}
+          title="Send text message"
+          className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-2)]"
         >
           <MessageSquare className="h-4 w-4" />
-        </ActionIconLink>
+        </button>
       )}
       {tel && (
         <ActionIconLink
@@ -100,6 +99,15 @@ export function ContactRow({
         className="field-input flex-1"
         formatAs={tel ? "phone" : undefined}
       />
+      {showSmsPicker && trimmed && (
+        <SmsPickerModal
+          phone={trimmed}
+          vars={templateVars(lead, settings)}
+          settings={settings}
+          onClose={() => setShowSmsPicker(false)}
+          onSelect={logText}
+        />
+      )}
     </div>
   );
 }

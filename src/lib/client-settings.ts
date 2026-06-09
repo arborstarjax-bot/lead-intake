@@ -9,6 +9,7 @@
 
 export type ClientAppSettings = {
   id: number;
+  setup_completed: boolean;
   home_address: string | null;
   home_city: string | null;
   home_state: string | null;
@@ -39,6 +40,7 @@ export type ClientAppSettings = {
 
 export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
   id: 1,
+  setup_completed: false,
   home_address: null,
   home_city: null,
   home_state: null,

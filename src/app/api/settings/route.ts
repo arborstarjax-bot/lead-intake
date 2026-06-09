@@ -11,6 +11,7 @@ const timeSchema = z
 
 const bodySchema = z
   .object({
+    setup_completed: z.boolean().optional(),
     home_address: z.string().trim().nullable().optional(),
     home_city: z.string().trim().nullable().optional(),
     home_state: z.string().trim().nullable().optional(),

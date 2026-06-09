@@ -123,9 +123,18 @@ export default function RouteMap({
       .then((google) => {
         if (cancelled || !containerRef.current) return;
         if (window.__googleMapsAuthError) return;
+        // Use the user's home location if set. Otherwise fall back to the
+        // first stop's coordinates if any stops exist. Last resort is the
+        // geographic center of the US so new users don't see Jacksonville.
+        const fallbackCenter = home
+          ? { lat: home.lat, lng: home.lng }
+          : stops.length > 0
+            ? { lat: stops[0].lat, lng: stops[0].lng }
+            : { lat: 39.8283, lng: -98.5795 };
+        const fallbackZoom = home || stops.length > 0 ? 10 : 4;
         const map = new google.maps.Map(containerRef.current, {
-          center: { lat: 30.3322, lng: -81.6557 }, // Jacksonville fallback
-          zoom: 10,
+          center: fallbackCenter,
+          zoom: fallbackZoom,
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
