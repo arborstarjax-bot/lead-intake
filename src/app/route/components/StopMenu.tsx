@@ -11,7 +11,7 @@ import {
 import { useAppSettings } from "@/components/SettingsProvider";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useToast } from "@/components/Toast";
-import { SmsPickerModal, type SmsTemplateVars } from "@/modules/leads/ui/lead-table/SmsPickerModal";
+import { SmsPickerModal, type SmsTemplateVars } from "@/modules/leads";
 import { formatClock, formatDateLong } from "../route-helpers";
 
 export function StopMenu({

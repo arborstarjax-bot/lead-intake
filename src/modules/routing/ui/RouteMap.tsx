@@ -107,6 +107,13 @@ export default function RouteMap({
     selectedLegRef.current = selectedLeg;
   }, [selectedLeg]);
 
+  // Keep latest props in refs so the one-shot init effect can read them
+  // without listing them as dependencies (the effect must fire only once).
+  const homeRef = useRef(home);
+  homeRef.current = home;
+  const stopsRef = useRef(stops);
+  stopsRef.current = stops;
+
   // One-shot: load Google Maps and instantiate the map inside the container.
   useEffect(() => {
     let cancelled = false;
@@ -126,12 +133,14 @@ export default function RouteMap({
         // Use the user's home location if set. Otherwise fall back to the
         // first stop's coordinates if any stops exist. Last resort is the
         // geographic center of the US so new users don't see Jacksonville.
-        const fallbackCenter = home
-          ? { lat: home.lat, lng: home.lng }
-          : stops.length > 0
-            ? { lat: stops[0].lat, lng: stops[0].lng }
+        const h = homeRef.current;
+        const s = stopsRef.current;
+        const fallbackCenter = h
+          ? { lat: h.lat, lng: h.lng }
+          : s.length > 0
+            ? { lat: s[0].lat, lng: s[0].lng }
             : { lat: 39.8283, lng: -98.5795 };
-        const fallbackZoom = home || stops.length > 0 ? 10 : 4;
+        const fallbackZoom = h || s.length > 0 ? 10 : 4;
         const map = new google.maps.Map(containerRef.current, {
           center: fallbackCenter,
           zoom: fallbackZoom,

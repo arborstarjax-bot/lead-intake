@@ -19,8 +19,7 @@ import {
 import { useAppSettings } from "@/components/SettingsProvider";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
 import type { LeadPatch } from "@/modules/leads/model";
-import { EstimateOutcomeModal } from "@/modules/leads";
-import { SmsPickerModal, type SmsTemplateVars } from "@/modules/leads/ui/lead-table/SmsPickerModal";
+import { EstimateOutcomeModal, SmsPickerModal, type SmsTemplateVars } from "@/modules/leads";
 import { formatClock, formatDateLong, type Stop } from "../route-helpers";
 
 type Mode = "normal" | "reorder" | "preview";
