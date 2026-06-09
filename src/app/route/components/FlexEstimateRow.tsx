@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
+  Check,
   CheckCircle2,
   ChevronRight,
   Loader2,
@@ -113,14 +114,18 @@ export function FlexEstimateRow({
   const isDone = Boolean(stop.done);
 
   return (
-    <li className={`py-3 first:pt-0 last:pb-0 ${isDone ? "opacity-60" : ""}`}>
+    <li className={`py-3 first:pt-0 last:pb-0 ${isDone ? "bg-gray-50 -mx-4 px-4 opacity-70" : ""}`}>
       <div className="flex items-start gap-3">
         <div className="shrink-0 flex flex-col items-center gap-1 w-10 pt-0.5">
           <div
-            className="flex items-center justify-center h-7 w-7 rounded-full text-xs font-semibold bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent)]/30"
-            title="Flex — no time assigned yet"
+            className={`flex items-center justify-center h-7 w-7 rounded-full text-xs font-semibold ${
+              isDone
+                ? "bg-gray-400 text-white"
+                : "bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent)]/30"
+            }`}
+            title={isDone ? "Completed" : "Flex — no time assigned yet"}
           >
-            F
+            {isDone ? <Check className="h-4 w-4" /> : "F"}
           </div>
           <button
             type="button"
@@ -137,20 +142,21 @@ export function FlexEstimateRow({
             href={`/leads/${stop.id}`}
             className="block min-w-0 group"
           >
-            <div className="font-medium truncate group-hover:underline">
-              {stop.label}
+            <div className="flex items-center justify-between gap-2">
+              <div className={`font-medium truncate group-hover:underline ${isDone ? "text-gray-400 line-through" : ""}`}>
+                {stop.label}
+              </div>
+              {isDone && stop.outcomeLabel && (
+                <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-200 text-gray-600 px-2.5 py-0.5 text-[11px] font-semibold">
+                  {stop.outcomeLabel}
+                </span>
+              )}
             </div>
             <div className="text-xs text-[var(--muted)] truncate">
               {stop.address}
             </div>
           </Link>
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-            {isDone && stop.outcomeLabel && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 h-5 text-[11px] font-medium">
-                <CheckCircle2 className="h-3 w-3" />
-                {stop.outcomeLabel}
-              </span>
-            )}
             {stop.salesPerson ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 h-5 text-[11px] text-[var(--fg)]">
                 <User className="h-3 w-3" /> {stop.salesPerson}
@@ -160,8 +166,8 @@ export function FlexEstimateRow({
         </div>
       </div>
 
-      <div className="mt-2 pl-[52px] flex items-center gap-1.5 flex-wrap">
-        {!isDone && (
+      {!isDone && (
+        <div className="mt-2 pl-[52px] flex items-center gap-1.5 flex-wrap">
           <button
             onClick={handleMarkComplete}
             disabled={completing}
@@ -175,43 +181,43 @@ export function FlexEstimateRow({
               <CheckCircle2 className="h-4 w-4" />
             )}
           </button>
-        )}
-        {telHref && (
+          {telHref && (
+            <a
+              href={telHref}
+              aria-label={`Call ${stop.label}`}
+              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+            >
+              <Phone className="h-4 w-4" />
+            </a>
+          )}
+          {stop.phoneNumber && (
+            <button
+              type="button"
+              onClick={() => setShowSmsPicker(true)}
+              aria-label={`Text ${stop.label}`}
+              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </button>
+          )}
           <a
-            href={telHref}
-            aria-label={`Call ${stop.label}`}
+            href={mapsHref}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Navigate to ${stop.address}`}
             className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
           >
-            <Phone className="h-4 w-4" />
+            <Navigation className="h-4 w-4" />
           </a>
-        )}
-        {stop.phoneNumber && (
-          <button
-            type="button"
-            onClick={() => setShowSmsPicker(true)}
-            aria-label={`Text ${stop.label}`}
-            className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+          <Link
+            href={`/leads/${stop.id}`}
+            aria-label={`Open ${stop.label}`}
+            className="ml-auto inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
           >
-            <MessageSquare className="h-4 w-4" />
-          </button>
-        )}
-        <a
-          href={mapsHref}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`Navigate to ${stop.address}`}
-          className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
-        >
-          <Navigation className="h-4 w-4" />
-        </a>
-        <Link
-          href={`/leads/${stop.id}`}
-          aria-label={`Open ${stop.label}`}
-          className="ml-auto inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Link>
-      </div>
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
+      )}
     {showOutcomeModal && (
       <EstimateOutcomeModal
         leadName={stop.label}

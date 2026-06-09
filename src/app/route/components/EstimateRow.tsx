@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowUp,
   Car,
+  Check,
   CheckCircle2,
   ChevronRight,
   Home as HomeIcon,
@@ -143,7 +144,7 @@ export function EstimateRow({
       : mode === "reorder"
         ? "-mx-4 px-4"
         : isDone
-          ? "opacity-60"
+          ? "bg-gray-50 -mx-4 px-4 opacity-70"
           : "";
 
   // Kept in the signature because several call sites already pass it and
@@ -165,10 +166,12 @@ export function EstimateRow({
             className={`flex items-center justify-center h-7 w-7 rounded-full text-xs font-semibold tabular-nums ${
               mode === "preview"
                 ? "bg-amber-500 text-white"
-                : "bg-[var(--accent)] text-white"
+                : isDone
+                  ? "bg-gray-400 text-white"
+                  : "bg-[var(--accent)] text-white"
             }`}
           >
-            {index}
+            {isDone ? <Check className="h-4 w-4" /> : index}
           </div>
           {mode === "normal" ? (
             <button
@@ -191,20 +194,21 @@ export function EstimateRow({
             href={`/leads/${stop.id}`}
             className="block min-w-0 group"
           >
-            <div className="font-medium truncate group-hover:underline">
-              {stop.label}
+            <div className="flex items-center justify-between gap-2">
+              <div className={`font-medium truncate group-hover:underline ${isDone ? "text-gray-400 line-through" : ""}`}>
+                {stop.label}
+              </div>
+              {isDone && stop.outcomeLabel && (
+                <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gray-200 text-gray-600 px-2.5 py-0.5 text-[11px] font-semibold">
+                  {stop.outcomeLabel}
+                </span>
+              )}
             </div>
             <div className="text-xs text-[var(--muted)] truncate">
               {stop.address}
             </div>
           </Link>
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-            {isDone && stop.outcomeLabel && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 h-5 text-[11px] font-medium">
-                <CheckCircle2 className="h-3 w-3" />
-                {stop.outcomeLabel}
-              </span>
-            )}
             {driveLabel && (
               <span className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 h-5 text-[11px] text-[var(--muted)]">
                 {isFirst ? (
@@ -258,23 +262,21 @@ export function EstimateRow({
       {/* Action strip sits on its own row on mobile so the name/address
          column stays full-width above and the buttons never squeeze text
          into wrapping. On sm+ the row has plenty of width. */}
-      {mode === "normal" && (
+      {mode === "normal" && !isDone && (
         <div className="mt-2 pl-[52px] flex items-center gap-1.5 flex-wrap">
-          {!isDone && (
-            <button
-              onClick={handleMarkComplete}
-              disabled={completing}
-              aria-label={`Mark ${stop.label} complete`}
-              title="Mark complete"
-              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-60"
-            >
-              {completing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
-              )}
-            </button>
-          )}
+          <button
+            onClick={handleMarkComplete}
+            disabled={completing}
+            aria-label={`Mark ${stop.label} complete`}
+            title="Mark complete"
+            className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-60"
+          >
+            {completing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
+          </button>
           {telHref && (
             <a
               href={telHref}
