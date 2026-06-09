@@ -21,6 +21,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { useAppSettings } from "@/components/SettingsProvider";
 import { cn } from "@/lib/utils";
 
 type Step = 1 | 2 | 3;
@@ -30,6 +31,7 @@ const inputCls =
 
 export default function SetupWizard() {
   const router = useRouter();
+  const { refresh } = useAppSettings();
   const [step, setStep] = useState<Step>(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +90,8 @@ export default function SetupWizard() {
         setError(j.error ?? "Something went wrong — try again.");
         return;
       }
+      await refresh();
       router.replace("/");
-      router.refresh();
     } catch {
       setError("Network error — check your connection and try again.");
     } finally {
