@@ -15,8 +15,7 @@ import {
 import { useAppSettings } from "@/components/SettingsProvider";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
 import { LEAD_FLEX_WINDOW_DISPLAY, type LeadPatch } from "@/modules/leads/model";
-import { EstimateOutcomeModal } from "@/modules/leads";
-import { SmsPickerModal, type SmsTemplateVars } from "@/modules/leads/ui/lead-table/SmsPickerModal";
+import { EstimateOutcomeModal, SmsPickerModal, type SmsTemplateVars } from "@/modules/leads";
 import { formatDateLong, type FlexStop } from "../route-helpers";
 
 /**

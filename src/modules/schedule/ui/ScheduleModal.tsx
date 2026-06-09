@@ -16,7 +16,7 @@ import type { Lead } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
-import { SmsPickerModal } from "@/modules/leads/ui/lead-table/SmsPickerModal";
+import { SmsPickerModal } from "@/modules/leads";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
 
 type Half = "all" | "morning" | "afternoon";

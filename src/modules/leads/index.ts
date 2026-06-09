@@ -26,4 +26,5 @@ export { default as LeadTable } from "./ui/LeadTable";
 export { default as StandaloneLeadCard } from "./ui/StandaloneLeadCard";
 export { LeadCard } from "./ui/lead-table/LeadCard";
 export { EstimateOutcomeModal } from "./ui/lead-table/EstimateOutcomeModal";
+export { SmsPickerModal, type SmsTemplateVars } from "./ui/lead-table/SmsPickerModal";
 export type { LeadFilter, FollowUpSubFilter, LeadCounts, OutcomeReasonSubFilter } from "./ui/LeadTable";
