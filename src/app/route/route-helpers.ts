@@ -18,6 +18,10 @@ export type Stop = {
    *  `expected_updated_at` so the server rejects with 409 on concurrent
    *  writes instead of silently overwriting. */
   updatedAt: string | null;
+  /** True when the estimate has been completed (Sold, Not Sold, or Pending). */
+  done?: boolean;
+  /** Outcome label for completed estimates. */
+  outcomeLabel?: string | null;
 };
 
 /**
@@ -38,6 +42,10 @@ export type FlexStop = {
   salesPerson: string | null;
   /** See Stop.updatedAt. */
   updatedAt: string | null;
+  /** True when the estimate has been completed (Sold, Not Sold, or Pending). */
+  done?: boolean;
+  /** Outcome label for completed estimates. */
+  outcomeLabel?: string | null;
 };
 
 export type Ghost = {

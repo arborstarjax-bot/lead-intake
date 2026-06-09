@@ -135,12 +135,16 @@ export function EstimateRow({
     }
   }
 
+  const isDone = Boolean(stop.done);
+
   const highlight =
     mode === "preview"
       ? "bg-amber-50 border-l-2 border-amber-400 -mx-4 px-4"
       : mode === "reorder"
         ? "-mx-4 px-4"
-        : "";
+        : isDone
+          ? "opacity-60"
+          : "";
 
   // Kept in the signature because several call sites already pass it and
   // future row-level actions (e.g. reschedule-to-tomorrow) will need it.
@@ -195,6 +199,12 @@ export function EstimateRow({
             </div>
           </Link>
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            {isDone && stop.outcomeLabel && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 h-5 text-[11px] font-medium">
+                <CheckCircle2 className="h-3 w-3" />
+                {stop.outcomeLabel}
+              </span>
+            )}
             {driveLabel && (
               <span className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 h-5 text-[11px] text-[var(--muted)]">
                 {isFirst ? (
@@ -250,19 +260,21 @@ export function EstimateRow({
          into wrapping. On sm+ the row has plenty of width. */}
       {mode === "normal" && (
         <div className="mt-2 pl-[52px] flex items-center gap-1.5 flex-wrap">
-          <button
-            onClick={handleMarkComplete}
-            disabled={completing}
-            aria-label={`Mark ${stop.label} complete`}
-            title="Mark complete"
-            className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-60"
-          >
-            {completing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4" />
-            )}
-          </button>
+          {!isDone && (
+            <button
+              onClick={handleMarkComplete}
+              disabled={completing}
+              aria-label={`Mark ${stop.label} complete`}
+              title="Mark complete"
+              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-60"
+            >
+              {completing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+            </button>
+          )}
           {telHref && (
             <a
               href={telHref}
