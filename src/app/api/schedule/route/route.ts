@@ -44,6 +44,10 @@ type MapStop = {
    *  `expected_updated_at` on follow-up PATCHes so the server can reject
    *  concurrent writes with 409 instead of silently overwriting. */
   updatedAt: string | null;
+  /** True when the estimate has been completed (Sold, Not Sold, or Pending). */
+  done: boolean;
+  /** Outcome label for completed estimates (e.g. "Sold", "Not Sold", "Pending"). */
+  outcomeLabel: string | null;
 };
 
 /**
@@ -66,6 +70,10 @@ type FlexStop = {
   salesPerson: string | null;
   /** See MapStop.updatedAt. */
   updatedAt: string | null;
+  /** True when the estimate has been completed (Sold, Not Sold, or Pending). */
+  done: boolean;
+  /** Outcome label for completed estimates. */
+  outcomeLabel: string | null;
 };
 
 type GhostStop = {
@@ -126,8 +134,6 @@ export async function GET(req: Request) {
       .select("*")
       .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", iso)
-      .neq("status", "Completed")
-      .neq("status", "Pending")
       .order("scheduled_time", { ascending: true, nullsFirst: false }),
     ghostLeadId
       ? supabase
@@ -156,6 +162,19 @@ export async function GET(req: Request) {
     `${l.first_name ?? ""} ${l.last_name ?? ""}`.trim() ||
     fallback;
 
+  const DONE_STATUSES = new Set(["Completed", "Pending", "Lost"]);
+  function isLeadDone(l: Lead): boolean {
+    return DONE_STATUSES.has(l.status ?? "");
+  }
+  function leadOutcomeLabel(l: Lead): string | null {
+    if (l.status === "Pending") return "Pending";
+    if (l.estimate_outcome === "Sold") return "Sold";
+    if (l.estimate_outcome === "Not Sold") return "Not Sold";
+    if (l.status === "Lost") return "Lost";
+    if (l.status === "Completed") return "Completed";
+    return null;
+  }
+
   const stopsInput = leads
     .map((l) => {
       const addr = leadAddressString(l);
@@ -172,6 +191,8 @@ export async function GET(req: Request) {
         phoneNumber: l.phone_number ?? null,
         salesPerson: l.sales_person ?? null,
         updatedAt: l.updated_at ?? null,
+        done: isLeadDone(l),
+        outcomeLabel: leadOutcomeLabel(l),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -190,6 +211,8 @@ export async function GET(req: Request) {
         phoneNumber: l.phone_number ?? null,
         salesPerson: l.sales_person ?? null,
         updatedAt: l.updated_at ?? null,
+        done: isLeadDone(l),
+        outcomeLabel: leadOutcomeLabel(l),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -247,6 +270,8 @@ export async function GET(req: Request) {
       phoneNumber: s.phoneNumber,
       salesPerson: s.salesPerson,
       updatedAt: s.updatedAt,
+      done: s.done,
+      outcomeLabel: s.outcomeLabel,
     });
   }
   for (const f of flexInput) {
@@ -266,6 +291,8 @@ export async function GET(req: Request) {
       phoneNumber: f.phoneNumber,
       salesPerson: f.salesPerson,
       updatedAt: f.updatedAt,
+      done: f.done,
+      outcomeLabel: f.outcomeLabel,
     });
   }
 
