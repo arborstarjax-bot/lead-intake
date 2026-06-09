@@ -16,7 +16,7 @@ import type { Lead } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
-import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
+import { SmsPickerModal } from "@/modules/leads/ui/lead-table/SmsPickerModal";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
 
 type Half = "all" | "morning" | "afternoon";
@@ -798,13 +798,12 @@ function BookedView({
   const phone = sanitizePhone(lead.phone_number);
   const dayLabel = formatLongDayLabel(day);
   const timeLabel = clockFromHHMM(time);
-  const message = renderTemplate(smsConfirmTemplate(settings), {
+  const [showSmsPicker, setShowSmsPicker] = useState(false);
+
+  const vars = useMemo(() => ({
     firstName: firstName(lead),
     lastName: (lead.last_name ?? "").trim(),
     client: (lead.client ?? "").trim(),
-    // Mirror LeadTable.templateVars: fall back to the configured
-    // default salesperson so {salesPerson} renders correctly even
-    // when the lead has none explicitly assigned.
     salesPerson:
       (lead.sales_person ?? "").trim() ||
       (settings.default_salesperson ?? "").trim(),
@@ -813,12 +812,7 @@ function BookedView({
     companyEmail: (settings.company_email ?? "").trim(),
     day: dayLabel,
     time: timeLabel,
-  });
-  // Matches the format used by the SMS button on the lead card — "?body="
-  // works on both iPhone and Android (see LeadTable.buildSmsHref).
-  const smsHref = phone
-    ? `sms:${phone}?body=${encodeURIComponent(message)}`
-    : null;
+  }), [lead, settings, dayLabel, timeLabel]);
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
@@ -833,14 +827,15 @@ function BookedView({
       </div>
 
       <div className="space-y-2">
-        {smsHref ? (
-          <a
-            href={smsHref}
+        {phone ? (
+          <button
+            type="button"
+            onClick={() => setShowSmsPicker(true)}
             className="w-full inline-flex items-center justify-center gap-2 rounded-xl h-12 px-4 text-sm font-semibold bg-[var(--accent)] text-white hover:opacity-95 active:scale-[0.98]"
           >
             <MessageSquare className="h-4 w-4" />
-            Text confirmation
-          </a>
+            Send text message
+          </button>
         ) : (
           <div className="text-xs text-[var(--muted)] text-center">
             No phone number on this lead — add one to text a confirmation.
@@ -867,10 +862,13 @@ function BookedView({
         </button>
       </div>
 
-      {smsHref && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-xs text-[var(--muted)] leading-relaxed">
-          Preview: {message}
-        </div>
+      {showSmsPicker && phone && (
+        <SmsPickerModal
+          phone={phone}
+          vars={vars}
+          settings={settings}
+          onClose={() => setShowSmsPicker(false)}
+        />
       )}
     </div>
   );

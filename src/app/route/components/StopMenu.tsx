@@ -9,9 +9,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAppSettings } from "@/components/SettingsProvider";
-import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useToast } from "@/components/Toast";
+import { SmsPickerModal, type SmsTemplateVars } from "@/modules/leads/ui/lead-table/SmsPickerModal";
 import { formatClock, formatDateLong } from "../route-helpers";
 
 export function StopMenu({
@@ -38,6 +38,7 @@ export function StopMenu({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showSmsPicker, setShowSmsPicker] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const confirmDialog = useConfirm();
   const { toast } = useToast();
@@ -83,34 +84,21 @@ export function StopMenu({
   }
 
   const { settings } = useAppSettings();
-  const smsHref = useMemo(() => {
-    if (!phoneNumber) return null;
-    const who = firstName?.trim() || "there";
-    const dayLabel = formatDateLong(date);
-    const timeLabel = formatClock(startTime);
-    const body = renderTemplate(smsConfirmTemplate(settings), {
-      firstName: who,
-      // Prefer the lead's own assigned salesperson; fall back to the
-      // configured default, then the first roster entry as a last
-      // resort so `{salesPerson}` never renders as the literal
-      // placeholder when nobody is explicitly assigned.
-      salesPerson:
-        salesPerson?.trim() ||
-        settings.default_salesperson?.trim() ||
-        settings.salespeople?.[0]?.trim() ||
-        "",
-      companyName: (settings.company_name ?? "").trim(),
-      companyPhone: (settings.company_phone ?? "").trim(),
-      companyEmail: (settings.company_email ?? "").trim(),
-      day: dayLabel,
-      time: timeLabel,
-    });
-    const digits = phoneNumber.replace(/[^\d+]/g, "");
-    // `?` (RFC 5724) is the only separator Android accepts — `&` gets
-    // absorbed into the phone-number portion so the prefilled body drops.
-    // iOS accepts both, so `?` is safe on iPhone too.
-    return `sms:${digits}?body=${encodeURIComponent(body)}`;
-  }, [firstName, phoneNumber, salesPerson, date, startTime, settings]);
+  const smsVars = useMemo<SmsTemplateVars>(() => ({
+    firstName: firstName?.trim() || "there",
+    lastName: "",
+    client: label,
+    salesPerson:
+      salesPerson?.trim() ||
+      settings.default_salesperson?.trim() ||
+      settings.salespeople?.[0]?.trim() ||
+      "",
+    companyName: (settings.company_name ?? "").trim(),
+    companyPhone: (settings.company_phone ?? "").trim(),
+    companyEmail: (settings.company_email ?? "").trim(),
+    day: formatDateLong(date),
+    time: formatClock(startTime),
+  }), [firstName, label, salesPerson, date, startTime, settings]);
 
   return (
     <div className="relative shrink-0" ref={menuRef}>
@@ -126,14 +114,17 @@ export function StopMenu({
       </button>
       {open && (
         <div className="absolute right-0 top-9 z-10 w-48 rounded-xl border border-[var(--border)] bg-white shadow-lg overflow-hidden">
-          {smsHref && (
-            <a
-              href={smsHref}
-              onClick={() => setOpen(false)}
+          {phoneNumber && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setShowSmsPicker(true);
+              }}
               className="w-full text-left px-3 h-10 text-sm flex items-center gap-2 hover:bg-[var(--surface-2)]"
             >
-              <MessageSquare className="h-4 w-4" /> Text confirmation
-            </a>
+              <MessageSquare className="h-4 w-4" /> Send text
+            </button>
           )}
           <button
             onClick={reschedule}
@@ -147,9 +138,17 @@ export function StopMenu({
             disabled={busy}
             className="w-full text-left px-3 h-10 text-sm flex items-center gap-2 text-red-700 hover:bg-red-50"
           >
-            <Trash2 className="h-4 w-4" /> Cancel booking
+            <Trash2 className="h-4 w-4" /> Unbook
           </button>
         </div>
+      )}
+      {showSmsPicker && phoneNumber && (
+        <SmsPickerModal
+          phone={phoneNumber}
+          vars={smsVars}
+          settings={settings}
+          onClose={() => setShowSmsPicker(false)}
+        />
       )}
     </div>
   );

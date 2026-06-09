@@ -3,6 +3,7 @@ import { createAdminClient } from "@/modules/shared/supabase/server";
 
 export type AppSettings = {
   workspace_id: string;
+  setup_completed: boolean;
   home_address: string | null;
   home_city: string | null;
   home_state: string | null;
@@ -39,6 +40,7 @@ export type AppSettings = {
 export type AppSettingsPatch = Partial<
   Pick<
     AppSettings,
+    | "setup_completed"
     | "home_address"
     | "home_city"
     | "home_state"
@@ -68,6 +70,7 @@ export function defaultSettings(workspaceId: string): AppSettings {
   const now = new Date().toISOString();
   return {
     workspace_id: workspaceId,
+    setup_completed: false,
     home_address: null,
     home_city: null,
     home_state: null,

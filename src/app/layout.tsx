@@ -5,6 +5,7 @@ import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { BottomNav } from "@/components/BottomNav";
+import { SetupGuard } from "@/components/SetupGuard";
 import { CapacitorLinkHandler } from "@/components/CapacitorLinkHandler";
 import { OfflineBanner, OfflineQueueReplayer } from "@/modules/offline";
 
@@ -52,6 +53,7 @@ export default function RootLayout({
         <ToastProvider>
           <ConfirmProvider>
             <SettingsProvider>
+              <SetupGuard />
               {children}
               <BottomNav />
               <CapacitorLinkHandler />

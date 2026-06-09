@@ -13,10 +13,10 @@ import {
   User,
 } from "lucide-react";
 import { useAppSettings } from "@/components/SettingsProvider";
-import { renderTemplate, smsConfirmTemplate } from "@/lib/templates";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
 import { LEAD_FLEX_WINDOW_DISPLAY, type LeadPatch } from "@/modules/leads/model";
 import { EstimateOutcomeModal } from "@/modules/leads";
+import { SmsPickerModal, type SmsTemplateVars } from "@/modules/leads/ui/lead-table/SmsPickerModal";
 import { formatDateLong, type FlexStop } from "../route-helpers";
 
 /**
@@ -46,6 +46,7 @@ export function FlexEstimateRow({
   const { settings } = useAppSettings();
   const [completing, setCompleting] = useState(false);
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
+  const [showSmsPicker, setShowSmsPicker] = useState(false);
 
   const flexLabel = LEAD_FLEX_WINDOW_DISPLAY[stop.flexWindow];
 
@@ -56,29 +57,21 @@ export function FlexEstimateRow({
   const telHref = stop.phoneNumber
     ? `tel:${stop.phoneNumber.replace(/[^\d+]/g, "")}`
     : null;
-  const smsHref = useMemo(() => {
-    if (!stop.phoneNumber) return null;
-    const digits = stop.phoneNumber.replace(/[^\d+]/g, "");
-    const body = renderTemplate(smsConfirmTemplate(settings), {
-      firstName: stop.firstName?.trim() || "there",
-      lastName: "",
-      client: stop.label,
-      salesPerson:
-        stop.salesPerson?.trim() ||
-        settings.default_salesperson?.trim() ||
-        settings.salespeople?.[0]?.trim() ||
-        "",
-      companyName: (settings.company_name ?? "").trim(),
-      companyPhone: (settings.company_phone ?? "").trim(),
-      companyEmail: (settings.company_email ?? "").trim(),
-      day: formatDateLong(date),
-      // Flex leads have no pinned time yet — surface the window itself
-      // rather than a blank so a confirmation SMS is still meaningful.
-      time: flexLabel,
-    });
-    return `sms:${digits}?body=${encodeURIComponent(body)}`;
-  }, [
-    stop.phoneNumber,
+  const smsVars = useMemo<SmsTemplateVars>(() => ({
+    firstName: stop.firstName?.trim() || "there",
+    lastName: "",
+    client: stop.label,
+    salesPerson:
+      stop.salesPerson?.trim() ||
+      settings.default_salesperson?.trim() ||
+      settings.salespeople?.[0]?.trim() ||
+      "",
+    companyName: (settings.company_name ?? "").trim(),
+    companyPhone: (settings.company_phone ?? "").trim(),
+    companyEmail: (settings.company_email ?? "").trim(),
+    day: formatDateLong(date),
+    time: flexLabel,
+  }), [
     stop.firstName,
     stop.label,
     stop.salesPerson,
@@ -183,14 +176,15 @@ export function FlexEstimateRow({
             <Phone className="h-4 w-4" />
           </a>
         )}
-        {smsHref && (
-          <a
-            href={smsHref}
+        {stop.phoneNumber && (
+          <button
+            type="button"
+            onClick={() => setShowSmsPicker(true)}
             aria-label={`Text ${stop.label}`}
             className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
           >
             <MessageSquare className="h-4 w-4" />
-          </a>
+          </button>
         )}
         <a
           href={mapsHref}
@@ -214,6 +208,14 @@ export function FlexEstimateRow({
         leadName={stop.label}
         onSubmit={submitOutcome}
         onCancel={() => setShowOutcomeModal(false)}
+      />
+    )}
+    {showSmsPicker && stop.phoneNumber && (
+      <SmsPickerModal
+        phone={stop.phoneNumber}
+        vars={smsVars}
+        settings={settings}
+        onClose={() => setShowSmsPicker(false)}
       />
     )}
     </li>
