@@ -14,8 +14,8 @@ type AiCallInfo = {
 /**
  * "AI Call" button shown on the lead card. Triggers the voice agent to
  * call this lead immediately (manual trigger, ignoring call window).
- * Shows "Called" state after a call has been placed. Includes a dropdown
- * toggle to view AI call history/tracking.
+ * Shows "Called" state + last call status underneath after a call.
+ * Expandable dropdown shows full call notes/summary.
  */
 export function AiCallButton({
   leadId,
@@ -43,11 +43,10 @@ export function AiCallButton({
       });
       if (res.ok) {
         setResult("success");
-        // Update local state to reflect the call was placed
         setLocalCallInfo((prev) => ({
           ai_call_count: (prev?.ai_call_count ?? 0) + 1,
           ai_last_call_at: new Date().toISOString(),
-          ai_last_call_status: prev?.ai_last_call_status ?? null,
+          ai_last_call_status: "in_progress",
           ai_notes: prev?.ai_notes ?? null,
         }));
       } else {
@@ -63,20 +62,11 @@ export function AiCallButton({
     }
   }
 
-  const statusLabel = localCallInfo?.ai_last_call_status
-    ? localCallInfo.ai_last_call_status === "completed"
-      ? "Answered"
-      : localCallInfo.ai_last_call_status === "no_answer"
-      ? "No answer"
-      : localCallInfo.ai_last_call_status === "voicemail"
-      ? "Voicemail"
-      : localCallInfo.ai_last_call_status === "failed"
-      ? "Failed"
-      : localCallInfo.ai_last_call_status
-    : null;
+  const statusLabel = getStatusLabel(localCallInfo?.ai_last_call_status);
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-0.5">
+      {/* Button row */}
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -105,45 +95,81 @@ export function AiCallButton({
             ? "Called"
             : "AI Call"}
         </button>
-        {hasCalled && (
+        {hasCalled && localCallInfo?.ai_notes && (
           <button
             type="button"
             onClick={() => setExpanded((e) => !e)}
-            title="View AI call details"
+            title="View AI call notes"
             className="inline-flex items-center justify-center h-8 w-6 rounded-md text-purple-600 hover:bg-purple-50 transition"
           >
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
         )}
       </div>
-      {expanded && hasCalled && (
-        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-2 text-[11px] space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="font-medium text-purple-800">
-              {statusLabel ?? "Called"}
+
+      {/* Status line — always visible after a call */}
+      {hasCalled && statusLabel && (
+        <div className="flex items-center gap-1.5 pl-0.5">
+          <span
+            className={cn(
+              "inline-block h-1.5 w-1.5 rounded-full",
+              localCallInfo?.ai_last_call_status === "completed"
+                ? "bg-green-500"
+                : localCallInfo?.ai_last_call_status === "voicemail"
+                ? "bg-amber-500"
+                : localCallInfo?.ai_last_call_status === "no_answer"
+                ? "bg-orange-500"
+                : localCallInfo?.ai_last_call_status === "in_progress"
+                ? "bg-blue-500"
+                : "bg-red-500"
+            )}
+          />
+          <span className="text-[10px] text-[var(--muted)] font-medium">
+            {statusLabel}
+          </span>
+          {localCallInfo?.ai_last_call_at && (
+            <span className="text-[10px] text-[var(--muted)] tabular-nums">
+              · {formatRelativeTime(localCallInfo.ai_last_call_at)}
             </span>
-            <span className="text-[10px] text-purple-600 tabular-nums">
-              {localCallInfo?.ai_last_call_at
-                ? formatRelativeTime(localCallInfo.ai_last_call_at)
-                : ""}
-            </span>
-          </div>
+          )}
           {(localCallInfo?.ai_call_count ?? 0) > 1 && (
-            <div className="text-[10px] text-purple-600">
-              {localCallInfo!.ai_call_count} calls total
-            </div>
+            <span className="text-[10px] text-[var(--muted)]">
+              · {localCallInfo!.ai_call_count} calls
+            </span>
           )}
-          {localCallInfo?.ai_notes && (
-            <div className="text-[10px] text-[var(--fg)] whitespace-pre-wrap leading-relaxed border-t border-purple-200 pt-1 mt-1">
-              {localCallInfo.ai_notes.length > 200
-                ? localCallInfo.ai_notes.slice(0, 200) + "…"
-                : localCallInfo.ai_notes}
-            </div>
-          )}
+        </div>
+      )}
+
+      {/* Expanded notes */}
+      {expanded && hasCalled && localCallInfo?.ai_notes && (
+        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-2 text-[10px] text-[var(--fg)] whitespace-pre-wrap leading-relaxed mt-0.5">
+          {localCallInfo.ai_notes.length > 300
+            ? localCallInfo.ai_notes.slice(0, 300) + "…"
+            : localCallInfo.ai_notes}
         </div>
       )}
     </div>
   );
+}
+
+function getStatusLabel(status: string | null | undefined): string | null {
+  if (!status) return null;
+  switch (status) {
+    case "completed":
+      return "Answered";
+    case "no_answer":
+      return "No answer";
+    case "voicemail":
+      return "Left VM";
+    case "failed":
+      return "Failed";
+    case "in_progress":
+      return "In progress";
+    case "transferred":
+      return "Transferred";
+    default:
+      return status;
+  }
 }
 
 function formatRelativeTime(iso: string): string {
