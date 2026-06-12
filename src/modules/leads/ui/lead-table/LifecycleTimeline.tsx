@@ -111,6 +111,7 @@ const LIFECYCLE_TYPES: LeadActivityType[] = [
   "lead_intake",
   "lead_scheduled",
   "lead_completed",
+  "ai_called",
   "status_changed",
   "follow_up_set",
   "proposal_sent",
@@ -147,6 +148,9 @@ function TimelineRow({ activity }: { activity: LeadActivity }) {
 function detailSuffix(activity: LeadActivity): string {
   const d = activity.details ?? {};
   if (activity.type === "customer_called" && typeof d.outcome === "string") {
+    return ` · ${d.outcome}`;
+  }
+  if (activity.type === "ai_called" && typeof d.outcome === "string") {
     return ` · ${d.outcome}`;
   }
   if (
