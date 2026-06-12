@@ -11,6 +11,7 @@ import { useAppSettings } from "@/components/SettingsProvider";
 import { LeadCard } from "./lead-table/LeadCard";
 import { EstimateOutcomeModal } from "./lead-table/EstimateOutcomeModal";
 import { CampaignBar } from "./lead-table/CampaignBar";
+import { ActiveCallBar } from "./lead-table/ActiveCallBar";
 
 const UNASSIGNED = "__unassigned__";
 
@@ -430,6 +431,7 @@ export default function LeadTable({
 
   return (
     <div className="flex flex-col gap-4">
+      <ActiveCallBar />
       <CampaignBar filter={filter} />
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[12rem]">
