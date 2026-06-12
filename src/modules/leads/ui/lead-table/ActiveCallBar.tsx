@@ -70,11 +70,12 @@ export function ActiveCallBar() {
     return () => clearInterval(interval);
   }, [call]);
 
-  // Clean up WebSocket + AudioContext when call ends
+  // Clean up WebSocket + AudioContext when call ends or component unmounts
   useEffect(() => {
     if (!call) {
       stopListening();
     }
+    return () => stopListening();
   }, [call]);
 
   function stopListening() {

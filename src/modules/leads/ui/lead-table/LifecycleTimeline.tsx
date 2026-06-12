@@ -165,6 +165,14 @@ function RecordingPlayer({ url }: { url: string }) {
   const [playing, setPlaying] = useState(false);
   const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (audioEl) {
+        audioEl.pause();
+      }
+    };
+  }, [audioEl]);
+
   function toggle() {
     if (playing && audioEl) {
       audioEl.pause();
