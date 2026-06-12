@@ -140,12 +140,10 @@ export function AiCallButton({
         </div>
       )}
 
-      {/* Expanded notes */}
+      {/* Expanded notes — full call details */}
       {expanded && hasCalled && localCallInfo?.ai_notes && (
-        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-2 text-[10px] text-[var(--fg)] whitespace-pre-wrap leading-relaxed mt-0.5">
-          {localCallInfo.ai_notes.length > 300
-            ? localCallInfo.ai_notes.slice(0, 300) + "…"
-            : localCallInfo.ai_notes}
+        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-2 text-[10px] text-[var(--fg)] whitespace-pre-wrap leading-relaxed mt-0.5 max-h-48 overflow-y-auto">
+          {localCallInfo.ai_notes}
         </div>
       )}
     </div>
