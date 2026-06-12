@@ -108,9 +108,12 @@ export async function POST(req: NextRequest) {
         : finalStatus === "transferred"
         ? "Transferred"
         : "Failed";
+    const durationDisplay = durationSecs
+      ? ` (${Math.floor(durationSecs / 60)}m ${durationSecs % 60}s)`
+      : "";
     const noteEntry = summary
-      ? `[${timestamp}] ${statusLabel} — ${summary}`
-      : `[${timestamp}] ${statusLabel}`;
+      ? `[${timestamp}] ${statusLabel}${durationDisplay} — ${summary}`
+      : `[${timestamp}] ${statusLabel}${durationDisplay}`;
     const existingNotes = (currentLead?.ai_notes as string) ?? "";
     const updatedNotes = existingNotes
       ? `${noteEntry}\n\n${existingNotes}`
@@ -170,12 +173,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Push notification for every AI call result
+    // Push notification for every AI call result — include full details
     const leadName = currentLead?.client ?? [currentLead?.first_name, currentLead?.last_name].filter(Boolean).join(" ") ?? "Lead";
+    const durationStr = durationSecs ? `${Math.floor(durationSecs / 60)}m ${durationSecs % 60}s` : "";
+    const notifBody = summary
+      ? `${leadName}${durationStr ? ` (${durationStr})` : ""}\n${summary}`
+      : `${leadName}${durationStr ? ` — ${durationStr}` : ""} — ${statusLabel}`;
     sendWorkspacePush({
       workspaceId: existingCall.workspace_id,
       title: `AI Call: ${statusLabel}`,
-      body: summary ? `${leadName} — ${summary.slice(0, 100)}` : `${leadName} — ${statusLabel}`,
+      body: notifBody,
       url: "/leads",
       tag: `ai-call-${existingCall.id}`,
     }).catch(() => {});
