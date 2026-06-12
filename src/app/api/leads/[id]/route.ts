@@ -9,6 +9,7 @@ import {
   isPendingCalendarClaim,
 } from "@/modules/calendar/server";
 import { requireMembership } from "@/modules/auth/server";
+import { sendWorkspacePush } from "@/lib/push";
 
 export const runtime = "nodejs";
 
@@ -392,6 +393,26 @@ export async function PATCH(
           details: a.details,
         }))
       );
+    }
+
+    // Push notification for status changes
+    if (typeof patch.status === "string" && patch.status !== existing.status) {
+      const name = displayName(data);
+      const statusLabels: Record<string, string> = {
+        "Called / No Response": "Needs Followup",
+        Scheduled: "Scheduled",
+        Completed: "Completed",
+        Lost: "Lost",
+        Pending: "Pending",
+      };
+      const label = statusLabels[patch.status] ?? patch.status;
+      sendWorkspacePush({
+        workspaceId: auth.workspaceId,
+        title: `Lead Status: ${label}`,
+        body: `${name} moved to ${label}`,
+        url: "/leads",
+        tag: `status-${id}`,
+      }).catch(() => {});
     }
   } catch {
     // Non-blocking — activity log failures never block the lead update.
