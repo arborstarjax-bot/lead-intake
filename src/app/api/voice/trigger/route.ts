@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSessionMembership } from "@/modules/auth/server";
+import { getSettings } from "@/lib/settings";
 import {
   getVoiceConfig,
   insertCall,
@@ -49,8 +50,9 @@ export async function POST(req: NextRequest) {
     workspaceId = membership.workspaceId;
   }
 
-  // Load voice config
+  // Load voice config + workspace settings (for callback number)
   const config = await getVoiceConfig(workspaceId);
+  const settings = await getSettings(workspaceId);
 
   if (!config.enabled) {
     return NextResponse.json(
@@ -142,6 +144,7 @@ export async function POST(req: NextRequest) {
           lead_source: lead.lead_source ?? "",
           company_name: config.company_name ?? "",
           agent_name: config.agent_name,
+          callback_number: settings.company_phone ?? "",
         },
       },
     });
