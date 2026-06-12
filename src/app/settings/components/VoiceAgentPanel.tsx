@@ -75,6 +75,23 @@ const DEFAULT_CONFIG: VoiceConfig = {
 const DEFAULT_GREETING =
   "Hi, this is {{agent_name}} from {{company_name}}. I'm calling because you reached out about tree service — is now a good time to chat for a minute?";
 
+/** Normalize any time string (AM/PM, narrow-space, etc.) to HH:MM 24h. */
+function normalizeTime(val: string): string {
+  const cleaned = val.replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
+  const ampm = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)$/i);
+  if (ampm) {
+    let h = parseInt(ampm[1]);
+    const m = ampm[2];
+    const period = ampm[3].toUpperCase().replace(/\./g, "");
+    if (period === "PM" && h < 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return `${h.toString().padStart(2, "0")}:${m}`;
+  }
+  const simple = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+  if (simple) return `${simple[1].padStart(2, "0")}:${simple[2]}`;
+  return cleaned;
+}
+
 export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -122,10 +139,17 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
     if (!dirty || saving) return;
     setSaving(true);
     try {
+      // Normalize time fields before sending — iOS <input type="time">
+      // may return 12h AM/PM format depending on locale
+      const payload = {
+        ...config,
+        call_window_start: normalizeTime(config.call_window_start),
+        call_window_end: normalizeTime(config.call_window_end),
+      };
       const res = await fetch("/api/voice/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -209,17 +233,7 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
                   disabled={!canEdit}
                 />
               </Field>
-              <Field label="Company name">
-                <input
-                  className={inputCls}
-                  value={config.company_name ?? ""}
-                  onChange={(e) =>
-                    update("company_name", e.target.value || null)
-                  }
-                  placeholder="Arbor Star Tree Service"
-                  disabled={!canEdit}
-                />
-              </Field>
+              {/* Company name comes from workspace Company Info settings */}
               <Field label="Greeting script">
                 <textarea
                   className={cn(textareaCls, "min-h-[80px]")}

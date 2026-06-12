@@ -203,8 +203,19 @@ async function checkAvailability(args: Record<string, unknown>) {
   const daysList: string[] = [];
 
   if (preferred_date) {
-    // Customer asked for a specific date — only check that one
-    if (preferred_date >= todayIso) daysList.push(preferred_date);
+    // Customer asked for a specific date — validate it's a work day
+    if (preferred_date >= todayIso) {
+      const pd = dateAtBusinessTzDay(preferred_date);
+      const pdow = dayOfWeekInBusinessTz(pd);
+      if (settings.work_days.includes(pdow)) {
+        daysList.push(preferred_date);
+      } else {
+        return {
+          error: `${preferred_date} is not a work day. Work days are: ${settings.work_days.map((n: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n]).join(", ")}. Please suggest a different day.`,
+          slots: [],
+        };
+      }
+    }
   } else {
     // Find the next N work days
     let offset = 1; // start from tomorrow
@@ -343,7 +354,7 @@ async function checkAvailability(args: Record<string, unknown>) {
     slots: best,
     instructions:
       "Offer the highest route_score slot first. Say something like: " +
-      "'Our estimator is going to be in your area on [date] — would [time] work for a free estimate?'",
+      "'Our arborist will be in your area on [date] — would [time] work for you?'",
   };
 }
 

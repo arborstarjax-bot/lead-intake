@@ -178,7 +178,8 @@ export async function POST(req: NextRequest) {
     });
 
     // Push notification for every AI call result — include full details
-    const leadName = currentLead?.client ?? [currentLead?.first_name, currentLead?.last_name].filter(Boolean).join(" ") ?? "Lead";
+    const leadName = currentLead?.client
+      ?? ([currentLead?.first_name, currentLead?.last_name].filter(Boolean).join(" ") || "Lead");
     const durationStr = durationSecs ? `${Math.floor(durationSecs / 60)}m ${durationSecs % 60}s` : "";
     const notifBody = summary
       ? `${leadName}${durationStr ? ` (${durationStr})` : ""}\n${summary}`

@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
           state: lead.state ?? "",
           zip: lead.zip ?? "",
           lead_source: lead.lead_source ?? "",
-          company_name: config.company_name ?? "",
+          company_name: settings.company_name ?? config.company_name ?? "",
           agent_name: config.agent_name,
           callback_number: settings.company_phone ?? "",
         },
