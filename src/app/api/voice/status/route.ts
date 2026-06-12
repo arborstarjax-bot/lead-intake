@@ -191,9 +191,115 @@ export async function POST(req: NextRequest) {
     if (finalStatus === "no_answer" || finalStatus === "voicemail") {
       await queueFollowUp(existingCall.workspace_id, existingCall.lead_id, finalStatus);
     }
+
+    // Campaign auto-advance: if this call was part of a campaign, trigger next
+    await advanceCampaign(existingCall.workspace_id, existingCall.lead_id, statusLabel, summary ?? null);
   }
 
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Check if the completed call was part of an active campaign and advance to the next lead.
+ */
+async function advanceCampaign(
+  workspaceId: string,
+  completedLeadId: string,
+  outcome: string,
+  summary: string | null
+) {
+  const supabase = createAdminClient();
+
+  // Find running campaign for this workspace
+  const { data: campaign } = await supabase
+    .from("ai_campaigns")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "running")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!campaign) return;
+
+  const queue = campaign.lead_queue as string[];
+  const currentIdx = queue.indexOf(completedLeadId);
+  if (currentIdx === -1) return; // Not part of this campaign
+
+  // Get lead name for results
+  const { data: leadRow } = await supabase
+    .from("leads")
+    .select("client, first_name, last_name")
+    .eq("id", completedLeadId)
+    .maybeSingle();
+  const leadName = leadRow?.client ?? ([leadRow?.first_name, leadRow?.last_name].filter(Boolean).join(" ") || "Lead");
+
+  // Update results
+  const results = (campaign.results as Array<Record<string, unknown>>) ?? [];
+  results.push({ lead_id: completedLeadId, name: leadName, outcome, summary });
+
+  const completedCount = results.length;
+  const nextIdx = currentIdx + 1;
+  const isFinished = nextIdx >= queue.length;
+
+  await supabase
+    .from("ai_campaigns")
+    .update({
+      completed_leads: completedCount,
+      results,
+      current_lead_id: isFinished ? null : queue[nextIdx],
+      status: isFinished ? "completed" : "running",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", campaign.id);
+
+  if (isFinished) {
+    // Send completion notification
+    sendWorkspacePush({
+      workspaceId,
+      title: "Campaign Complete",
+      body: `${completedCount} leads called. ${results.filter((r) => r.outcome === "Answered").length} answered, ${results.filter((r) => r.outcome === "Left VM" || r.outcome === "Voicemail").length} voicemail, ${results.filter((r) => r.outcome === "No answer").length} no answer.`,
+      url: "/leads",
+      tag: `campaign-${campaign.id}`,
+    }).catch(() => {});
+    return;
+  }
+
+  // Wait 5 seconds before next call to avoid overwhelming Vapi
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+
+  // Check if campaign was paused/cancelled during the wait
+  const { data: refreshed } = await supabase
+    .from("ai_campaigns")
+    .select("status")
+    .eq("id", campaign.id)
+    .maybeSingle();
+  if (refreshed?.status !== "running") return;
+
+  // Trigger next call
+  const nextLeadId = queue[nextIdx];
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  const triggerRes = await fetch(`${baseUrl}/api/voice/trigger`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lead_id: nextLeadId, workspace_id: workspaceId, manual: true }),
+  });
+
+  if (!triggerRes.ok) {
+    // If trigger fails, record failure and try next
+    const err = await triggerRes.json().catch(() => ({}));
+    const { data: failedLead } = await supabase
+      .from("leads")
+      .select("client, first_name, last_name")
+      .eq("id", nextLeadId)
+      .maybeSingle();
+    const failedName = failedLead?.client ?? ([failedLead?.first_name, failedLead?.last_name].filter(Boolean).join(" ") || "Lead");
+    results.push({ lead_id: nextLeadId, name: failedName, outcome: "Failed", summary: err.error ?? "Trigger failed" });
+
+    // Recursively advance past failed leads
+    await advanceCampaign(workspaceId, nextLeadId, "Failed", err.error ?? "Trigger failed");
+  }
 }
 
 function mapVapiStatus(status: string): string {
