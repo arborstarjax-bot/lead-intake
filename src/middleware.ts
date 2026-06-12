@@ -8,6 +8,8 @@ import { updateSession } from "@/modules/shared/supabase/middleware";
 // - Stripe webhook (Stripe POSTs server-to-server, signature-authed by the
 //   route handler; redirecting to /login here would fail every delivery
 //   with a 307)
+// - Voice agent webhooks (Vapi POSTs tool calls and status updates
+//   server-to-server during live calls; auth is implicit via call context)
 // - PWA shell assets (manifest, SW, icons) and Next static
 const PUBLIC_PATHS = [
   "/login",
@@ -18,6 +20,8 @@ const PUBLIC_PATHS = [
   "/api/auth",
   "/api/health",
   "/api/stripe",
+  "/api/voice/webhook",
+  "/api/voice/status",
   "/manifest.webmanifest",
   "/sw.js",
   "/icons",
