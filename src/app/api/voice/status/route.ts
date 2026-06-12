@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     const supabase = createAdminClient();
     const { data: currentLead } = await supabase
       .from("leads")
-      .select("ai_notes, client, first_name, last_name")
+      .select("ai_notes, ai_call_count, client, first_name, last_name")
       .eq("id", existingCall.lead_id)
       .maybeSingle();
 
@@ -135,6 +135,7 @@ export async function POST(req: NextRequest) {
       ai_last_call_at: now,
       ai_last_call_status: finalStatus,
       ai_notes: updatedNotes,
+      ai_call_count: ((currentLead?.ai_call_count as number) ?? 0) + 1,
     };
 
     if (shouldMoveToFollowUp) {
@@ -155,15 +156,7 @@ export async function POST(req: NextRequest) {
       .update(leadUpdate)
       .eq("id", existingCall.lead_id);
 
-    await supabase.rpc("increment_ai_call_count", {
-      p_lead_id: existingCall.lead_id,
-    }).then(() => {}, () => {
-      // RPC may not exist yet — fall back to raw update
-      return supabase
-        .from("leads")
-        .update({ ai_call_count: (existingCall.attempt_number ?? 0) + 1 })
-        .eq("id", existingCall.lead_id);
-    });
+    // ai_call_count is now included in the main leadUpdate above
 
     // Log ai_called activity to the lead's timeline
     await supabase.from("lead_activities").insert({
