@@ -18,7 +18,7 @@ export async function GET() {
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: call } = await supabase
     .from("ai_calls")
-    .select("id, lead_id, status, to_number, created_at")
+    .select("id, lead_id, status, to_number, created_at, listen_url")
     .eq("workspace_id", auth.workspaceId)
     .in("status", ["queued", "ringing", "in_progress"])
     .gte("created_at", tenMinAgo)
@@ -47,6 +47,7 @@ export async function GET() {
       lead_name: leadName,
       status: call.status,
       started_at: call.created_at,
+      listen_url: call.listen_url ?? null,
     },
   });
 }

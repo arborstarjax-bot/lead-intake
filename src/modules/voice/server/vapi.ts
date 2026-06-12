@@ -26,6 +26,10 @@ export type VapiCallResponse = {
   phoneNumberId: string;
   customer: { number: string };
   createdAt: string;
+  monitor?: {
+    listenUrl?: string;
+    controlUrl?: string;
+  };
 };
 
 export async function createOutboundCall(

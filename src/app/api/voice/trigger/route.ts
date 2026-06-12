@@ -149,11 +149,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Update the call record with Vapi's call ID
+    // Update the call record with Vapi's call ID + monitor listen URL
     const { updateCall } = await import("@/modules/voice/server");
     await updateCall(callRecord.id, {
       vapi_call_id: vapiResponse.id,
       status: "ringing",
+      listen_url: vapiResponse.monitor?.listenUrl ?? null,
     });
 
     return NextResponse.json({

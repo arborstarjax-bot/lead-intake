@@ -63,7 +63,8 @@ export async function POST(req: NextRequest) {
   } else if (type === "end-of-call-report") {
     const now = new Date().toISOString();
     const transcript = message.transcript as string | undefined;
-    const recordingUrl = message.recordingUrl as string | undefined;
+    const artifact = message.artifact as Record<string, unknown> | undefined;
+    const recordingUrl = (message.recordingUrl ?? artifact?.recordingUrl ?? artifact?.recording) as string | undefined;
     const summary = message.summary as string | undefined;
     const endedReason = message.endedReason as string | undefined;
     const durationSecs =
@@ -174,6 +175,7 @@ export async function POST(req: NextRequest) {
         summary: summary ?? null,
         duration_secs: durationSecs,
         call_id: existingCall.id,
+        recording_url: recordingUrl ?? null,
       },
     });
 

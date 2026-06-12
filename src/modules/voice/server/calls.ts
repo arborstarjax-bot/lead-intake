@@ -23,6 +23,7 @@ export type AiCall = {
   info_gathered: Record<string, unknown> | null;
   appointment_booked: boolean;
   recording_url: string | null;
+  listen_url: string | null;
   transcript: Array<{ role: string; content: string; timestamp?: number }> | null;
   failure_reason: string | null;
   created_at: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Clock } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock, Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   LEAD_ACTIVITY_LABELS,
@@ -134,6 +134,10 @@ function TimelineRow({ activity }: { activity: LeadActivity }) {
     activity.type === "ai_called" && typeof d.summary === "string" && d.summary
       ? d.summary
       : null;
+  const recordingUrl =
+    activity.type === "ai_called" && typeof d.recording_url === "string" && d.recording_url
+      ? d.recording_url
+      : null;
 
   return (
     <div className="flex items-start gap-2">
@@ -148,11 +152,51 @@ function TimelineRow({ activity }: { activity: LeadActivity }) {
             {aiSummary}
           </div>
         )}
+        {recordingUrl && <RecordingPlayer url={recordingUrl} />}
         <div className="text-[10px] tabular-nums text-[var(--muted)]">
           {formatTimestamp(activity.created_at)}
         </div>
       </div>
     </div>
+  );
+}
+
+function RecordingPlayer({ url }: { url: string }) {
+  const [playing, setPlaying] = useState(false);
+  const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioEl) {
+        audioEl.pause();
+      }
+    };
+  }, [audioEl]);
+
+  function toggle() {
+    if (playing && audioEl) {
+      audioEl.pause();
+      setPlaying(false);
+      return;
+    }
+    const audio = audioEl ?? new Audio(url);
+    if (!audioEl) {
+      audio.addEventListener("ended", () => setPlaying(false));
+      audio.addEventListener("error", () => setPlaying(false));
+      setAudioEl(audio);
+    }
+    audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700 hover:bg-purple-100 transition-colors"
+    >
+      {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+      {playing ? "Pause" : "Play Recording"}
+    </button>
   );
 }
 
