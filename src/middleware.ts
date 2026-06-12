@@ -22,6 +22,7 @@ const PUBLIC_PATHS = [
   "/api/stripe",
   "/api/voice/webhook",
   "/api/voice/status",
+  "/api/voice/trigger",
   "/manifest.webmanifest",
   "/sw.js",
   "/icons",
