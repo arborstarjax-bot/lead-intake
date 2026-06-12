@@ -20,14 +20,33 @@ export async function POST(req: NextRequest) {
   }
 
   const action = body.action as string;
-  if (!["pause", "resume", "stop"].includes(action)) {
+  if (!["pause", "resume", "stop", "dismiss"].includes(action)) {
     return NextResponse.json(
-      { error: "action must be 'pause', 'resume', or 'stop'" },
+      { error: "action must be 'pause', 'resume', 'stop', or 'dismiss'" },
       { status: 400 }
     );
   }
 
   const supabase = createAdminClient();
+
+  // Dismiss: mark completed/cancelled campaign so it no longer shows
+  if (action === "dismiss") {
+    const { data: doneCampaign } = await supabase
+      .from("ai_campaigns")
+      .select("id")
+      .eq("workspace_id", auth.workspaceId)
+      .in("status", ["completed", "cancelled"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (doneCampaign) {
+      await supabase
+        .from("ai_campaigns")
+        .update({ status: "dismissed", updated_at: new Date().toISOString() })
+        .eq("id", doneCampaign.id);
+    }
+    return NextResponse.json({ status: "dismissed" });
+  }
 
   // Find active campaign
   const { data: campaign } = await supabase

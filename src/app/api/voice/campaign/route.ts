@@ -15,11 +15,12 @@ export async function GET() {
 
   const supabase = createAdminClient();
 
-  // Get the most recent active or recently completed campaign
+  // Get the most recent active or completed campaign (exclude dismissed)
   const { data: campaign } = await supabase
     .from("ai_campaigns")
     .select("*")
     .eq("workspace_id", auth.workspaceId)
+    .neq("status", "dismissed")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

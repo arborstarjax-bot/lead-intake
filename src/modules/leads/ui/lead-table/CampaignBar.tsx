@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Phone, Pause, Play, Square, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Phone, Pause, Play, Square, CheckCircle2, XCircle, Loader2, X } from "lucide-react";
 
 interface CampaignResult {
   lead_id: string;
@@ -99,16 +99,31 @@ export function CampaignBar({ filter }: CampaignBarProps) {
     }
   }
 
+  async function dismissCampaign() {
+    setCampaign(null);
+    // Mark campaign as dismissed in backend so it doesn't resurface
+    try {
+      await fetch("/api/voice/campaign/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss" }),
+      });
+    } catch {
+      // Silently ignore
+    }
+  }
+
   // Active campaign exists
   const isActive = campaign && (campaign.status === "running" || campaign.status === "paused");
   const isCompleted = campaign && campaign.status === "completed";
-  const recentlyCompleted = isCompleted && (Date.now() - new Date(campaign.created_at).getTime()) < 60 * 60 * 1000; // within last hour
+  const isCancelled = campaign && campaign.status === "cancelled";
+  const showCompleted = isCompleted || isCancelled;
 
   // Don't show anything if not on a relevant tab and no active campaign
-  if (!showButton && !isActive && !recentlyCompleted) return null;
+  if (!showButton && !isActive && !showCompleted) return null;
 
   // Show campaign button only
-  if (!isActive && !recentlyCompleted && showButton) {
+  if (!isActive && !showCompleted && showButton) {
     return (
       <button
         onClick={startCampaign}
@@ -197,6 +212,16 @@ export function CampaignBar({ filter }: CampaignBarProps) {
               <Square className="h-4 w-4" />
             </button>
           </div>
+        )}
+        {/* Dismiss button for completed/cancelled campaigns */}
+        {(campaign.status === "completed" || campaign.status === "cancelled") && (
+          <button
+            onClick={dismissCampaign}
+            className="rounded-lg p-1.5 text-purple-600 hover:bg-purple-200 transition"
+            title="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
         )}
       </div>
 
