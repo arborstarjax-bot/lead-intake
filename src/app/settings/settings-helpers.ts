@@ -15,6 +15,23 @@ export const DAYS = [
 
 export type Patch = Partial<ClientAppSettings>;
 
+/** Normalize any time string (AM/PM, narrow-space, etc.) to HH:MM 24h. */
+export function normalizeTime(val: string): string {
+  const cleaned = val.replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
+  const ampm = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)$/i);
+  if (ampm) {
+    let h = parseInt(ampm[1]);
+    const m = ampm[2];
+    const period = ampm[3].toUpperCase().replace(/\./g, "");
+    if (period === "PM" && h < 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return `${h.toString().padStart(2, "0")}:${m}`;
+  }
+  const simple = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+  if (simple) return `${simple[1].padStart(2, "0")}:${simple[2]}`;
+  return cleaned;
+}
+
 /**
  * Shallow diff between two settings snapshots. Only fields that the
  * UI renders as editable are compared; the server is authoritative
@@ -53,7 +70,9 @@ export const EDITABLE_KEYS = [
  * doesn't leave the page stuck in a phantom-dirty state.
  */
 export function timeEq(a: unknown, b: unknown): boolean {
-  return String(a ?? "").slice(0, 5) === String(b ?? "").slice(0, 5);
+  const na = normalizeTime(String(a ?? "")).slice(0, 5);
+  const nb = normalizeTime(String(b ?? "")).slice(0, 5);
+  return na === nb;
 }
 
 export function diffSettings(next: ClientAppSettings, prev: ClientAppSettings): Patch {
@@ -79,9 +98,11 @@ export function diffSettings(next: ClientAppSettings, prev: ClientAppSettings): 
       same = a === b;
     }
     if (!same) {
-      // Assignment goes through `unknown` so TS doesn't infer each
-      // field's individual union type for the merged patch.
-      (patch as Record<string, unknown>)[key] = a;
+      // Normalize time values before including in patch
+      const value = (key === "work_start_time" || key === "work_end_time") && typeof a === "string"
+        ? normalizeTime(a)
+        : a;
+      (patch as Record<string, unknown>)[key] = value;
     }
   }
   return patch;
