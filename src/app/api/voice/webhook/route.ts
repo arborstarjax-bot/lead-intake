@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   const toolCalls = message.toolCalls as Array<{
     id: string;
-    function: { name: string; arguments: string };
+    function: { name: string; arguments: string | Record<string, unknown> };
   }>;
 
   if (!toolCalls?.length) {
@@ -54,9 +54,19 @@ export async function POST(req: NextRequest) {
 
   const results = await Promise.all(
     toolCalls.map(async (tc) => {
-      const args = JSON.parse(tc.function.arguments || "{}");
-      const result = await handleToolCall(tc.function.name, args);
-      return { toolCallId: tc.id, result: JSON.stringify(result) };
+      try {
+        // Vapi may send arguments as a JSON string OR as an already-parsed object
+        const raw = tc.function.arguments;
+        const args =
+          typeof raw === "string" ? JSON.parse(raw || "{}") : raw ?? {};
+        const result = await handleToolCall(tc.function.name, args);
+        return { toolCallId: tc.id, result: JSON.stringify(result) };
+      } catch (e) {
+        return {
+          toolCallId: tc.id,
+          result: JSON.stringify({ error: (e as Error).message }),
+        };
+      }
     })
   );
 
