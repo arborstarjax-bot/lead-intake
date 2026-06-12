@@ -127,6 +127,9 @@ export async function POST(req: NextRequest) {
       finalStatus === "failed" ||
       (finalStatus === "completed" && !summary?.toLowerCase().includes("booked"));
 
+    // Determine the appropriate follow_up_result sub-category
+    const followUpResult = getFollowUpResult(finalStatus, summary ?? null);
+
     const leadUpdate: Record<string, unknown> = {
       ai_last_call_at: now,
       ai_last_call_status: finalStatus,
@@ -142,6 +145,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (leadStatus?.status === "New") {
         leadUpdate.status = "Called / No Response";
+        leadUpdate.follow_up_result = followUpResult;
       }
     }
 
@@ -338,6 +342,38 @@ function endedReasonToStatus(reason: string | undefined): string {
     default:
       return "completed";
   }
+}
+
+/**
+ * Determine the appropriate follow_up_result sub-category based on call outcome.
+ * Maps to the FOLLOW_UP_RESULTS enum: "Called — No Answer", "Left Voicemail",
+ * "Spoke With Customer", "Requested Callback", etc.
+ */
+function getFollowUpResult(finalStatus: string, summary: string | null): string {
+  if (finalStatus === "no_answer") return "Called — No Answer";
+  if (finalStatus === "voicemail") return "Left Voicemail";
+  if (finalStatus === "failed") return "Called — No Answer";
+
+  // For completed calls, analyze the summary to determine sub-category
+  if (finalStatus === "completed" && summary) {
+    const lower = summary.toLowerCase();
+    if (
+      lower.includes("call back") ||
+      lower.includes("call you back") ||
+      lower.includes("callback") ||
+      lower.includes("call us back") ||
+      lower.includes("requested callback") ||
+      lower.includes("busy") ||
+      lower.includes("not a good time") ||
+      lower.includes("can't talk")
+    ) {
+      return "Requested Callback";
+    }
+    // They answered and talked but didn't book
+    return "Spoke With Customer";
+  }
+
+  return "Called — No Answer";
 }
 
 async function queueFollowUp(

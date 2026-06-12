@@ -8,22 +8,24 @@ export const dynamic = "force-dynamic";
 const timeSchema = z
   .string()
   .transform((val) => {
-    // Normalize 12h AM/PM to 24h (e.g. "5:00 PM" → "17:00")
-    const ampm = val.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    // Strip any non-ASCII whitespace (iOS inserts \u202f or \u00a0 before AM/PM)
+    const cleaned = val.replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
+    // Normalize 12h AM/PM to 24h (e.g. "5:00 PM" → "17:00", "9:00AM" → "09:00")
+    const ampm = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)$/i);
     if (ampm) {
       let h = parseInt(ampm[1]);
       const m = ampm[2];
-      const period = ampm[3].toUpperCase();
+      const period = ampm[3].toUpperCase().replace(/\./g, "");
       if (period === "PM" && h < 12) h += 12;
       if (period === "AM" && h === 12) h = 0;
       return `${h.toString().padStart(2, "0")}:${m}`;
     }
     // Normalize single-digit hour (e.g. "9:00" → "09:00")
-    const simple = val.match(/^(\d{1,2}):(\d{2})$/);
+    const simple = cleaned.match(/^(\d{1,2}):(\d{2})$/);
     if (simple) {
       return `${simple[1].padStart(2, "0")}:${simple[2]}`;
     }
-    return val;
+    return cleaned;
   })
   .refine(
     (val) => /^([01]\d|2[0-3]):[0-5]\d$/.test(val),
