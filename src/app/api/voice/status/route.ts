@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getCallByVapiId, updateCall } from "@/modules/voice/server";
+import { sendWorkspacePush } from "@/lib/push";
 
 export const runtime = "nodejs";
 
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
     const supabase = createAdminClient();
     const { data: currentLead } = await supabase
       .from("leads")
-      .select("ai_notes")
+      .select("ai_notes, client, first_name, last_name")
       .eq("id", existingCall.lead_id)
       .maybeSingle();
 
@@ -138,6 +139,14 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (leadStatus?.status === "New") {
         leadUpdate.status = "Called / No Response";
+        const leadName = currentLead?.client ?? [currentLead?.first_name, currentLead?.last_name].filter(Boolean).join(" ") ?? "Lead";
+        sendWorkspacePush({
+          workspaceId: existingCall.workspace_id,
+          title: "Lead Status: Needs Followup",
+          body: `${leadName} — AI call: ${statusLabel}`,
+          url: "/leads",
+          tag: `status-${existingCall.lead_id}`,
+        }).catch(() => {});
       }
     }
 
