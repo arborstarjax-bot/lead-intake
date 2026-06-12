@@ -7,7 +7,28 @@ export const dynamic = "force-dynamic";
 
 const timeSchema = z
   .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "time must be HH:MM");
+  .transform((val) => {
+    // Normalize 12h AM/PM to 24h (e.g. "5:00 PM" → "17:00")
+    const ampm = val.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (ampm) {
+      let h = parseInt(ampm[1]);
+      const m = ampm[2];
+      const period = ampm[3].toUpperCase();
+      if (period === "PM" && h < 12) h += 12;
+      if (period === "AM" && h === 12) h = 0;
+      return `${h.toString().padStart(2, "0")}:${m}`;
+    }
+    // Normalize single-digit hour (e.g. "9:00" → "09:00")
+    const simple = val.match(/^(\d{1,2}):(\d{2})$/);
+    if (simple) {
+      return `${simple[1].padStart(2, "0")}:${simple[2]}`;
+    }
+    return val;
+  })
+  .refine(
+    (val) => /^([01]\d|2[0-3]):[0-5]\d$/.test(val),
+    "time must be HH:MM"
+  );
 
 const patchSchema = z
   .object({

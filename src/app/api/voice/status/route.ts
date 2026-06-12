@@ -139,14 +139,6 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (leadStatus?.status === "New") {
         leadUpdate.status = "Called / No Response";
-        const leadName = currentLead?.client ?? [currentLead?.first_name, currentLead?.last_name].filter(Boolean).join(" ") ?? "Lead";
-        sendWorkspacePush({
-          workspaceId: existingCall.workspace_id,
-          title: "Lead Status: Needs Followup",
-          body: `${leadName} — AI call: ${statusLabel}`,
-          url: "/leads",
-          tag: `status-${existingCall.lead_id}`,
-        }).catch(() => {});
       }
     }
 
@@ -177,6 +169,16 @@ export async function POST(req: NextRequest) {
         call_id: existingCall.id,
       },
     });
+
+    // Push notification for every AI call result
+    const leadName = currentLead?.client ?? [currentLead?.first_name, currentLead?.last_name].filter(Boolean).join(" ") ?? "Lead";
+    sendWorkspacePush({
+      workspaceId: existingCall.workspace_id,
+      title: `AI Call: ${statusLabel}`,
+      body: summary ? `${leadName} — ${summary.slice(0, 100)}` : `${leadName} — ${statusLabel}`,
+      url: "/leads",
+      tag: `ai-call-${existingCall.id}`,
+    }).catch(() => {});
 
     // Queue follow-up if no answer
     if (finalStatus === "no_answer" || finalStatus === "voicemail") {
