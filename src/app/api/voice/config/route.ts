@@ -35,7 +35,7 @@ const patchSchema = z
     transfer_phone_number: z.string().trim().nullable().optional(),
     transfer_enabled: z.boolean().optional(),
   })
-  .strict();
+  .strip();
 
 export async function GET() {
   const auth = await requireMembership();
