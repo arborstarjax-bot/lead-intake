@@ -83,13 +83,44 @@ export async function POST(req: NextRequest) {
       call_summary: summary ?? null,
     });
 
-    // Update lead's AI call tracking
+    // Update lead's AI call tracking + append call summary to ai_notes
     const supabase = createAdminClient();
+    const { data: currentLead } = await supabase
+      .from("leads")
+      .select("ai_notes")
+      .eq("id", existingCall.lead_id)
+      .maybeSingle();
+
+    const timestamp = new Date(now).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const statusLabel =
+      finalStatus === "completed"
+        ? "Answered"
+        : finalStatus === "no_answer"
+        ? "No answer"
+        : finalStatus === "voicemail"
+        ? "Voicemail"
+        : finalStatus === "transferred"
+        ? "Transferred"
+        : "Failed";
+    const noteEntry = summary
+      ? `[${timestamp}] ${statusLabel} — ${summary}`
+      : `[${timestamp}] ${statusLabel}`;
+    const existingNotes = (currentLead?.ai_notes as string) ?? "";
+    const updatedNotes = existingNotes
+      ? `${noteEntry}\n\n${existingNotes}`
+      : noteEntry;
+
     await supabase
       .from("leads")
       .update({
         ai_last_call_at: now,
         ai_last_call_status: finalStatus,
+        ai_notes: updatedNotes,
       })
       .eq("id", existingCall.lead_id);
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings } from "@/lib/settings";
 import { suggestSlots, formatClock } from "@/modules/schedule/server";
+import { sendWorkspacePush } from "@/lib/push";
 import type { Lead } from "@/modules/leads/model";
 import {
   todayIsoInBusinessTz,
@@ -450,14 +451,32 @@ async function bookAppointment(args: Record<string, unknown>) {
 
   if (error) return { error: error.message };
 
-
+  // Send push notification for the booked appointment
+  const clientName =
+    (lead.client as string ?? "").trim() ||
+    [lead.first_name, lead.last_name].filter(Boolean).join(" ") ||
+    "A lead";
+  const displayTime = formatClock(requestedMin);
+  const dateObj = new Date(date + "T12:00:00");
+  const dayLabel = dateObj.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  sendWorkspacePush({
+    workspaceId,
+    title: "AI booked estimate",
+    body: `${clientName} — ${dayLabel} at ${displayTime}`,
+    url: `/leads?highlight=${lead_id}`,
+    tag: "ai-booking",
+  }).catch(() => {});
 
   return {
     success: true,
     appointment: {
       date,
       time,
-      display_time: formatClock(requestedMin),
+      display_time: displayTime,
       status: "Scheduled",
       note: "Lead moved to Scheduled in Lead Flow. Estimate appointment confirmed.",
     },
