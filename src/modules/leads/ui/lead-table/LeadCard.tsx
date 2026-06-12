@@ -225,7 +225,15 @@ export function LeadCard({
         />
         {lead.phone_number && (
           <div className="mt-2">
-            <AiCallButton leadId={lead.id} />
+            <AiCallButton
+              leadId={lead.id}
+              callInfo={{
+                ai_call_count: lead.ai_call_count,
+                ai_last_call_at: lead.ai_last_call_at,
+                ai_last_call_status: lead.ai_last_call_status,
+                ai_notes: lead.ai_notes,
+              }}
+            />
           </div>
         )}
       </Section>
