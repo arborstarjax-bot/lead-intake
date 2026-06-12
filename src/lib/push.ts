@@ -60,6 +60,84 @@ export async function sendNewLeadPush(input: NewLeadPushInput): Promise<void> {
   ]);
 }
 
+export type WorkspacePushInput = {
+  workspaceId: string;
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+};
+
+/**
+ * General-purpose push notification to all devices in a workspace.
+ * Used for AI booking confirmations, scheduling events, etc.
+ */
+export async function sendWorkspacePush(input: WorkspacePushInput): Promise<void> {
+  const webEnabled = configure();
+  const apnsEnabled = isApnsConfigured();
+  if (!webEnabled && !apnsEnabled) return;
+
+  const admin = createAdminClient();
+
+  // Web push
+  if (webEnabled) {
+    const { data: subs } = await admin
+      .from("push_subscriptions")
+      .select("id, endpoint, p256dh, auth")
+      .eq("workspace_id", input.workspaceId)
+      .eq("platform", "web");
+
+    if (subs && subs.length > 0) {
+      await Promise.all(
+        (subs as WebPushRow[]).map(async (s) => {
+          const payload = JSON.stringify({
+            title: input.title,
+            body: input.body,
+            url: input.url ?? "/leads",
+            tag: input.tag ?? "general",
+          });
+          try {
+            await webpush.sendNotification(
+              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+              payload
+            );
+          } catch (err) {
+            const status = (err as { statusCode?: number }).statusCode;
+            if (status === 404 || status === 410) {
+              await admin.from("push_subscriptions").delete().eq("id", s.id);
+            }
+          }
+        })
+      );
+    }
+  }
+
+  // Native push (APNs)
+  if (apnsEnabled) {
+    const { data: subs } = await admin
+      .from("push_subscriptions")
+      .select("id, device_token, platform")
+      .eq("workspace_id", input.workspaceId)
+      .eq("platform", "ios");
+
+    if (subs && subs.length > 0) {
+      await Promise.all(
+        (subs as NativePushRow[]).map(async (s) => {
+          const result = await sendApnsPush({
+            deviceToken: s.device_token,
+            title: input.title,
+            body: input.body,
+            collapseId: input.tag ?? "general",
+          });
+          if (!result.ok && result.shouldPrune) {
+            await admin.from("push_subscriptions").delete().eq("id", s.id);
+          }
+        })
+      );
+    }
+  }
+}
+
 async function sendWeb(input: NewLeadPushInput): Promise<void> {
   const admin = createAdminClient();
   // platform='web' only: native (ios/android) rows carry a device_token
