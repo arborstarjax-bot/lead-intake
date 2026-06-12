@@ -95,10 +95,14 @@ export async function getCallsForLead(leadId: string): Promise<AiCall[]> {
 
 export async function getActiveCallCount(workspaceId: string): Promise<number> {
   const admin = createAdminClient();
+  // Only count calls created within the last 10 minutes as "active".
+  // Calls stuck longer than that are stale (status webhook missed).
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { count } = await admin
     .from("ai_calls")
     .select("*", { count: "exact", head: true })
     .eq("workspace_id", workspaceId)
-    .in("status", ["queued", "ringing", "in_progress"]);
+    .in("status", ["queued", "ringing", "in_progress"])
+    .gte("created_at", tenMinAgo);
   return count ?? 0;
 }
