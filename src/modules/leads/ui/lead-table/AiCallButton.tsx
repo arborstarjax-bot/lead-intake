@@ -95,11 +95,11 @@ export function AiCallButton({
             ? "Called"
             : "AI Call"}
         </button>
-        {hasCalled && localCallInfo?.ai_notes && (
+        {hasCalled && localCallInfo?.ai_notes && localCallInfo.ai_notes.includes("\n\n") && (
           <button
             type="button"
             onClick={() => setExpanded((e) => !e)}
-            title="View AI call notes"
+            title={expanded ? "Show latest call only" : "Show all call history"}
             className="inline-flex items-center justify-center h-8 w-6 rounded-md text-purple-600 hover:bg-purple-50 transition"
           >
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -140,10 +140,12 @@ export function AiCallButton({
         </div>
       )}
 
-      {/* Expanded notes — full call details */}
-      {expanded && hasCalled && localCallInfo?.ai_notes && (
-        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-2 text-[10px] text-[var(--fg)] whitespace-pre-wrap leading-relaxed mt-0.5 max-h-48 overflow-y-auto">
-          {localCallInfo.ai_notes}
+      {/* AI call notes — always visible when calls have been made */}
+      {hasCalled && localCallInfo?.ai_notes && (
+        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-2 text-[10px] text-[var(--fg)] whitespace-pre-wrap leading-relaxed mt-1 max-h-40 overflow-y-auto">
+          {expanded
+            ? localCallInfo.ai_notes
+            : getLatestNote(localCallInfo.ai_notes)}
         </div>
       )}
     </div>
@@ -168,6 +170,12 @@ function getStatusLabel(status: string | null | undefined): string | null {
     default:
       return status;
   }
+}
+
+function getLatestNote(notes: string): string {
+  // Notes are separated by double newlines, newest first
+  const firstNote = notes.split("\n\n")[0] ?? notes;
+  return firstNote;
 }
 
 function formatRelativeTime(iso: string): string {
