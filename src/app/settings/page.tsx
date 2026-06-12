@@ -40,6 +40,7 @@ import { SalespeopleEditor } from "./components/SalespeopleEditor";
 import { TemplateField } from "./components/TemplateField";
 import { NumberField } from "./components/NumberField";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
+import { VoiceAgentPanel } from "./components/VoiceAgentPanel";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -178,6 +179,9 @@ export default function SettingsPage() {
 
       {/* Integrations (calendar sync + notifications) */}
       <IntegrationsPanel />
+
+      {/* AI Voice Agent */}
+      <VoiceAgentPanel canEdit={canEdit} />
 
       {/* Company info */}
       <Panel

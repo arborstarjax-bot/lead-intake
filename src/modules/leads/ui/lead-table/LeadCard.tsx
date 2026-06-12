@@ -37,6 +37,7 @@ import { OutcomeReasonModal } from "./OutcomeReasonModal";
 import { LeadSourceBadge } from "./LeadSourceBadge";
 import { LeadTypePill } from "./LeadTypePill";
 import { OutcomeBadge } from "./OutcomeBadge";
+import { AiCallButton } from "./AiCallButton";
 import { formatDateHuman, formatScheduleDisplay } from "./lead-table-helpers";
 
 export function LeadCard({
@@ -222,6 +223,11 @@ export function LeadCard({
           onPatch={onPatch}
           settings={settings}
         />
+        {lead.phone_number && (
+          <div className="mt-2">
+            <AiCallButton leadId={lead.id} />
+          </div>
+        )}
       </Section>
 
       {/* Location */}
