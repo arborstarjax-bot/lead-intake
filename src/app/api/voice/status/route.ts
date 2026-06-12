@@ -115,13 +115,35 @@ export async function POST(req: NextRequest) {
       ? `${noteEntry}\n\n${existingNotes}`
       : noteEntry;
 
+    // Determine if lead should be moved to "Called / No Response" (Needs Followup)
+    // Only move if currently "New" — don't regress leads that are already Scheduled/Pending/etc.
+    const shouldMoveToFollowUp =
+      finalStatus === "no_answer" ||
+      finalStatus === "voicemail" ||
+      finalStatus === "failed" ||
+      (finalStatus === "completed" && !summary?.toLowerCase().includes("booked"));
+
+    const leadUpdate: Record<string, unknown> = {
+      ai_last_call_at: now,
+      ai_last_call_status: finalStatus,
+      ai_notes: updatedNotes,
+    };
+
+    if (shouldMoveToFollowUp) {
+      // Only move "New" leads — don't override "Scheduled" etc.
+      const { data: leadStatus } = await supabase
+        .from("leads")
+        .select("status")
+        .eq("id", existingCall.lead_id)
+        .maybeSingle();
+      if (leadStatus?.status === "New") {
+        leadUpdate.status = "Called / No Response";
+      }
+    }
+
     await supabase
       .from("leads")
-      .update({
-        ai_last_call_at: now,
-        ai_last_call_status: finalStatus,
-        ai_notes: updatedNotes,
-      })
+      .update(leadUpdate)
       .eq("id", existingCall.lead_id);
 
     await supabase.rpc("increment_ai_call_count", {
@@ -132,6 +154,19 @@ export async function POST(req: NextRequest) {
         .from("leads")
         .update({ ai_call_count: (existingCall.attempt_number ?? 0) + 1 })
         .eq("id", existingCall.lead_id);
+    });
+
+    // Log ai_called activity to the lead's timeline
+    await supabase.from("lead_activities").insert({
+      workspace_id: existingCall.workspace_id,
+      lead_id: existingCall.lead_id,
+      type: "ai_called",
+      details: {
+        outcome: statusLabel,
+        summary: summary ?? null,
+        duration_secs: durationSecs,
+        call_id: existingCall.id,
+      },
     });
 
     // Queue follow-up if no answer
@@ -169,6 +204,8 @@ function endedReasonToStatus(reason: string | undefined): string {
     case "customer-ended-call":
     case "assistant-ended-call":
       return "completed";
+    case "silence-timed-out":
+      return "no_answer";
     case "assistant-forwarded-call":
       return "transferred";
     case "phone-call-provider-closed-websocket":
