@@ -129,6 +129,12 @@ function TimelineRow({ activity }: { activity: LeadActivity }) {
       ? "bg-[var(--accent)]"
       : "bg-[var(--muted)]/60"
   );
+  const d = activity.details ?? {};
+  const aiSummary =
+    activity.type === "ai_called" && typeof d.summary === "string" && d.summary
+      ? d.summary
+      : null;
+
   return (
     <div className="flex items-start gap-2">
       <div className={dotClass} aria-hidden />
@@ -137,6 +143,11 @@ function TimelineRow({ activity }: { activity: LeadActivity }) {
           {LEAD_ACTIVITY_LABELS[activity.type]}
           {detailSuffix(activity)}
         </div>
+        {aiSummary && (
+          <div className="text-[10px] text-[var(--fg)]/80 mt-0.5 whitespace-pre-wrap leading-relaxed">
+            {aiSummary}
+          </div>
+        )}
         <div className="text-[10px] tabular-nums text-[var(--muted)]">
           {formatTimestamp(activity.created_at)}
         </div>
@@ -151,7 +162,10 @@ function detailSuffix(activity: LeadActivity): string {
     return ` · ${d.outcome}`;
   }
   if (activity.type === "ai_called" && typeof d.outcome === "string") {
-    return ` · ${d.outcome}`;
+    const dur = typeof d.duration_secs === "number" && d.duration_secs > 0
+      ? ` (${Math.floor(d.duration_secs / 60)}m ${d.duration_secs % 60}s)`
+      : "";
+    return ` · ${d.outcome}${dur}`;
   }
   if (
     (activity.type === "marked_not_sold" || activity.type === "marked_lost" || activity.type === "follow_up_set") &&
