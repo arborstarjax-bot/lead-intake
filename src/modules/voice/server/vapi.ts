@@ -14,6 +14,8 @@ export type VapiCreateCallParams = {
   customerNumber: string;
   assistantOverrides?: {
     variableValues?: Record<string, string>;
+    voice?: { provider: string; voiceId: string };
+    firstMessage?: string;
   };
   schedulePlan?: {
     earliestAt?: string;

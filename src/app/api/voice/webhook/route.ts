@@ -158,6 +158,16 @@ async function updateLeadInfo(
   if (Object.keys(filtered).length === 0)
     return { error: "No valid fields to update" };
 
+  // Auto-detect DNC request from ai_notes
+  const aiNotes = (filtered.ai_notes as string) ?? "";
+  if (
+    aiNotes.toUpperCase().includes("DO NOT CALL") ||
+    aiNotes.toUpperCase().includes("DNC") ||
+    aiNotes.toUpperCase().includes("REQUESTED REMOVAL")
+  ) {
+    (filtered as Record<string, unknown>).ai_do_not_call = true;
+  }
+
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("leads")

@@ -13,6 +13,8 @@ const textareaCls =
 type VoiceConfig = {
   enabled: boolean;
   agent_name: string;
+  agent_name_male: string | null;
+  agent_name_female: string | null;
   company_name: string | null;
   greeting_template: string | null;
   system_prompt: string | null;
@@ -49,6 +51,8 @@ const CALL_DAYS = [
 const DEFAULT_CONFIG: VoiceConfig = {
   enabled: false,
   agent_name: "AI Assistant",
+  agent_name_male: null,
+  agent_name_female: null,
   company_name: null,
   greeting_template: null,
   system_prompt: null,
@@ -224,15 +228,30 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
               <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">
                 Persona
               </h3>
-              <Field label="Agent name (AI introduces itself as)">
+              <Field label="Male agent name (used when calling female leads)">
                 <input
                   className={inputCls}
-                  value={config.agent_name}
-                  onChange={(e) => update("agent_name", e.target.value)}
-                  placeholder="David"
+                  value={config.agent_name_male ?? config.agent_name}
+                  onChange={(e) => {
+                    update("agent_name_male", e.target.value || null);
+                    update("agent_name", e.target.value || "AI Assistant");
+                  }}
+                  placeholder="David Martin"
                   disabled={!canEdit}
                 />
               </Field>
+              <Field label="Female agent name (used when calling male leads)">
+                <input
+                  className={inputCls}
+                  value={config.agent_name_female ?? ""}
+                  onChange={(e) => update("agent_name_female", e.target.value || null)}
+                  placeholder="Sarah"
+                  disabled={!canEdit}
+                />
+              </Field>
+              <p className="text-xs text-[var(--muted)]">
+                The AI uses the opposite gender voice/name to the lead. Male leads hear the female agent, female leads hear the male agent.
+              </p>
               {/* Company name comes from workspace Company Info settings */}
               <Field label="Greeting script">
                 <textarea
