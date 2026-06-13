@@ -38,22 +38,27 @@ export async function POST(req: NextRequest) {
   const userAgent = req.headers.get("user-agent") ?? null;
 
   if (parsed.platform === "web") {
+    // Delete any existing row for this endpoint first — the previous
+    // row may belong to a deleted user or a different account on the
+    // same device, which would cause an upsert conflict or FK error.
+    await admin
+      .from("push_subscriptions")
+      .delete()
+      .eq("endpoint", parsed.endpoint);
+
     const { error } = await admin
       .from("push_subscriptions")
-      .upsert(
-        {
-          platform: "web",
-          endpoint: parsed.endpoint,
-          p256dh: parsed.p256dh,
-          auth: parsed.auth,
-          device_token: null,
-          app_version: null,
-          user_agent: userAgent,
-          user_id: auth.userId,
-          workspace_id: auth.workspaceId,
-        },
-        { onConflict: "endpoint" }
-      );
+      .insert({
+        platform: "web",
+        endpoint: parsed.endpoint,
+        p256dh: parsed.p256dh,
+        auth: parsed.auth,
+        device_token: null,
+        app_version: null,
+        user_agent: userAgent,
+        user_id: auth.userId,
+        workspace_id: auth.workspaceId,
+      });
     if (error)
       return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
@@ -96,11 +101,12 @@ export async function DELETE(req: NextRequest) {
   // delete by device_token. user_id scope prevents one device from
   // tearing down another user's subscription.
   if (typeof obj.endpoint === "string") {
+    // Delete by endpoint only — the subscription may have been created
+    // under a previous account on this device.
     await admin
       .from("push_subscriptions")
       .delete()
-      .eq("endpoint", obj.endpoint)
-      .eq("user_id", auth.userId);
+      .eq("endpoint", obj.endpoint);
     return NextResponse.json({ ok: true });
   }
   if (typeof obj.device_token === "string") {

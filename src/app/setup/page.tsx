@@ -27,6 +27,7 @@ import {
 import { Logo } from "@/components/Logo";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { useToast } from "@/components/Toast";
+import { AddressInput } from "@/components/AddressInput";
 import { cn } from "@/lib/utils";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -318,19 +319,23 @@ export default function SetupWizard() {
                   to calculate drive times and optimize stop order.
                 </p>
               </div>
-              <label className="block">
+              <div className="block">
                 <div className="text-xs font-medium text-[var(--muted)] mb-1">
                   Street address <span className="text-red-500">*</span>
                 </div>
-                <input
+                <AddressInput
                   className={inputCls}
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="123 Main St"
-                  autoComplete="street-address"
+                  onChange={setAddress}
+                  onSelect={(parts) => {
+                    setAddress(parts.street);
+                    if (parts.city) setCity(parts.city);
+                    if (parts.state) setState(parts.state);
+                    if (parts.zip) setZip(parts.zip);
+                  }}
                   autoFocus
                 />
-              </label>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label className="block">
                   <div className="text-xs font-medium text-[var(--muted)] mb-1">

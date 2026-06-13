@@ -153,6 +153,15 @@ export async function POST(req: NextRequest) {
           model: "claude-haiku-4-5-20251001",
           messages: [{ role: "system", content: systemPrompt }],
         },
+        voicemailDetection: {
+          provider: "twilio",
+          enabled: true,
+          voicemailDetectionTypes: [
+            "machine_end_beep",
+            "machine_end_silence",
+            "machine_end_other",
+          ],
+        },
         variableValues: {
           lead_id: lead.id,
           first_name: lead.first_name ?? "",

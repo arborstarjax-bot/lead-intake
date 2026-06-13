@@ -49,6 +49,7 @@ import { NumberField } from "./components/NumberField";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
 import { VoiceAgentPanel, type VoiceAgentHandle } from "./components/VoiceAgentPanel";
 import { LeadSourcesEditor } from "./components/LeadSourcesEditor";
+import { AddressInput } from "@/components/AddressInput";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -357,12 +358,16 @@ export default function SettingsPage() {
         description="Used as the first stop of every workday when the scheduler ranks slots."
       >
         <Field label="Street address">
-          <input
+          <AddressInput
             className={inputCls}
             value={s.home_address ?? ""}
-            onChange={(e) => update("home_address", e.target.value)}
-            placeholder="123 Main St"
-            autoComplete="street-address"
+            onChange={(v) => update("home_address", v)}
+            onSelect={(parts) => {
+              update("home_address", parts.street);
+              if (parts.city) update("home_city", parts.city);
+              if (parts.state) update("home_state", parts.state);
+              if (parts.zip) update("home_zip", parts.zip);
+            }}
           />
         </Field>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

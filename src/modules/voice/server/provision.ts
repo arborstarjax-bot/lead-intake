@@ -74,6 +74,15 @@ export async function createVapiAssistant(
       listenEnabled: true,
       controlEnabled: false,
     },
+    voicemailDetection: {
+      provider: "twilio",
+      enabled: true,
+      voicemailDetectionTypes: [
+        "machine_end_beep",
+        "machine_end_silence",
+        "machine_end_other",
+      ],
+    },
     endCallPhrases: ["goodbye", "bye now", "have a good one"],
     silenceTimeoutSeconds: 30,
     maxDurationSeconds: 300,
