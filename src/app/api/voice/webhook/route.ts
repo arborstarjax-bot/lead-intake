@@ -270,7 +270,7 @@ async function checkAvailability(args: Record<string, unknown>) {
         .eq("workspace_id", workspaceId)
         .eq("scheduled_day", day)
         .not("scheduled_time", "is", null)
-        .neq("status", "Completed")
+        .not("status", "in", '("Completed","Lost","Pending")')
         .neq("id", lead.id);
 
       const leadWithDay = { ...lead, scheduled_day: day } as Lead;
