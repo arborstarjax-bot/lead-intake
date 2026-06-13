@@ -238,52 +238,60 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
 
   candidates.sort((a, b) => a.totalDriveMinutes - b.totalDriveMinutes);
 
-  // Build the full ordered set of spread picks across all pages. Using a
-  // shrinking `minGap` when the earlier pages exhaust distinct-enough
-  // candidates lets later pages still surface useful alternatives instead
-  // of "no more slots" after the first 3.
-  const PAGE_SIZE = 3;
-  const allPicked: SlotSuggestion[] = [];
-  const gapSteps = [45, 30, 15, 0];
-  for (const minGap of gapSteps) {
-    for (const c of candidates) {
-      if (allPicked.some((p) => p.startTime === c.startTime)) continue;
-      const cMin = parseHHMM(c.startTime);
-      if (
-        minGap > 0 &&
-        allPicked.some((p) => Math.abs(parseHHMM(p.startTime) - cMin) < minGap)
-      ) {
-        continue;
-      }
-      allPicked.push(c);
-    }
-    if (allPicked.length >= (offset + 1) * PAGE_SIZE + PAGE_SIZE) break;
+  // Bucket-based diversity: pick the best slot from each time period so we
+  // offer options across the full working day, not just clustered times.
+  // Buckets: morning (start..noon), midday (noon..3PM), late (3PM..end).
+  const NOON = 12 * 60;
+  const MID_END = 15 * 60;
+  const buckets: SlotSuggestion[][] = [[], [], []];
+  for (const c of candidates) {
+    const cMin = parseHHMM(c.startTime);
+    if (cMin < NOON) buckets[0].push(c);
+    else if (cMin < MID_END) buckets[1].push(c);
+    else buckets[2].push(c);
   }
 
+  // Each bucket is already sorted by drive time (inherits from candidates sort).
+  // Pick best from each bucket first, then fill remaining from overall best.
+  const PAGE_SIZE = 5;
+  const allPicked: SlotSuggestion[] = [];
+  for (const bucket of buckets) {
+    if (bucket.length > 0) allPicked.push(bucket[0]);
+  }
+  // Fill remaining with next-best overall candidates not already picked
+  for (const c of candidates) {
+    if (allPicked.length >= PAGE_SIZE) break;
+    if (allPicked.some((p) => p.startTime === c.startTime)) continue;
+    // Ensure minimum 30-min spacing from already-picked slots
+    const cMin = parseHHMM(c.startTime);
+    if (allPicked.some((p) => Math.abs(parseHHMM(p.startTime) - cMin) < 30)) continue;
+    allPicked.push(c);
+  }
+
+  // Support pagination for the UI (week view still uses offset)
+  const totalPicked = allPicked.length;
   const pageStart = offset * PAGE_SIZE;
   const pageEnd = pageStart + PAGE_SIZE;
   const page = allPicked.slice(pageStart, pageEnd);
-  const hasMore = allPicked.length > pageEnd;
+  const hasMore = totalPicked > pageEnd;
 
   if (page.length === 0) {
     warnings.push(
-      allPicked.length > 0
+      totalPicked > 0
         ? "No more distinct slots — go back to the first page."
         : candidates.length
-        ? "All slots were too close together to show three distinct options."
+        ? "All slots were too close together to show distinct options."
         : "No feasible slots on this day inside working hours — try a different day."
     );
   }
 
-  // Display in chronological order within the page, not ranked order, so
-  // morning options feel like morning options — but preserve rank for
-  // optional highlighting.
+  // Display in chronological order within the page
   page.sort((a, b) => parseHHMM(a.startTime) - parseHHMM(b.startTime));
 
   return {
     slots: page,
     warnings,
     hasMore,
-    totalCount: allPicked.length,
+    totalCount: totalPicked,
   };
 }

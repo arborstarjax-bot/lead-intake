@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
+import { getSettings } from "@/lib/settings";
+import { sortByDistanceFromHome } from "@/lib/geo";
 
 export const runtime = "nodejs";
 
@@ -68,7 +70,7 @@ export async function POST(req: NextRequest) {
   const statusFilter = filter === "new" ? "New" : "Called / No Response";
   const { data: leads } = await supabase
     .from("leads")
-    .select("id, first_name, last_name, client, phone_number, ai_do_not_call")
+    .select("id, first_name, last_name, client, phone_number, zip, ai_do_not_call")
     .eq("workspace_id", auth.workspaceId)
     .eq("status", statusFilter)
     .order("created_at", { ascending: true });
@@ -78,14 +80,21 @@ export async function POST(req: NextRequest) {
     (l) => l.phone_number && !l.ai_do_not_call
   );
 
-  if (callableLeads.length === 0) {
+  // Sort by distance from home base (closest first) to build efficient routes
+  const settings = await getSettings(auth.workspaceId);
+  const homeZip = settings.home_zip;
+  const sortedLeads = homeZip
+    ? sortByDistanceFromHome(callableLeads, homeZip)
+    : callableLeads;
+
+  if (sortedLeads.length === 0) {
     return NextResponse.json(
       { error: "No callable leads found" },
       { status: 404 }
     );
   }
 
-  const leadQueue = callableLeads.map((l) => l.id);
+  const leadQueue = sortedLeads.map((l) => l.id);
 
   // Create the campaign
   const { data: campaign, error } = await supabase
@@ -127,7 +136,7 @@ export async function POST(req: NextRequest) {
     await supabase
       .from("ai_campaigns")
       .update({
-        results: [{ lead_id: firstLeadId, name: getLeadName(callableLeads, firstLeadId), outcome: "failed", summary: err.error ?? "Trigger failed" }],
+        results: [{ lead_id: firstLeadId, name: getLeadName(sortedLeads, firstLeadId), outcome: "failed", summary: err.error ?? "Trigger failed" }],
         completed_leads: 1,
         current_lead_id: leadQueue[1] ?? null,
         status: leadQueue.length <= 1 ? "completed" : "running",

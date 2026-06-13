@@ -347,9 +347,9 @@ async function checkAvailability(args: Record<string, unknown>) {
 
   const allSlots = dayResults.flat();
 
-  // Sort by route_score descending, take top 3 (AI offers 1 at a time)
+  // Sort by route_score descending, take top 5 (AI offers 1 at a time, has fallbacks)
   allSlots.sort((a, b) => b.route_score - a.route_score);
-  const best = allSlots.slice(0, 3);
+  const best = allSlots.slice(0, 5);
 
   const windowStart = formatClock(
     parseInt(settings.work_start_time.split(":")[0]) * 60 +
