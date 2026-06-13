@@ -21,6 +21,11 @@ export type VapiCreateCallParams = {
       model: string;
       messages: { role: string; content: string }[];
     };
+    voicemailDetection?: {
+      provider: string;
+      enabled: boolean;
+      voicemailDetectionTypes: string[];
+    };
   };
   schedulePlan?: {
     earliestAt?: string;
