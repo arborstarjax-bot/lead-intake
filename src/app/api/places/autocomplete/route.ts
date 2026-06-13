@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionMembership } from "@/modules/auth/server";
+import { createAdminClient } from "@/modules/shared/supabase/server";
+import { geocode } from "@/modules/routing/server";
 
 export const runtime = "nodejs";
 
 const GOOGLE_API = "https://maps.googleapis.com/maps/api/place/autocomplete/json";
+
+/** 50-mile radius for location bias (in meters). */
+const BIAS_RADIUS = 80_467;
 
 export async function GET(req: NextRequest) {
   const auth = await getSessionMembership();
@@ -26,6 +31,13 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("components", "country:us");
   url.searchParams.set("key", key);
 
+  // Bias predictions toward the workspace's home location
+  const latLng = await getWorkspaceLatLng(auth.workspaceId);
+  if (latLng) {
+    url.searchParams.set("location", `${latLng.lat},${latLng.lng}`);
+    url.searchParams.set("radius", String(BIAS_RADIUS));
+  }
+
   const res = await fetch(url.toString());
   const data = await res.json();
 
@@ -46,4 +58,27 @@ export async function GET(req: NextRequest) {
   );
 
   return NextResponse.json({ predictions });
+}
+
+/** Resolve the workspace's home address to lat/lng for autocomplete bias. */
+async function getWorkspaceLatLng(workspaceId: string) {
+  try {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from("app_settings")
+      .select("home_address, home_city, home_state, home_zip")
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+
+    if (!data?.home_address) return null;
+
+    const addr = [data.home_address, data.home_city, data.home_state, data.home_zip]
+      .filter(Boolean)
+      .join(", ");
+
+    return geocode(addr);
+  } catch {
+    // Don't let bias lookup failures break autocomplete
+    return null;
+  }
 }
