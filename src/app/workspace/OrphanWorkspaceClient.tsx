@@ -72,7 +72,7 @@ export function OrphanWorkspaceClient({ email }: { email: string }) {
         return;
       }
       toast({ kind: "success", message: "Workspace created" });
-      router.replace("/");
+      router.replace("/setup");
       router.refresh();
     });
   }
