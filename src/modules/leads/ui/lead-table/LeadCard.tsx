@@ -38,6 +38,7 @@ import { LeadSourceBadge } from "./LeadSourceBadge";
 import { LeadTypePill } from "./LeadTypePill";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { AiCallButton } from "./AiCallButton";
+import { AiCallHistory } from "./AiCallHistory";
 import { formatDateHuman, formatScheduleDisplay } from "./lead-table-helpers";
 
 export function LeadCard({
@@ -233,6 +234,11 @@ export function LeadCard({
                 ai_last_call_status: lead.ai_last_call_status,
                 ai_notes: lead.ai_notes,
               }}
+              onCallTriggered={() => setActivityRefreshKey((k) => k + 1)}
+            />
+            <AiCallHistory
+              leadId={lead.id}
+              refreshKey={activityRefreshKey}
             />
           </div>
         )}

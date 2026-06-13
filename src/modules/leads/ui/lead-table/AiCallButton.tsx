@@ -20,16 +20,23 @@ type AiCallInfo = {
 export function AiCallButton({
   leadId,
   callInfo,
+  onCallTriggered,
 }: {
   leadId: string;
   callInfo?: AiCallInfo;
+  onCallTriggered?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<"idle" | "success" | "error">("idle");
   const [expanded, setExpanded] = useState(false);
   const [localCallInfo, setLocalCallInfo] = useState<AiCallInfo | undefined>(callInfo);
 
-  const hasCalled = (localCallInfo?.ai_call_count ?? 0) > 0;
+  // Detect "has been called" using multiple signals — ai_call_count may
+  // be stale/zero for calls made before the increment fix (PR #215).
+  const hasCalled =
+    (localCallInfo?.ai_call_count ?? 0) > 0 ||
+    Boolean(localCallInfo?.ai_last_call_status) ||
+    Boolean(localCallInfo?.ai_notes);
 
   async function trigger() {
     if (loading) return;
@@ -49,6 +56,7 @@ export function AiCallButton({
           ai_last_call_status: "in_progress",
           ai_notes: prev?.ai_notes ?? null,
         }));
+        onCallTriggered?.();
       } else {
         const json = await res.json().catch(() => ({}));
         console.error("AI call trigger failed:", json);
