@@ -24,6 +24,7 @@ import {
   DEFAULT_CLIENT_SETTINGS,
   type ClientAppSettings,
 } from "@/lib/client-settings";
+import { createClient } from "@/modules/shared/supabase/client";
 
 export type WorkspaceRole = "admin" | "user";
 
@@ -46,7 +47,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/settings", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        // If the user is signed out the API returns 401. Reset to
+        // defaults so stale workspace data is never shown.
+        if (res.status === 401) {
+          setSettings(DEFAULT_CLIENT_SETTINGS);
+          setRole(null);
+        }
+        return;
+      }
       const json = await res.json();
       if (json?.settings) {
         // Merge over defaults so missing columns (e.g. before the tailoring
@@ -64,10 +73,34 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Initial fetch on mount.
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
     refresh();
+  }, [refresh]);
+
+  // Re-fetch whenever the Supabase auth state changes (sign-in,
+  // sign-out, token refresh). Without this, the root-layout provider
+  // keeps stale settings from a previous account after a client-side
+  // navigation through /login, causing workspace variable leakage.
+  useEffect(() => {
+    const supabase = createClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event) => {
+        if (
+          event === "SIGNED_IN" ||
+          event === "SIGNED_OUT" ||
+          event === "TOKEN_REFRESHED"
+        ) {
+          // Reset the loaded guard so subsequent SIGNED_IN events
+          // also trigger a fetch (not just the first one).
+          loaded.current = false;
+          refresh();
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
   }, [refresh]);
 
   const apply = useCallback((patch: Partial<ClientAppSettings>) => {

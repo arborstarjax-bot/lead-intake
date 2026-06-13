@@ -38,6 +38,14 @@ export function SetupGuard() {
   const router = useRouter();
   const redirected = useRef(false);
 
+  // Reset the one-shot guard whenever settings change (e.g. after an
+  // account switch the SettingsProvider pushes new settings). Without
+  // this, the guard stays locked after the first redirect and never
+  // fires again for a second account that also hasn't completed setup.
+  useEffect(() => {
+    redirected.current = false;
+  }, [settings.created_at, settings.setup_completed]);
+
   useEffect(() => {
     // Wait for the actual settings to load (created_at is "" in the
     // default placeholder).
