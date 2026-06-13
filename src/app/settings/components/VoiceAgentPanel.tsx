@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { Panel, Field } from "./Panel";
+import { Zap } from "lucide-react";
 
 const inputCls =
   "w-full h-11 rounded-lg border border-[var(--border)] bg-white px-3 text-sm outline-none focus:border-[var(--accent)]";
@@ -100,9 +101,16 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [provisioning, setProvisioning] = useState(false);
   const [config, setConfig] = useState<VoiceConfig>(DEFAULT_CONFIG);
   const savedRef = useRef<VoiceConfig>(DEFAULT_CONFIG);
   const [dirty, setDirty] = useState(false);
+  // Provision form state
+  const [provisionForm, setProvisionForm] = useState({
+    service_type: "tree service",
+    appointment_type: "free estimate",
+    technician_title: "our arborist",
+  });
 
   useEffect(() => {
     fetch("/api/voice/config")
@@ -174,6 +182,39 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  async function provision() {
+    if (provisioning) return;
+    setProvisioning(true);
+    try {
+      const res = await fetch("/api/voice/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(provisionForm),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast({ kind: "error", message: json.error ?? "Provisioning failed" });
+        return;
+      }
+      toast({ kind: "success", message: "AI assistant activated!" });
+      // Reload config to reflect new assistant ID
+      const configRes = await fetch("/api/voice/config");
+      const configJson = await configRes.json();
+      if (configJson.config) {
+        const c = { ...DEFAULT_CONFIG, ...configJson.config } as VoiceConfig;
+        setConfig(c);
+        savedRef.current = c;
+        setDirty(false);
+      }
+    } catch (e) {
+      toast({ kind: "error", message: (e as Error).message });
+    } finally {
+      setProvisioning(false);
+    }
+  }
+
+  const needsProvisioning = config.enabled && !config.vapi_assistant_id;
+
   if (loading) {
     return (
       <section className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
@@ -221,7 +262,72 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
           </button>
         </div>
 
-        {config.enabled && (
+        {/* Setup wizard — shown when enabled but not yet provisioned */}
+        {needsProvisioning && (
+          <div className="space-y-4 pt-3">
+            <div className="rounded-xl border border-green-200 bg-green-50/50 p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-green-600" />
+                <h3 className="text-sm font-semibold text-green-900">
+                  Set up your AI assistant
+                </h3>
+              </div>
+              <p className="text-xs text-green-800">
+                Tell us about your business and we&apos;ll create a custom AI caller
+                that books appointments for you automatically.
+              </p>
+              <Field label="What service do you provide?">
+                <input
+                  className={inputCls}
+                  value={provisionForm.service_type}
+                  onChange={(e) =>
+                    setProvisionForm((p) => ({ ...p, service_type: e.target.value }))
+                  }
+                  placeholder="tree service, plumbing, HVAC, landscaping..."
+                  disabled={!canEdit}
+                />
+              </Field>
+              <Field label="What are you scheduling?">
+                <input
+                  className={inputCls}
+                  value={provisionForm.appointment_type}
+                  onChange={(e) =>
+                    setProvisionForm((p) => ({ ...p, appointment_type: e.target.value }))
+                  }
+                  placeholder="free estimate, consultation, inspection..."
+                  disabled={!canEdit}
+                />
+              </Field>
+              <Field label="Who comes out? (how should AI refer to them)">
+                <input
+                  className={inputCls}
+                  value={provisionForm.technician_title}
+                  onChange={(e) =>
+                    setProvisionForm((p) => ({ ...p, technician_title: e.target.value }))
+                  }
+                  placeholder="our arborist, a technician, our team..."
+                  disabled={!canEdit}
+                />
+              </Field>
+              <button
+                onClick={provision}
+                disabled={provisioning || !canEdit}
+                className="w-full h-11 rounded-lg bg-green-600 text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {provisioning ? (
+                  "Setting up..."
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4" />
+                    Activate AI Assistant
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {config.enabled && !needsProvisioning && (
           <div className="space-y-5 pt-2">
             {/* Persona */}
             <div className="space-y-3">
