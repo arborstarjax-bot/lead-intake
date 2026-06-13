@@ -62,19 +62,11 @@ h1, h2, h3, h4 {
 
 body {
   min-height: 100dvh;
-  /* Respect iOS notch / Dynamic Island at the top, and the home
-     indicator + fixed bottom tab bar at the bottom (see BottomNav.tsx).
-     Pages rendered inside a Capacitor / WKWebView shell with
-     `viewportFit: "cover"` would otherwise slide under the status bar.
-     Desktop breakpoints zero out the bottom nav reserve since the nav
-     is hidden there; safe-area insets are already 0 on desktop. */
+  /* Respect iOS notch / Dynamic Island at the top. Bottom spacing is
+     handled by the flex layout in layout.tsx — the BottomNav sits
+     as a sticky element at the bottom of the flex container, so no
+     manual padding-bottom is needed. */
   padding-top: env(safe-area-inset-top);
-  padding-bottom: calc(env(safe-area-inset-bottom) + 8rem);
-}
-@media (min-width: 768px) {
-  body {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
 }
 
 /* iOS Safari zooms inputs with font-size < 16px on focus. */

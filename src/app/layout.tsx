@@ -49,12 +49,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={sans.variable}>
-      <body>
+      <body className="flex flex-col min-h-[100dvh]">
         <ToastProvider>
           <ConfirmProvider>
             <SettingsProvider>
               <SetupGuard />
-              {children}
+              <main className="flex-1 overflow-y-auto">
+                {children}
+              </main>
               <BottomNav />
               <CapacitorLinkHandler />
               <OfflineBanner />
