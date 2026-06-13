@@ -6,10 +6,14 @@ import { inputCls } from "../settings-helpers";
 
 export function SalespeopleEditor({
   roster,
+  titles,
   onChange,
+  onTitleChange,
 }: {
   roster: string[];
+  titles: Record<string, string>;
   onChange: (next: string[]) => void;
+  onTitleChange: (name: string, title: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const list = useMemo(() => roster.filter((n) => n.trim().length > 0), [roster]);
@@ -32,18 +36,24 @@ export function SalespeopleEditor({
   return (
     <div className="space-y-3">
       {list.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5">
+        <ul className="space-y-2">
           {list.map((name) => (
             <li
               key={name}
-              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-2)] px-3 h-9 text-sm"
+              className="flex items-center gap-2"
             >
-              <span>{name}</span>
+              <span className="text-sm font-medium shrink-0">{name}</span>
+              <input
+                className="flex-1 h-8 rounded-md border border-[var(--border)] bg-white px-2 text-xs outline-none focus:border-[var(--accent)]"
+                value={titles[name] ?? ""}
+                onChange={(e) => onTitleChange(name, e.target.value)}
+                placeholder="Title (e.g. Sales Rep, Estimator)"
+              />
               <button
                 type="button"
                 onClick={() => remove(name)}
                 aria-label={`Remove ${name}`}
-                className="text-[var(--muted)] hover:text-[var(--fg)]"
+                className="text-[var(--muted)] hover:text-[var(--fg)] shrink-0"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

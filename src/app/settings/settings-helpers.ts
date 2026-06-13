@@ -42,7 +42,9 @@ export const EDITABLE_KEYS = [
   "company_name",
   "company_phone",
   "company_email",
+  "business_type",
   "salespeople",
+  "salesperson_titles",
   "default_salesperson",
   "sms_intro_template",
   "sms_confirm_template",
@@ -81,7 +83,10 @@ export function diffSettings(next: ClientAppSettings, prev: ClientAppSettings): 
     const a = next[key];
     const b = prev[key];
     let same: boolean;
-    if (Array.isArray(a) && Array.isArray(b)) {
+    if (
+      (Array.isArray(a) && Array.isArray(b)) ||
+      (typeof a === "object" && a !== null && typeof b === "object" && b !== null)
+    ) {
       same = JSON.stringify(a) === JSON.stringify(b);
     } else if (key === "work_start_time" || key === "work_end_time") {
       same = timeEq(a, b);

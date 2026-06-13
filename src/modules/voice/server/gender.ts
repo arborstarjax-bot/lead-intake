@@ -92,18 +92,13 @@ export function guessGender(firstName: string | null | undefined): GenderGuess {
  * (Savannah, Clara, Tara) fail with pipeline-error when passed as overrides.
  */
 export function selectVoiceForLead(
-  firstName: string | null | undefined,
-  config?: {
-    agent_name: string;
-    agent_name_male?: string | null;
-    agent_name_female?: string | null;
-  }
+  _firstName: string | null | undefined,
+  config?: { agent_name: string }
 ): {
   provider: string;
   voiceId: string;
   agentName: string;
 } {
-  // Use male voice (Elliot) for all calls — voice overrides cause pipeline errors
-  const maleName = config?.agent_name_male || config?.agent_name || "David";
-  return { provider: "vapi", voiceId: "Elliot", agentName: maleName };
+  const name = config?.agent_name || "David";
+  return { provider: "vapi", voiceId: "Elliot", agentName: name };
 }

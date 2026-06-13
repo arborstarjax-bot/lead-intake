@@ -26,7 +26,9 @@ export type ClientAppSettings = {
   company_name: string | null;
   company_phone: string | null;
   company_email: string | null;
+  business_type: string | null;
   salespeople: string[];
+  salesperson_titles: Record<string, string>;
   default_salesperson: string | null;
   sms_intro_template: string | null;
   sms_confirm_template: string | null;
@@ -56,7 +58,9 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
   company_name: null,
   company_phone: null,
   company_email: null,
+  business_type: null,
   salespeople: [],
+  salesperson_titles: {},
   default_salesperson: null,
   sms_intro_template: null,
   sms_confirm_template: null,

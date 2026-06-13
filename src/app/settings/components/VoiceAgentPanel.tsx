@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  forwardRef,
+} from "react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
 import { Panel, Field } from "./Panel";
@@ -8,14 +15,14 @@ import { Zap } from "lucide-react";
 
 const inputCls =
   "w-full h-11 rounded-lg border border-[var(--border)] bg-white px-3 text-sm outline-none focus:border-[var(--accent)]";
-const textareaCls =
-  "w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--accent)] resize-y";
+
+/* ------------------------------------------------------------------ */
+/*  Types — only fields that actually exist in the DB                  */
+/* ------------------------------------------------------------------ */
 
 type VoiceConfig = {
   enabled: boolean;
   agent_name: string;
-  agent_name_male: string | null;
-  agent_name_female: string | null;
   company_name: string | null;
   greeting_template: string | null;
   system_prompt: string | null;
@@ -52,8 +59,6 @@ const CALL_DAYS = [
 const DEFAULT_CONFIG: VoiceConfig = {
   enabled: false,
   agent_name: "AI Assistant",
-  agent_name_male: null,
-  agent_name_female: null,
   company_name: null,
   greeting_template: null,
   system_prompt: null,
@@ -77,13 +82,15 @@ const DEFAULT_CONFIG: VoiceConfig = {
   transfer_enabled: true,
 };
 
-const DEFAULT_GREETING =
-  "Hi, this is {{agent_name}} from {{company_name}}. I'm calling because you reached out about tree service — is now a good time to chat for a minute?";
-
 /** Normalize any time string (AM/PM, narrow-space, etc.) to HH:MM 24h. */
 function normalizeTime(val: string): string {
-  const cleaned = val.replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
-  const ampm = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)$/i);
+  const cleaned = val
+    .replace(/[^\x20-\x7E]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const ampm = cleaned.match(
+    /^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)$/i
+  );
   if (ampm) {
     let h = parseInt(ampm[1]);
     const m = ampm[2];
@@ -97,20 +104,25 @@ function normalizeTime(val: string): string {
   return cleaned;
 }
 
-export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
+/* ------------------------------------------------------------------ */
+/*  Imperative handle so parent can query dirty + trigger save         */
+/* ------------------------------------------------------------------ */
+
+export type VoiceAgentHandle = {
+  isDirty: () => boolean;
+  save: () => Promise<boolean>;
+};
+
+export const VoiceAgentPanel = forwardRef<
+  VoiceAgentHandle,
+  { canEdit: boolean; onDirtyChange?: () => void }
+>(function VoiceAgentPanel({ canEdit, onDirtyChange }, ref) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [provisioning, setProvisioning] = useState(false);
   const [config, setConfig] = useState<VoiceConfig>(DEFAULT_CONFIG);
   const savedRef = useRef<VoiceConfig>(DEFAULT_CONFIG);
   const [dirty, setDirty] = useState(false);
-  // Provision form state
-  const [provisionForm, setProvisionForm] = useState({
-    service_type: "tree service",
-    appointment_type: "free estimate",
-    technician_title: "our arborist",
-  });
 
   useEffect(() => {
     fetch("/api/voice/config")
@@ -127,9 +139,12 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
   }, []);
 
   const checkDirty = useCallback(
-    (c: VoiceConfig) =>
-      setDirty(JSON.stringify(c) !== JSON.stringify(savedRef.current)),
-    []
+    (c: VoiceConfig) => {
+      const isDirty = JSON.stringify(c) !== JSON.stringify(savedRef.current);
+      setDirty(isDirty);
+      onDirtyChange?.();
+    },
+    [onDirtyChange]
   );
 
   function update<K extends keyof VoiceConfig>(key: K, value: VoiceConfig[K]) {
@@ -147,18 +162,13 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
     update("call_days", next);
   }
 
-  async function save() {
-    if (!dirty || saving) return;
-    setSaving(true);
+  /** Save voice config. Returns true on success. */
+  async function save(): Promise<boolean> {
+    if (!dirty) return true;
     try {
-      // Only send fields that exist in the schema — avoids sending DB-only
-      // fields (id, workspace_id, created_at, updated_at, voice_cloned) that
-      // could interfere with the upsert.
       const payload: Record<string, unknown> = {
         enabled: config.enabled,
         agent_name: config.agent_name,
-        agent_name_male: config.agent_name_male,
-        agent_name_female: config.agent_name_female,
         company_name: config.company_name,
         greeting_template: config.greeting_template,
         system_prompt: config.system_prompt,
@@ -188,8 +198,8 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
       });
       const json = await res.json();
       if (!res.ok) {
-        toast({ kind: "error", message: json.error ?? "Save failed" });
-        return;
+        toast({ kind: "error", message: json.error ?? "Voice config save failed" });
+        return false;
       }
       if (json.config) {
         const c = { ...DEFAULT_CONFIG, ...json.config } as VoiceConfig;
@@ -197,13 +207,18 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
         setConfig(c);
         setDirty(false);
       }
-      toast({ kind: "success", message: "Voice agent settings saved" });
+      return true;
     } catch (e) {
       toast({ kind: "error", message: (e as Error).message });
-    } finally {
-      setSaving(false);
+      return false;
     }
   }
+
+  // Expose dirty/save to parent so the unified SaveBar can include us
+  useImperativeHandle(ref, () => ({
+    isDirty: () => dirty,
+    save,
+  }));
 
   async function provision() {
     if (provisioning) return;
@@ -212,7 +227,7 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
       const res = await fetch("/api/voice/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(provisionForm),
+        body: JSON.stringify({}),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -220,7 +235,6 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
         return;
       }
       toast({ kind: "success", message: "AI assistant activated!" });
-      // Reload config to reflect new assistant ID
       const configRes = await fetch("/api/voice/config");
       const configJson = await configRes.json();
       if (configJson.config) {
@@ -249,21 +263,9 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="space-y-4">
-      {/* Master toggle */}
       <Panel
         title="AI Voice Agent"
         description="Automatically call, qualify, and schedule new leads using an AI voice assistant."
-        footer={
-          dirty && canEdit ? (
-            <button
-              onClick={save}
-              disabled={saving}
-              className="w-full h-10 rounded-lg bg-[var(--accent)] text-white text-sm font-medium disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save voice agent settings"}
-            </button>
-          ) : null
-        }
       >
         {/* Enable toggle */}
         <div className="flex items-center justify-between">
@@ -285,53 +287,21 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
           </button>
         </div>
 
-        {/* Setup wizard — shown when enabled but not yet provisioned */}
+        {/* Setup — shown when enabled but not yet provisioned */}
         {needsProvisioning && (
-          <div className="space-y-4 pt-3">
-            <div className="rounded-xl border border-green-200 bg-green-50/50 p-4 space-y-4">
+          <div className="pt-3">
+            <div className="rounded-xl border border-green-200 bg-green-50/50 p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Zap className="h-5 w-5 text-green-600" />
                 <h3 className="text-sm font-semibold text-green-900">
-                  Set up your AI assistant
+                  Activate AI assistant
                 </h3>
               </div>
               <p className="text-xs text-green-800">
-                Tell us about your business and we&apos;ll create a custom AI caller
-                that books appointments for you automatically.
+                Your AI caller will use your company info and working hours
+                to book appointments automatically. Make sure your company
+                name is set in Company Info above.
               </p>
-              <Field label="What service do you provide?">
-                <input
-                  className={inputCls}
-                  value={provisionForm.service_type}
-                  onChange={(e) =>
-                    setProvisionForm((p) => ({ ...p, service_type: e.target.value }))
-                  }
-                  placeholder="tree service, plumbing, HVAC, landscaping..."
-                  disabled={!canEdit}
-                />
-              </Field>
-              <Field label="What are you scheduling?">
-                <input
-                  className={inputCls}
-                  value={provisionForm.appointment_type}
-                  onChange={(e) =>
-                    setProvisionForm((p) => ({ ...p, appointment_type: e.target.value }))
-                  }
-                  placeholder="free estimate, consultation, inspection..."
-                  disabled={!canEdit}
-                />
-              </Field>
-              <Field label="Who comes out? (how should AI refer to them)">
-                <input
-                  className={inputCls}
-                  value={provisionForm.technician_title}
-                  onChange={(e) =>
-                    setProvisionForm((p) => ({ ...p, technician_title: e.target.value }))
-                  }
-                  placeholder="our arborist, a technician, our team..."
-                  disabled={!canEdit}
-                />
-              </Field>
               <button
                 onClick={provision}
                 disabled={provisioning || !canEdit}
@@ -350,92 +320,21 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
           </div>
         )}
 
+        {/* Main config — shown when provisioned */}
         {config.enabled && !needsProvisioning && (
           <div className="space-y-5 pt-2">
-            {/* Persona */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">
-                Persona
-              </h3>
-              <Field label="Agent name">
-                <input
-                  className={inputCls}
-                  value={config.agent_name}
-                  onChange={(e) => {
-                    update("agent_name", e.target.value || "AI Assistant");
-                    update("agent_name_male", e.target.value || null);
-                  }}
-                  placeholder="David Martin"
-                  disabled={!canEdit}
-                />
-              </Field>
-              {/* Company name comes from workspace Company Info settings */}
-              <Field label="Greeting script">
-                <textarea
-                  className={cn(textareaCls, "min-h-[80px]")}
-                  value={config.greeting_template ?? DEFAULT_GREETING}
-                  onChange={(e) =>
-                    update("greeting_template", e.target.value || null)
-                  }
-                  placeholder={DEFAULT_GREETING}
-                  disabled={!canEdit}
-                  rows={3}
-                />
-                <p className="text-xs text-[var(--muted)] mt-1">
-                  Variables: {"{{agent_name}}"}, {"{{company_name}}"},{" "}
-                  {"{{first_name}}"}, {"{{address}}"}
-                </p>
-              </Field>
-            </div>
-
-            {/* Auto-call triggers */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">
-                Auto-call triggers
-              </h3>
-              <Toggle
-                label="Call new leads automatically"
-                checked={config.auto_call_new_leads}
-                onChange={(v) => update("auto_call_new_leads", v)}
+            {/* Agent name */}
+            <Field label="Agent name">
+              <input
+                className={inputCls}
+                value={config.agent_name}
+                onChange={(e) =>
+                  update("agent_name", e.target.value || "AI Assistant")
+                }
+                placeholder="David Martin"
                 disabled={!canEdit}
               />
-              <Toggle
-                label="Retry leads who don't answer"
-                checked={config.auto_follow_up_no_answer}
-                onChange={(v) => update("auto_follow_up_no_answer", v)}
-                disabled={!canEdit}
-              />
-              <Toggle
-                label="Follow up on pending estimates"
-                checked={config.auto_follow_up_estimates}
-                onChange={(v) => update("auto_follow_up_estimates", v)}
-                disabled={!canEdit}
-              />
-              <Toggle
-                label="Re-engage dormant leads"
-                checked={config.auto_reengage_dormant}
-                onChange={(v) => update("auto_reengage_dormant", v)}
-                disabled={!canEdit}
-              />
-              {config.auto_reengage_dormant && (
-                <Field label="Days until considered dormant">
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={config.dormant_days_threshold}
-                    onChange={(e) =>
-                      update(
-                        "dormant_days_threshold",
-                        parseInt(e.target.value) || 14
-                      )
-                    }
-                    min={1}
-                    max={365}
-                    disabled={!canEdit}
-                  />
-                </Field>
-              )}
-            </div>
+            </Field>
 
             {/* Calling hours */}
             <div className="space-y-3">
@@ -459,7 +358,9 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
                     type="time"
                     className={inputCls}
                     value={config.call_window_end}
-                    onChange={(e) => update("call_window_end", e.target.value)}
+                    onChange={(e) =>
+                      update("call_window_end", e.target.value)
+                    }
                     disabled={!canEdit}
                   />
                 </Field>
@@ -483,76 +384,10 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
                   ))}
                 </div>
               </Field>
-              <Field label="Timezone">
-                <input
-                  className={inputCls}
-                  value={config.timezone}
-                  onChange={(e) => update("timezone", e.target.value)}
-                  placeholder="America/New_York"
-                  disabled={!canEdit}
-                />
-              </Field>
             </div>
 
-            {/* Call limits */}
+            {/* Transfer */}
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">
-                Call limits
-              </h3>
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Max attempts">
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={config.max_attempts}
-                    onChange={(e) =>
-                      update("max_attempts", parseInt(e.target.value) || 3)
-                    }
-                    min={1}
-                    max={10}
-                    disabled={!canEdit}
-                  />
-                </Field>
-                <Field label="Retry (min)">
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={config.retry_delay_mins}
-                    onChange={(e) =>
-                      update(
-                        "retry_delay_mins",
-                        parseInt(e.target.value) || 60
-                      )
-                    }
-                    min={5}
-                    max={1440}
-                    disabled={!canEdit}
-                  />
-                </Field>
-                <Field label="Concurrent">
-                  <input
-                    type="number"
-                    className={inputCls}
-                    value={config.concurrent_calls}
-                    onChange={(e) =>
-                      update(
-                        "concurrent_calls",
-                        parseInt(e.target.value) || 2
-                      )
-                    }
-                    min={1}
-                    max={10}
-                    disabled={!canEdit}
-                  />
-                </Field>
-              </div>
-            </div>
-
-            {/* Human transfer */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">
-                Human transfer
-              </h3>
               <Toggle
                 label="Allow transfer to human"
                 checked={config.transfer_enabled}
@@ -578,12 +413,121 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
               )}
             </div>
 
-            {/* Advanced — Vapi config */}
+            {/* Advanced — collapsed by default */}
             <details className="group">
               <summary className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide cursor-pointer select-none">
                 Advanced
               </summary>
-              <div className="space-y-3 pt-3">
+              <div className="space-y-4 pt-3">
+                <div className="space-y-3">
+                  <h4 className="text-xs font-medium text-[var(--muted)]">
+                    Call limits
+                  </h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Field label="Max attempts">
+                      <input
+                        type="number"
+                        className={inputCls}
+                        value={config.max_attempts}
+                        onChange={(e) =>
+                          update(
+                            "max_attempts",
+                            parseInt(e.target.value) || 3
+                          )
+                        }
+                        min={1}
+                        max={10}
+                        disabled={!canEdit}
+                      />
+                    </Field>
+                    <Field label="Retry (min)">
+                      <input
+                        type="number"
+                        className={inputCls}
+                        value={config.retry_delay_mins}
+                        onChange={(e) =>
+                          update(
+                            "retry_delay_mins",
+                            parseInt(e.target.value) || 60
+                          )
+                        }
+                        min={5}
+                        max={1440}
+                        disabled={!canEdit}
+                      />
+                    </Field>
+                    <Field label="Concurrent">
+                      <input
+                        type="number"
+                        className={inputCls}
+                        value={config.concurrent_calls}
+                        onChange={(e) =>
+                          update(
+                            "concurrent_calls",
+                            parseInt(e.target.value) || 2
+                          )
+                        }
+                        min={1}
+                        max={10}
+                        disabled={!canEdit}
+                      />
+                    </Field>
+                  </div>
+                </div>
+
+                <Field label="Timezone">
+                  <input
+                    className={inputCls}
+                    value={config.timezone}
+                    onChange={(e) => update("timezone", e.target.value)}
+                    placeholder="America/New_York"
+                    disabled={!canEdit}
+                  />
+                </Field>
+
+                <Toggle
+                  label="Call new leads automatically"
+                  checked={config.auto_call_new_leads}
+                  onChange={(v) => update("auto_call_new_leads", v)}
+                  disabled={!canEdit}
+                />
+                <Toggle
+                  label="Retry leads who don't answer"
+                  checked={config.auto_follow_up_no_answer}
+                  onChange={(v) => update("auto_follow_up_no_answer", v)}
+                  disabled={!canEdit}
+                />
+                <Toggle
+                  label="Follow up on pending estimates"
+                  checked={config.auto_follow_up_estimates}
+                  onChange={(v) => update("auto_follow_up_estimates", v)}
+                  disabled={!canEdit}
+                />
+                <Toggle
+                  label="Re-engage dormant leads"
+                  checked={config.auto_reengage_dormant}
+                  onChange={(v) => update("auto_reengage_dormant", v)}
+                  disabled={!canEdit}
+                />
+                {config.auto_reengage_dormant && (
+                  <Field label="Days until considered dormant">
+                    <input
+                      type="number"
+                      className={inputCls}
+                      value={config.dormant_days_threshold}
+                      onChange={(e) =>
+                        update(
+                          "dormant_days_threshold",
+                          parseInt(e.target.value) || 14
+                        )
+                      }
+                      min={1}
+                      max={365}
+                      disabled={!canEdit}
+                    />
+                  </Field>
+                )}
+
                 <Field label="Vapi Assistant ID">
                   <input
                     className={inputCls}
@@ -613,7 +557,7 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
       </Panel>
     </div>
   );
-}
+});
 
 function Toggle({
   label,

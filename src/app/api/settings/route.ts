@@ -50,11 +50,13 @@ const bodySchema = z
     company_name: z.string().trim().nullable().optional(),
     company_phone: z.string().trim().nullable().optional(),
     company_email: z.string().trim().nullable().optional(),
+    business_type: z.string().trim().max(100).nullable().optional(),
     // Salespeople is a small roster; cap it so one typo can't blow up the UI.
     salespeople: z
       .array(z.string().trim().min(1).max(80))
       .max(20)
       .optional(),
+    salesperson_titles: z.record(z.string().max(80)).optional(),
     default_salesperson: z.string().trim().max(80).nullable().optional(),
     sms_intro_template: z.string().nullable().optional(),
     sms_confirm_template: z.string().nullable().optional(),

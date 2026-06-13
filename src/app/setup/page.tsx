@@ -40,6 +40,7 @@ export default function SetupWizard() {
   const [companyName, setCompanyName] = useState("");
   const [companyPhone, setCompanyPhone] = useState("");
   const [companyEmail, setCompanyEmail] = useState("");
+  const [businessType, setBusinessType] = useState("");
 
   // Step 2: Starting location
   const [address, setAddress] = useState("");
@@ -49,6 +50,7 @@ export default function SetupWizard() {
 
   // Step 3: Salespeople
   const [salesperson, setSalesperson] = useState("");
+  const [salespersonTitle, setSalespersonTitle] = useState("");
 
   function canAdvance(): boolean {
     if (step === 1) return companyName.trim().length > 0;
@@ -74,6 +76,7 @@ export default function SetupWizard() {
           company_name: companyName.trim() || null,
           company_phone: companyPhone.trim() || null,
           company_email: companyEmail.trim() || null,
+          business_type: businessType.trim() || null,
           home_address: address.trim() || null,
           home_city: city.trim() || null,
           home_state: state.trim().toUpperCase() || null,
@@ -81,6 +84,9 @@ export default function SetupWizard() {
           salespeople: salesperson.trim()
             ? [salesperson.trim()]
             : [],
+          salesperson_titles: salesperson.trim() && salespersonTitle.trim()
+            ? { [salesperson.trim()]: salespersonTitle.trim() }
+            : {},
           default_salesperson: salesperson.trim() || null,
           setup_completed: true,
         }),
@@ -175,7 +181,7 @@ export default function SetupWizard() {
                   className={inputCls}
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Arbor Tech 904"
+                  placeholder="Your Company Name"
                   autoFocus
                 />
               </label>
@@ -205,6 +211,17 @@ export default function SetupWizard() {
                   />
                 </label>
               </div>
+              <label className="block">
+                <div className="text-xs font-medium text-[var(--muted)] mb-1">
+                  Business type
+                </div>
+                <input
+                  className={inputCls}
+                  value={businessType}
+                  onChange={(e) => setBusinessType(e.target.value)}
+                  placeholder="e.g. Plumbing, HVAC, Tree Care, Landscaping"
+                />
+              </label>
             </>
           )}
 
@@ -293,6 +310,17 @@ export default function SetupWizard() {
                   onChange={(e) => setSalesperson(e.target.value)}
                   placeholder="John Smith"
                   autoFocus
+                />
+              </label>
+              <label className="block">
+                <div className="text-xs font-medium text-[var(--muted)] mb-1">
+                  Title
+                </div>
+                <input
+                  className={inputCls}
+                  value={salespersonTitle}
+                  onChange={(e) => setSalespersonTitle(e.target.value)}
+                  placeholder="e.g. Sales Rep, Estimator, Account Manager"
                 />
               </label>
             </>

@@ -19,9 +19,11 @@ export const TEMPLATE_PLACEHOLDERS = [
   "day",
   "time",
   "salesPerson",
+  "salesPersonTitle",
   "companyName",
   "companyPhone",
   "companyEmail",
+  "businessType",
 ] as const;
 
 export type TemplatePlaceholder = (typeof TEMPLATE_PLACEHOLDERS)[number];
@@ -32,13 +34,13 @@ export type TemplateVars = Partial<Record<TemplatePlaceholder, string | null | u
 // Keep in sync with `/settings` placeholder hint text.
 export const DEFAULT_SMS_INTRO =
   "Hi {firstName}, this is {salesPerson} with {companyName}. I'm reaching " +
-  "out regarding your request for a free estimate/arborist assessment. " +
+  "out regarding your recent inquiry. " +
   "Feel free to call or text me to schedule a day and time that works " +
   "best for you. I look forward to helping you out!";
 
 export const DEFAULT_SMS_CONFIRM =
-  "Hi {firstName}, {salesPerson} with {companyName}. Confirming our " +
-  "arborist assessment on {day} at {time}. Reply here if anything " +
+  "Hi {firstName}, {salesPerson} with {companyName}. Confirming your " +
+  "appointment on {day} at {time}. Reply here if anything " +
   "changes — see you then!";
 
 export const DEFAULT_SMS_ENROUTE =
@@ -51,7 +53,7 @@ export const DEFAULT_EMAIL_SUBJECT =
 export const DEFAULT_EMAIL_BODY =
   "Hi {firstName},\n\n" +
   "Thanks for reaching out to {companyName}. I'd love to set up a time " +
-  "to swing by and take a look at the trees you have questions about. " +
+  "to come by and discuss how we can help. " +
   "Let me know a day and time that works for you and I'll confirm back.\n\n" +
   "— {salesPerson}\n" +
   "{companyPhone}";
