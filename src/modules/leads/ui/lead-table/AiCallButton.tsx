@@ -29,7 +29,12 @@ export function AiCallButton({
   const [expanded, setExpanded] = useState(false);
   const [localCallInfo, setLocalCallInfo] = useState<AiCallInfo | undefined>(callInfo);
 
-  const hasCalled = (localCallInfo?.ai_call_count ?? 0) > 0;
+  // Detect "has been called" using multiple signals — ai_call_count may
+  // be stale/zero for calls made before the increment fix (PR #215).
+  const hasCalled =
+    (localCallInfo?.ai_call_count ?? 0) > 0 ||
+    Boolean(localCallInfo?.ai_last_call_status) ||
+    Boolean(localCallInfo?.ai_notes);
 
   async function trigger() {
     if (loading) return;
