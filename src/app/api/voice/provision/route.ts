@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/modules/auth/server";
 import { getSettings } from "@/lib/settings";
-import { getVoiceConfig, upsertVoiceConfig } from "@/modules/voice/server";
 import {
+  getVoiceConfig,
+  upsertVoiceConfig,
   createVapiAssistant,
   listVapiPhoneNumbers,
   deleteVapiAssistant,
-} from "@/modules/voice/server/provision";
+} from "@/modules/voice/server";
 
 export const runtime = "nodejs";
 
