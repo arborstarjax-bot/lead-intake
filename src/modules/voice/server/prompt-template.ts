@@ -152,6 +152,14 @@ export function generateFirstMessage(_vars?: PromptTemplateVars): string {
 }
 
 /**
+ * Generate the voicemail message spoken when AMD detects an answering machine.
+ * This is a static TTS message — not AI-generated — so it's always consistent.
+ */
+export function generateVoicemailMessage(_vars?: PromptTemplateVars): string {
+  return `Hey {{first_name}}, this is {{agent_name}} with {{company_name}}. I was reaching out about your recent inquiry. Give me a call or text back at {{callback_number}} to set up a good time for us to come out. Thanks! Talk soon.`;
+}
+
+/**
  * Generate the tool definitions for the Vapi assistant.
  * These are the same for all tenants — they call back to the shared webhook.
  */

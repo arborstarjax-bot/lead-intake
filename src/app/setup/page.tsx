@@ -329,9 +329,9 @@ export default function SetupWizard() {
                   onChange={setAddress}
                   onSelect={(parts) => {
                     setAddress(parts.street);
-                    if (parts.city) setCity(parts.city);
-                    if (parts.state) setState(parts.state);
-                    if (parts.zip) setZip(parts.zip);
+                    setCity(parts.city);
+                    setState(parts.state);
+                    setZip(parts.zip);
                   }}
                   autoFocus
                 />

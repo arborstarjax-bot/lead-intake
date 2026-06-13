@@ -3,6 +3,7 @@ import "server-only";
 import {
   generateSystemPrompt,
   generateFirstMessage,
+  generateVoicemailMessage,
   generateToolDefinitions,
   type PromptTemplateVars,
 } from "./prompt-template";
@@ -58,6 +59,7 @@ export async function createVapiAssistant(
       language: "en-US",
     },
     firstMessage,
+    voicemailMessage: generateVoicemailMessage(params.templateVars),
     startSpeakingPlan: {
       waitSeconds: 1.8,
       smartEndpointingPlan: {

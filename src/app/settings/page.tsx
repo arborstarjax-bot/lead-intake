@@ -364,9 +364,9 @@ export default function SettingsPage() {
             onChange={(v) => update("home_address", v)}
             onSelect={(parts) => {
               update("home_address", parts.street);
-              if (parts.city) update("home_city", parts.city);
-              if (parts.state) update("home_state", parts.state);
-              if (parts.zip) update("home_zip", parts.zip);
+              update("home_city", parts.city);
+              update("home_state", parts.state);
+              update("home_zip", parts.zip);
             }}
           />
         </Field>

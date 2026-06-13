@@ -100,11 +100,13 @@ export function loadGoogleMaps(): Promise<GoogleMapsNamespace> {
     return window.__googleMapsLoader;
   }
 
-  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY;
+  const key =
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY ||
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   if (!key) {
     return Promise.reject(
       new Error(
-        "NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY is not set. Add it on Vercel and redeploy."
+        "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not set. Add it on Vercel and redeploy."
       )
     );
   }
