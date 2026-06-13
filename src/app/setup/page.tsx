@@ -88,6 +88,7 @@ export default function SetupWizard() {
 
   // Step 5: AI Calling
   const [enableAI, setEnableAI] = useState(false);
+  const [agentName, setAgentName] = useState("Dave");
   const [provisioning, setProvisioning] = useState(false);
   const [provisioned, setProvisioned] = useState(false);
 
@@ -115,11 +116,11 @@ export default function SetupWizard() {
     if (provisioning || provisioned) return;
     setProvisioning(true);
     try {
-      // First enable voice config
+      // First enable voice config with agent name
       await fetch("/api/voice/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: true }),
+        body: JSON.stringify({ enabled: true, agent_name: agentName.trim() || "Dave" }),
       });
       // Then provision
       const res = await fetch("/api/voice/provision", {
@@ -520,6 +521,22 @@ export default function SetupWizard() {
                     />
                   </button>
                 </div>
+                {enableAI && (
+                  <label className="block">
+                    <div className="text-xs font-medium text-[var(--muted)] mb-1">
+                      Agent name
+                    </div>
+                    <input
+                      className={inputCls}
+                      value={agentName}
+                      onChange={(e) => setAgentName(e.target.value)}
+                      placeholder="Dave"
+                    />
+                    <p className="text-xs text-[var(--muted)] mt-1">
+                      The name your AI will use when calling leads.
+                    </p>
+                  </label>
+                )}
                 {enableAI && !provisioned && (
                   <button
                     type="button"

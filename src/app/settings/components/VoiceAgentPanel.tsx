@@ -44,7 +44,7 @@ type VoiceConfig = {
 
 const DEFAULT_CONFIG: VoiceConfig = {
   enabled: false,
-  agent_name: "AI Assistant",
+  agent_name: "Dave",
   company_name: null,
   greeting_template: null,
   system_prompt: null,

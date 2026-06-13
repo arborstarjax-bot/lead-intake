@@ -38,7 +38,7 @@ export function defaultVoiceConfig(workspaceId: string): VoiceAgentConfig {
     id: "",
     workspace_id: workspaceId,
     enabled: false,
-    agent_name: "AI Assistant",
+    agent_name: "Dave",
     company_name: null,
     greeting_template: null,
     system_prompt: null,
