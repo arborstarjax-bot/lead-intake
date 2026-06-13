@@ -417,29 +417,6 @@ export const VoiceAgentPanel = forwardRef<
                     />
                   </Field>
                 )}
-
-                <Field label="Vapi Assistant ID">
-                  <input
-                    className={inputCls}
-                    value={config.vapi_assistant_id ?? ""}
-                    onChange={(e) =>
-                      update("vapi_assistant_id", e.target.value || null)
-                    }
-                    placeholder="Auto-provisioned"
-                    disabled={!canEdit}
-                  />
-                </Field>
-                <Field label="Vapi Phone Number ID">
-                  <input
-                    className={inputCls}
-                    value={config.vapi_phone_id ?? ""}
-                    onChange={(e) =>
-                      update("vapi_phone_id", e.target.value || null)
-                    }
-                    placeholder="Shared (optional)"
-                    disabled={!canEdit}
-                  />
-                </Field>
               </div>
             </details>
           </div>

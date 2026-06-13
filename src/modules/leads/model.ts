@@ -51,8 +51,6 @@ export const LEAD_SOURCES = [
   "Facebook",
   "Craigslist",
   "Instagram",
-  "Close AI",
-  "Certified Lead Kings",
   "Text Message",
   "Google Ads",
   "Website Form",
@@ -61,7 +59,6 @@ export const LEAD_SOURCES = [
   "Angi",
   "Email",
   "Referral",
-  "Tree Letter",
   "Direct Mail",
   "Other",
 ] as const;
