@@ -44,13 +44,22 @@ export function ActiveCallBar() {
   const nextPlayTimeRef = useRef(0);
   const stoppedRef = useRef(false);
   const formatDetectedRef = useRef<"pcm16_stereo" | "pcm16_mono" | "mulaw" | null>(null);
+  const callIdRef = useRef<string | null>(null);
 
   const fetchActive = useCallback(async () => {
     try {
       const res = await fetch("/api/voice/active");
       if (res.ok) {
         const json = await res.json();
-        setCall(json.active ?? null);
+        const active = json.active ?? null;
+        // Only update state if the call ID actually changed to avoid
+        // re-renders that would kill the WebSocket connection
+        setCall((prev) => {
+          if (prev?.id === active?.id && prev?.status === active?.status) {
+            return prev;
+          }
+          return active;
+        });
       }
     } catch {
       // Silently ignore
@@ -77,13 +86,20 @@ export function ActiveCallBar() {
     return () => clearInterval(interval);
   }, [call]);
 
-  // Clean up WebSocket + AudioContext when call ends or component unmounts
+  // Clean up WebSocket when the call ID changes or disappears
   useEffect(() => {
-    if (!call) {
+    const newId = call?.id ?? null;
+    if (callIdRef.current && callIdRef.current !== newId) {
+      // Call changed or ended — stop listening
       stopListening();
     }
-    return () => stopListening();
+    callIdRef.current = newId;
   }, [call]);
+
+  // Cleanup on unmount only
+  useEffect(() => {
+    return () => stopListening();
+  }, []);
 
   function stopListening() {
     stoppedRef.current = true;
