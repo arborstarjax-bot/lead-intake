@@ -253,6 +253,7 @@ async function checkAvailability(args: Record<string, unknown>) {
   // Process all days IN PARALLEL for much faster response
   type SlotResult = {
     date: string;
+    display_date: string;
     time: string;
     display_time: string;
     drive_minutes: number;
@@ -283,8 +284,10 @@ async function checkAvailability(args: Record<string, unknown>) {
         if (warnings.length && slots.length === 0) return [];
 
         const existing = sameDay?.length ?? 0;
+        const dayName = new Date(day + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
         return slots.map((slot) => ({
           date: day,
+          display_date: dayName,
           time: slot.startTime,
           display_time: formatClock(
             parseInt(slot.startTime.split(":")[0]) * 60 +
@@ -334,6 +337,7 @@ async function checkAvailability(args: Record<string, unknown>) {
 
           daySlots.push({
             date: day,
+            display_date: new Date(day + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
             time: timeStr,
             display_time: formatClock(m),
             drive_minutes: 0,
@@ -380,8 +384,9 @@ async function checkAvailability(args: Record<string, unknown>) {
     slots: best,
     appointment_window: `${windowStart}–${windowEnd}, ${workDayNames}`,
     instructions:
-      "Offer the highest route_score slot first. Say something like: " +
-      "'We will be in your area on [date] — would [time] work for you?' " +
+      "Offer the highest route_score slot first. Use the display_date field for the day name (e.g. 'Monday, June 15'). " +
+      "Say something like: 'We will be in your area on [display_date] — would [display_time] work for you?' " +
+      "IMPORTANT: Always use the display_date from the slot data. Do NOT compute day names yourself. " +
       `Our full appointment window is ${windowStart} to ${windowEnd}. ` +
       `HARD LIMIT: Do NOT agree to any time before ${windowStart} or after ${windowEnd}. ` +
       "If the customer asks for a time outside this window, politely say: " +
