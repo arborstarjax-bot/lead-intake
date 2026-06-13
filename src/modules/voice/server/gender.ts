@@ -105,13 +105,7 @@ export function selectVoiceForLead(
   voiceId: string;
   agentName: string;
 } {
-  const gender = guessGender(firstName);
-  if (gender === "male") {
-    // Male lead → female voice + female agent name
-    const femaleName = config?.agent_name_female || "Sarah";
-    return { provider: "vapi", voiceId: "Tara", agentName: femaleName };
-  }
-  // Female or unknown → male voice + male agent name
+  // Use male voice (Elliot) for all calls — voice overrides cause pipeline errors
   const maleName = config?.agent_name_male || config?.agent_name || "David";
   return { provider: "vapi", voiceId: "Elliot", agentName: maleName };
 }
