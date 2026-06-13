@@ -50,6 +50,8 @@ type SmsOption = {
   label: string;
   icon: typeof MessageSquare;
   body: string;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 export function SmsPickerModal({
@@ -65,9 +67,10 @@ export function SmsPickerModal({
     const intro = renderTemplate(smsIntroTemplate(settings), vars);
     const confirm = renderTemplate(smsConfirmTemplate(settings), vars);
     const enroute = renderTemplate(smsEnrouteTemplate(settings), vars);
+    const hasSchedule = !!(vars.day && vars.time);
     return [
       { key: "intro", label: "Introduction", icon: MessageSquare, body: intro },
-      { key: "confirm", label: "Scheduling Confirmation", icon: Send, body: confirm },
+      { key: "confirm", label: "Scheduling Confirmation", icon: Send, body: confirm, disabled: !hasSchedule, disabledReason: "No appointment scheduled" },
       { key: "enroute", label: "En Route", icon: Navigation, body: enroute },
       { key: "blank", label: "Blank Text", icon: FileText, body: "" },
     ];
@@ -100,6 +103,24 @@ export function SmsPickerModal({
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {options.map((opt) => {
             const Icon = opt.icon;
+            if (opt.disabled) {
+              return (
+                <div
+                  key={opt.key}
+                  className="block w-full rounded-xl border border-[var(--border)] p-3 text-left opacity-40 cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-100 text-gray-400 shrink-0">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <span className="font-medium text-sm">{opt.label}</span>
+                  </div>
+                  <p className="text-xs text-[var(--muted)] italic ml-10">
+                    {opt.disabledReason}
+                  </p>
+                </div>
+              );
+            }
             return (
               <a
                 key={opt.key}
