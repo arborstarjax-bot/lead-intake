@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Check calling window (skip for manual triggers)
-  if (!manual && !isWithinCallWindow(config)) {
+  if (!manual && !isWithinCallWindow(settings)) {
     return NextResponse.json(
       { error: "Outside calling hours", scheduled: true },
       { status: 200 }
@@ -180,43 +180,47 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function isWithinCallWindow(config: {
-  call_window_start: string;
-  call_window_end: string;
-  call_days: number[];
+function isWithinCallWindow(settings: {
+  work_start_time: string;
+  work_end_time: string;
+  work_days: number[];
   timezone: string;
 }): boolean {
   const now = new Date();
-  // Get current time in workspace timezone
+  const tz = settings.timezone;
   const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: config.timezone,
+    timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
   const dayFormatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: config.timezone,
+    timeZone: tz,
     weekday: "short",
   });
 
-  const timeStr = formatter.format(now); // "09:30" format
+  const timeStr = formatter.format(now);
   const dayStr = dayFormatter.format(now);
 
-  // Map day string to number (1=Mon..7=Sun)
+  // Match workspace work_days: 0=Sunday..6=Saturday
   const dayMap: Record<string, number> = {
+    Sun: 0,
     Mon: 1,
     Tue: 2,
     Wed: 3,
     Thu: 4,
     Fri: 5,
     Sat: 6,
-    Sun: 7,
   };
   const dayNum = dayMap[dayStr] ?? 0;
 
-  if (!config.call_days.includes(dayNum)) return false;
-  if (timeStr < config.call_window_start) return false;
-  if (timeStr >= config.call_window_end) return false;
+  // Strip seconds from DB time values (e.g. "09:00:00" → "09:00")
+  const start = settings.work_start_time.slice(0, 5);
+  const end = settings.work_end_time.slice(0, 5);
+
+  if (!settings.work_days.includes(dayNum)) return false;
+  if (timeStr < start) return false;
+  if (timeStr >= end) return false;
 
   return true;
 }

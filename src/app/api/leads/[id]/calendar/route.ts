@@ -11,6 +11,7 @@ import {
   updateCalendarEvent,
 } from "@/modules/calendar/server";
 import { requireMembership } from "@/modules/auth/server";
+import { getSettings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,9 @@ export async function POST(
     .eq("workspace_id", auth.workspaceId)
     .single();
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const settings = await getSettings(auth.workspaceId);
+  const tz = settings.timezone;
 
   if (!canSchedule(lead)) {
     return NextResponse.json(
@@ -85,7 +89,7 @@ export async function POST(
 
     if (lead.calendar_event_id) {
       // Row already has a real event id — straightforward update.
-      event = await updateCalendarEvent(token, lead.calendar_event_id, leadForEvent);
+      event = await updateCalendarEvent(token, lead.calendar_event_id, leadForEvent, tz);
     } else {
       // Claim creation rights atomically. `.is("calendar_event_id", null)`
       // gates the UPDATE on the row still being unclaimed; RETURNING id
@@ -120,7 +124,7 @@ export async function POST(
       }
 
       try {
-        event = await createCalendarEvent(token, leadForEvent);
+        event = await createCalendarEvent(token, leadForEvent, tz);
       } catch (e) {
         // Release the claim so a retry isn't permanently blocked by a
         // stale sentinel. Scope the release to rows that still hold our

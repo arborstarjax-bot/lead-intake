@@ -363,6 +363,7 @@ export async function POST(req: Request) {
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createAdminClient();
+  const settings = await getSettings(auth.workspaceId);
 
   // Load the leads we're about to update — enforces workspace membership
   // and confirms every id is (a) on this day and (b) still a flex lead.
@@ -489,8 +490,8 @@ export async function POST(req: Request) {
     try {
       const realEventId = realCalendarEventId(lead.calendar_event_id);
       const event = realEventId
-        ? await updateCalendarEvent(token, realEventId, leadNext)
-        : await createCalendarEvent(token, leadNext);
+        ? await updateCalendarEvent(token, realEventId, leadNext, settings.timezone)
+        : await createCalendarEvent(token, leadNext, settings.timezone);
       await supabase
         .from("leads")
         .update({

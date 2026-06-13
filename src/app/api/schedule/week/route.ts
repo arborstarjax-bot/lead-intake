@@ -147,9 +147,10 @@ export async function POST(req: Request) {
   // UTC server produces midnight UTC, which is yesterday in ET — that would
   // shift the entire 14-day horizon one day into the past. upcomingBusinessTzDays
   // anchors at noon UTC for each ET calendar day, which survives DST.
-  const days = upcomingBusinessTzDays(parsed.horizonDays);
-  const startIso = isoInBusinessTz(days[0]);
-  const endIso = isoInBusinessTz(days[days.length - 1]);
+  const tz = settings.timezone;
+  const days = upcomingBusinessTzDays(parsed.horizonDays, tz);
+  const startIso = isoInBusinessTz(days[0], tz);
+  const endIso = isoInBusinessTz(days[days.length - 1], tz);
 
   // Pull every same-horizon job in ONE query so we don't fan out to Supabase
   // per-day.
@@ -187,8 +188,8 @@ export async function POST(req: Request) {
     // duplicate calls for the same origin-dest pair (e.g. home→new lead).
     const results = await Promise.all(
       days.map(async (d): Promise<DayPreview> => {
-        const iso = isoInBusinessTz(d);
-        const dow = dayOfWeekInBusinessTz(d); // 0=Sunday .. 6=Saturday
+        const iso = isoInBusinessTz(d, tz);
+        const dow = dayOfWeekInBusinessTz(d, tz); // 0=Sunday .. 6=Saturday
         if (!workDays.has(dow)) {
           return { date: iso, isWorkDay: false };
         }

@@ -4,6 +4,7 @@ import { findDuplicates, isSaveable } from "@/modules/leads";
 import { displayName, normalizeState, normalizeZip } from "@/modules/shared/format";
 import { inferAddress, MapsUnavailableError } from "@/modules/routing/server";
 import { LEAD_SOURCES, type Lead, type LeadIntakeSource, type LeadSource } from "@/modules/leads/model";
+import { getSettings } from "@/lib/settings";
 
 type IngestArgs = {
   workspaceId: string;
@@ -117,10 +118,11 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
     !saveable || lowConf || duplicates.length > 0 ? "needs_review" : "ready";
 
   // en-CA locale yields "YYYY-MM-DD". Vercel runs in UTC, so compute today
-  // in the app's fixed timezone (America/New_York) — otherwise after ~8 PM ET
+  // in the workspace's timezone — otherwise after ~8 PM local
   // we'd stamp tomorrow's date on every upload.
+  const wsSettings = await getSettings(args.workspaceId);
   const today = new Date().toLocaleDateString("en-CA", {
-    timeZone: "America/New_York",
+    timeZone: wsSettings.timezone,
   });
   const { data: inserted, error: insertErr } = await admin
     .from("leads")

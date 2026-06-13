@@ -107,9 +107,9 @@ export function addDaysIso(iso: string, n: number): string {
   )}-${String(base.getUTCDate()).padStart(2, "0")}`;
 }
 
-/** Today in America/New_York, YYYY-MM-DD. Matches the server-side helper. */
-export function todayEtIso(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+/** Today in the given timezone, YYYY-MM-DD. Matches the server-side helper. */
+export function todayEtIso(tz = "America/New_York"): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: tz });
 }
 
 export function formatClock(t: string): string {

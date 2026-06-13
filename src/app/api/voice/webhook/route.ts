@@ -212,7 +212,8 @@ async function checkAvailability(args: Record<string, unknown>) {
         : "all";
 
   // Determine which days to check (default 3 for speed — AI only needs 1-2 good slots)
-  const todayIso = todayIsoInBusinessTz();
+  const tz = settings.timezone;
+  const todayIso = todayIsoInBusinessTz(tz);
   const daysToCheck = days_ahead ?? 3;
   const daysList: string[] = [];
 
@@ -220,7 +221,7 @@ async function checkAvailability(args: Record<string, unknown>) {
     // Customer asked for a specific date — validate it's a work day
     if (preferred_date >= todayIso) {
       const pd = dateAtBusinessTzDay(preferred_date);
-      const pdow = dayOfWeekInBusinessTz(pd);
+      const pdow = dayOfWeekInBusinessTz(pd, tz);
       if (settings.work_days.includes(pdow)) {
         daysList.push(preferred_date);
       } else {
@@ -234,9 +235,9 @@ async function checkAvailability(args: Record<string, unknown>) {
     // Find the next N work days
     let offset = 1; // start from tomorrow
     while (daysList.length < daysToCheck && offset <= 14) {
-      const candidate = addDaysToBusinessTzIso(todayIso, offset);
+      const candidate = addDaysToBusinessTzIso(todayIso, offset, tz);
       const d = dateAtBusinessTzDay(candidate);
-      const dow = dayOfWeekInBusinessTz(d);
+      const dow = dayOfWeekInBusinessTz(d, tz);
       if (settings.work_days.includes(dow)) {
         daysList.push(candidate);
       }
@@ -465,7 +466,7 @@ async function bookAppointment(args: Record<string, unknown>) {
 
   // Validate the day is a work day
   const d = dateAtBusinessTzDay(date);
-  const dow = dayOfWeekInBusinessTz(d);
+  const dow = dayOfWeekInBusinessTz(d, settings.timezone);
   if (!settings.work_days.includes(dow)) {
     return {
       error: `${date} is not a work day. Work days are: ${settings.work_days.map((n: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n]).join(", ")}. Please offer a different day.`,

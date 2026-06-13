@@ -17,6 +17,7 @@ export type ClientAppSettings = {
   work_start_time: string;
   work_end_time: string;
   work_days: number[];
+  timezone: string;
   default_job_minutes: number;
   travel_buffer_minutes: number;
   min_time_between_appointments: number;
@@ -50,6 +51,7 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
   work_start_time: "08:00",
   work_end_time: "17:00",
   work_days: [1, 2, 3, 4, 5, 6],
+  timezone: "America/New_York",
   default_job_minutes: 60,
   travel_buffer_minutes: 15,
   min_time_between_appointments: 60,
