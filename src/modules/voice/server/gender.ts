@@ -109,7 +109,7 @@ export function selectVoiceForLead(
   if (gender === "male") {
     // Male lead → female voice + female agent name
     const femaleName = config?.agent_name_female || "Sarah";
-    return { provider: "vapi", voiceId: "Clara", agentName: femaleName };
+    return { provider: "vapi", voiceId: "Savannah", agentName: femaleName };
   }
   // Female or unknown → male voice + male agent name
   const maleName = config?.agent_name_male || config?.agent_name || "David";
