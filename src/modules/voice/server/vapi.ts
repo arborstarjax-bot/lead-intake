@@ -16,6 +16,7 @@ export type VapiCreateCallParams = {
     variableValues?: Record<string, string>;
     voice?: { provider: string; voiceId: string; language?: string };
     firstMessage?: string;
+    voicemailMessage?: string;
     model?: {
       provider: string;
       model: string;

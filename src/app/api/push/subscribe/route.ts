@@ -97,16 +97,15 @@ export async function DELETE(req: NextRequest) {
   const admin = createAdminClient();
   const obj = body as Record<string, unknown>;
 
-  // Web clients delete by endpoint (existing behavior); native clients
-  // delete by device_token. user_id scope prevents one device from
-  // tearing down another user's subscription.
+  // Web clients delete by endpoint + user_id; native clients delete
+  // by device_token + user_id. Scoping by user_id prevents one user
+  // from tearing down another user's subscription.
   if (typeof obj.endpoint === "string") {
-    // Delete by endpoint only — the subscription may have been created
-    // under a previous account on this device.
     await admin
       .from("push_subscriptions")
       .delete()
-      .eq("endpoint", obj.endpoint);
+      .eq("endpoint", obj.endpoint)
+      .eq("user_id", auth.userId);
     return NextResponse.json({ ok: true });
   }
   if (typeof obj.device_token === "string") {

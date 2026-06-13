@@ -10,6 +10,7 @@ import {
   selectVoiceForLead,
   generateSystemPrompt,
   generateFirstMessage,
+  generateVoicemailMessage,
 } from "@/modules/voice/server";
 
 export const runtime = "nodejs";
@@ -140,6 +141,7 @@ export async function POST(req: NextRequest) {
     const promptVars = { businessType: settings.business_type ?? undefined };
     const systemPrompt = generateSystemPrompt(promptVars);
     const firstMessage = generateFirstMessage(promptVars);
+    const voicemailMessage = generateVoicemailMessage(promptVars);
 
     const vapiResponse = await createOutboundCall({
       assistantId: config.vapi_assistant_id,
@@ -148,6 +150,7 @@ export async function POST(req: NextRequest) {
       assistantOverrides: {
         voice: { provider: voiceSelection.provider, voiceId: voiceSelection.voiceId },
         firstMessage,
+        voicemailMessage,
         model: {
           provider: "anthropic",
           model: "claude-haiku-4-5-20251001",
