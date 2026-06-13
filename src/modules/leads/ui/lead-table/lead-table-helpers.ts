@@ -29,8 +29,8 @@ export function templateVars(lead: Lead, settings: ClientAppSettings): TemplateV
     companyName: (settings.company_name ?? "").trim(),
     companyPhone: (settings.company_phone ?? "").trim(),
     companyEmail: (settings.company_email ?? "").trim(),
-    day: lead.scheduled_day ?? "",
-    time: lead.scheduled_time ?? "",
+    day: formatDayHuman(lead.scheduled_day),
+    time: formatTimeHuman(lead.scheduled_time),
   };
 }
 
@@ -116,6 +116,25 @@ export function formatScheduleDisplay(
     return `${dayStr} · Flex ${labels[flexWindow] ?? flexWindow}`;
   }
   return dayStr;
+}
+
+/** "2026-06-17" → "Wed, Jun 17" (or "Wed, Jun 17, 2028" for other years). */
+function formatDayHuman(day: string | null | undefined): string {
+  if (!day) return "";
+  const d = new Date(day + "T12:00:00");
+  if (isNaN(d.getTime())) return day;
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  });
+}
+
+/** "14:00:00" → "2:00 PM". */
+function formatTimeHuman(time: string | null | undefined): string {
+  if (!time) return "";
+  return formatTime12(time);
 }
 
 function formatTime12(hhmm: string): string {
