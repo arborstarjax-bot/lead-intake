@@ -150,7 +150,7 @@ export function SignupForm({
               required
               maxLength={80}
               className="w-full rounded-lg border border-[var(--border)] bg-white px-3 h-11 text-sm"
-              placeholder="e.g. Arbor Tech 904"
+              placeholder="e.g. LeadFlow2026"
             />
           </label>
         ) : (
