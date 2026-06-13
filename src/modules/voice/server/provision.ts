@@ -40,8 +40,12 @@ export async function createVapiAssistant(
   const firstMessage = generateFirstMessage(params.templateVars);
   const tools = generateToolDefinitions(params.webhookUrl);
 
+  // Status webhook URL — receives status-update + end-of-call-report events
+  const statusUrl = params.webhookUrl.replace(/\/webhook$/, "/status");
+
   const body = {
     name: params.assistantName,
+    serverUrl: statusUrl,
     model: {
       provider: "anthropic",
       model: "claude-haiku-4-5-20251001",

@@ -55,12 +55,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Determine webhook URL from the request origin
-  const origin = req.headers.get("origin") || req.headers.get("referer");
-  const baseUrl = origin
-    ? new URL(origin).origin
-    : `https://${req.headers.get("host")}`;
-  const webhookUrl = `${baseUrl}/api/voice/webhook`;
+  // Use the canonical app URL so the webhook always points to production,
+  // not a Vercel preview deployment the user might be browsing from.
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    `https://${req.headers.get("host")}`;
+  const webhookUrl = `${appUrl}/api/voice/webhook`;
 
   // Create the Vapi assistant
   let result;
