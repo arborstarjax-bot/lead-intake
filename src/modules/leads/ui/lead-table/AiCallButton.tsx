@@ -21,10 +21,13 @@ export function AiCallButton({
   leadId,
   callInfo,
   onCallTriggered,
+  compact,
 }: {
   leadId: string;
   callInfo?: AiCallInfo;
   onCallTriggered?: () => void;
+  /** Render as a row-friendly action button (no notes/status below). */
+  compact?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<"idle" | "success" | "error">("idle");
@@ -72,6 +75,40 @@ export function AiCallButton({
 
   const statusLabel = getStatusLabel(localCallInfo?.ai_last_call_status);
 
+  // ── Compact mode: single inline button for the quick-action row ──
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={trigger}
+        disabled={loading}
+        title={hasCalled ? "Call again with AI voice agent" : "AI Call — voice agent calls this lead now"}
+        className={cn(
+          "inline-flex items-center justify-center gap-1.5 w-full h-11 rounded-xl text-[13px] font-semibold transition active:scale-[0.97]",
+          result === "success"
+            ? "bg-green-100 text-green-700"
+            : result === "error"
+            ? "bg-red-100 text-red-700"
+            : hasCalled
+            ? "bg-purple-800 text-white hover:bg-purple-900"
+            : "bg-[#111] text-white hover:bg-[#222]"
+        )}
+      >
+        {hasCalled ? <Phone className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+        {loading
+          ? "Calling…"
+          : result === "success"
+          ? "Call placed"
+          : result === "error"
+          ? "Failed"
+          : hasCalled
+          ? `Called${(localCallInfo?.ai_call_count ?? 0) > 1 ? ` ${localCallInfo!.ai_call_count}×` : ""}`
+          : "AI Call"}
+      </button>
+    );
+  }
+
+  // ── Standard mode: full button with status + notes below ──
   return (
     <div className="flex flex-col gap-0.5">
       {/* Button row */}
