@@ -48,8 +48,8 @@ export async function createVapiAssistant(
     name: params.assistantName,
     serverUrl: statusUrl,
     model: {
-      provider: "anthropic",
-      model: "claude-haiku-4-5-20251001",
+      provider: "openai",
+      model: "gpt-4o",
       messages: [{ role: "system", content: systemPrompt }],
       tools,
     },
