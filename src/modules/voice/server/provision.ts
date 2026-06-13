@@ -78,12 +78,6 @@ export async function createVapiAssistant(
     },
     voicemailDetection: {
       provider: "vapi",
-      enabled: true,
-      voicemailDetectionTypes: [
-        "machine_end_beep",
-        "machine_end_silence",
-        "machine_end_other",
-      ],
       backoffPlan: {
         startAtSeconds: 3,
         frequencySeconds: 3,
