@@ -3,3 +3,4 @@ export { insertCall, updateCall, getCallByVapiId, getCallsForLead, getActiveCall
 export { createOutboundCall, getVapiCall, type VapiCreateCallParams } from "./vapi";
 export { guessGender, selectVoiceForLead, type GenderGuess } from "./gender";
 export { createVapiAssistant, listVapiPhoneNumbers, deleteVapiAssistant, type ProvisionParams, type ProvisionResult } from "./provision";
+export { generateSystemPrompt, generateFirstMessage } from "./prompt-template";
