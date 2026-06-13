@@ -151,12 +151,35 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
     if (!dirty || saving) return;
     setSaving(true);
     try {
-      // Normalize time fields before sending — iOS <input type="time">
-      // may return 12h AM/PM format depending on locale
-      const payload = {
-        ...config,
+      // Only send fields that exist in the schema — avoids sending DB-only
+      // fields (id, workspace_id, created_at, updated_at, voice_cloned) that
+      // could interfere with the upsert.
+      const payload: Record<string, unknown> = {
+        enabled: config.enabled,
+        agent_name: config.agent_name,
+        agent_name_male: config.agent_name_male,
+        agent_name_female: config.agent_name_female,
+        company_name: config.company_name,
+        greeting_template: config.greeting_template,
+        system_prompt: config.system_prompt,
+        vapi_assistant_id: config.vapi_assistant_id,
+        vapi_phone_id: config.vapi_phone_id,
+        voice_provider: config.voice_provider,
+        voice_id: config.voice_id,
         call_window_start: normalizeTime(config.call_window_start),
         call_window_end: normalizeTime(config.call_window_end),
+        call_days: config.call_days,
+        timezone: config.timezone,
+        max_attempts: config.max_attempts,
+        retry_delay_mins: config.retry_delay_mins,
+        concurrent_calls: config.concurrent_calls,
+        auto_call_new_leads: config.auto_call_new_leads,
+        auto_follow_up_no_answer: config.auto_follow_up_no_answer,
+        auto_follow_up_estimates: config.auto_follow_up_estimates,
+        auto_reengage_dormant: config.auto_reengage_dormant,
+        dormant_days_threshold: config.dormant_days_threshold,
+        transfer_phone_number: config.transfer_phone_number,
+        transfer_enabled: config.transfer_enabled,
       };
       const res = await fetch("/api/voice/config", {
         method: "PUT",
@@ -334,30 +357,18 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
               <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">
                 Persona
               </h3>
-              <Field label="Male agent name (used when calling female leads)">
+              <Field label="Agent name">
                 <input
                   className={inputCls}
-                  value={config.agent_name_male ?? config.agent_name}
+                  value={config.agent_name}
                   onChange={(e) => {
-                    update("agent_name_male", e.target.value || null);
                     update("agent_name", e.target.value || "AI Assistant");
+                    update("agent_name_male", e.target.value || null);
                   }}
                   placeholder="David Martin"
                   disabled={!canEdit}
                 />
               </Field>
-              <Field label="Female agent name (used when calling male leads)">
-                <input
-                  className={inputCls}
-                  value={config.agent_name_female ?? ""}
-                  onChange={(e) => update("agent_name_female", e.target.value || null)}
-                  placeholder="Sarah"
-                  disabled={!canEdit}
-                />
-              </Field>
-              <p className="text-xs text-[var(--muted)]">
-                The AI uses the opposite gender voice/name to the lead. Male leads hear the female agent, female leads hear the male agent.
-              </p>
               {/* Company name comes from workspace Company Info settings */}
               <Field label="Greeting script">
                 <textarea
@@ -570,7 +581,7 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
             {/* Advanced — Vapi config */}
             <details className="group">
               <summary className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide cursor-pointer select-none">
-                Advanced (Vapi)
+                Advanced
               </summary>
               <div className="space-y-3 pt-3">
                 <Field label="Vapi Assistant ID">
@@ -580,7 +591,7 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
                     onChange={(e) =>
                       update("vapi_assistant_id", e.target.value || null)
                     }
-                    placeholder="asst_..."
+                    placeholder="Auto-provisioned"
                     disabled={!canEdit}
                   />
                 </Field>
@@ -591,18 +602,7 @@ export function VoiceAgentPanel({ canEdit }: { canEdit: boolean }) {
                     onChange={(e) =>
                       update("vapi_phone_id", e.target.value || null)
                     }
-                    placeholder="phn_..."
-                    disabled={!canEdit}
-                  />
-                </Field>
-                <Field label="ElevenLabs Voice ID">
-                  <input
-                    className={inputCls}
-                    value={config.voice_id ?? ""}
-                    onChange={(e) =>
-                      update("voice_id", e.target.value || null)
-                    }
-                    placeholder="Leave blank for default"
+                    placeholder="Shared (optional)"
                     disabled={!canEdit}
                   />
                 </Field>

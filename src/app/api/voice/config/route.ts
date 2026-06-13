@@ -43,7 +43,7 @@ const patchSchema = z
     system_prompt: z.string().nullable().optional(),
     vapi_assistant_id: z.string().trim().nullable().optional(),
     vapi_phone_id: z.string().trim().nullable().optional(),
-    voice_provider: z.enum(["elevenlabs", "deepgram", "playht"]).optional(),
+    voice_provider: z.enum(["elevenlabs", "deepgram", "playht", "vapi"]).optional(),
     voice_id: z.string().trim().nullable().optional(),
     call_window_start: timeSchema.optional(),
     call_window_end: timeSchema.optional(),
