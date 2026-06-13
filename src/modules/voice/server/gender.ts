@@ -89,7 +89,7 @@ export function guessGender(firstName: string | null | undefined): GenderGuess {
 /**
  * Select voice based on lead's detected gender.
  * Strategy: opposite gender voice for more natural conversation.
- * - Male lead → Female voice (Savannah)
+ * - Male lead → Female voice (Tara)
  * - Female lead → Male voice (Elliot)
  * - Unknown → Default male voice (Elliot)
  */
