@@ -109,7 +109,9 @@ export function SignupForm({
               setNotice(res.notice);
               return;
             }
-            router.replace("/");
+            // "create" → brand-new workspace, send straight to setup wizard.
+            // "join" → existing workspace (already set up), go to home.
+            router.replace(mode === "create" ? "/setup" : "/");
             router.refresh();
           });
         }}
