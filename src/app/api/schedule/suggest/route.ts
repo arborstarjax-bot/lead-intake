@@ -78,7 +78,7 @@ export async function POST(req: Request) {
   // Refuse to schedule into the past. Compare as calendar days in the
   // business timezone — using UTC would block booking between ~8 PM and
   // midnight ET because the server clock is already "tomorrow".
-  const todayIso = todayIsoInBusinessTz();
+  const todayIso = todayIsoInBusinessTz(settings.timezone);
   if (targetDay < todayIso) {
     return NextResponse.json(
       { error: "That day is in the past — pick a future date." },

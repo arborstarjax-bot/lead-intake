@@ -30,10 +30,6 @@ type VoiceConfig = {
   vapi_phone_id: string | null;
   voice_provider: string;
   voice_id: string | null;
-  call_window_start: string;
-  call_window_end: string;
-  call_days: number[];
-  timezone: string;
   max_attempts: number;
   retry_delay_mins: number;
   concurrent_calls: number;
@@ -46,16 +42,6 @@ type VoiceConfig = {
   transfer_enabled: boolean;
 };
 
-const CALL_DAYS = [
-  { value: 1, label: "M" },
-  { value: 2, label: "T" },
-  { value: 3, label: "W" },
-  { value: 4, label: "T" },
-  { value: 5, label: "F" },
-  { value: 6, label: "S" },
-  { value: 7, label: "S" },
-];
-
 const DEFAULT_CONFIG: VoiceConfig = {
   enabled: false,
   agent_name: "AI Assistant",
@@ -66,10 +52,6 @@ const DEFAULT_CONFIG: VoiceConfig = {
   vapi_phone_id: null,
   voice_provider: "elevenlabs",
   voice_id: null,
-  call_window_start: "09:00",
-  call_window_end: "17:00",
-  call_days: [1, 2, 3, 4, 5],
-  timezone: "America/New_York",
   max_attempts: 3,
   retry_delay_mins: 60,
   concurrent_calls: 2,
@@ -82,27 +64,6 @@ const DEFAULT_CONFIG: VoiceConfig = {
   transfer_enabled: true,
 };
 
-/** Normalize any time string (AM/PM, narrow-space, etc.) to HH:MM 24h. */
-function normalizeTime(val: string): string {
-  const cleaned = val
-    .replace(/[^\x20-\x7E]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const ampm = cleaned.match(
-    /^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)$/i
-  );
-  if (ampm) {
-    let h = parseInt(ampm[1]);
-    const m = ampm[2];
-    const period = ampm[3].toUpperCase().replace(/\./g, "");
-    if (period === "PM" && h < 12) h += 12;
-    if (period === "AM" && h === 12) h = 0;
-    return `${h.toString().padStart(2, "0")}:${m}`;
-  }
-  const simple = cleaned.match(/^(\d{1,2}):(\d{2})$/);
-  if (simple) return `${simple[1].padStart(2, "0")}:${simple[2]}`;
-  return cleaned;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Imperative handle so parent can query dirty + trigger save         */
@@ -155,13 +116,6 @@ export const VoiceAgentPanel = forwardRef<
     });
   }
 
-  function toggleDay(d: number) {
-    const next = config.call_days.includes(d)
-      ? config.call_days.filter((x) => x !== d)
-      : [...config.call_days, d].sort((a, b) => a - b);
-    update("call_days", next);
-  }
-
   /** Save voice config. Returns true on success. */
   async function save(): Promise<boolean> {
     if (!dirty) return true;
@@ -176,10 +130,6 @@ export const VoiceAgentPanel = forwardRef<
         vapi_phone_id: config.vapi_phone_id,
         voice_provider: config.voice_provider,
         voice_id: config.voice_id,
-        call_window_start: normalizeTime(config.call_window_start),
-        call_window_end: normalizeTime(config.call_window_end),
-        call_days: config.call_days,
-        timezone: config.timezone,
         max_attempts: config.max_attempts,
         retry_delay_mins: config.retry_delay_mins,
         concurrent_calls: config.concurrent_calls,
@@ -336,56 +286,6 @@ export const VoiceAgentPanel = forwardRef<
               />
             </Field>
 
-            {/* Calling hours */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">
-                Calling hours
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Start">
-                  <input
-                    type="time"
-                    className={inputCls}
-                    value={config.call_window_start}
-                    onChange={(e) =>
-                      update("call_window_start", e.target.value)
-                    }
-                    disabled={!canEdit}
-                  />
-                </Field>
-                <Field label="End">
-                  <input
-                    type="time"
-                    className={inputCls}
-                    value={config.call_window_end}
-                    onChange={(e) =>
-                      update("call_window_end", e.target.value)
-                    }
-                    disabled={!canEdit}
-                  />
-                </Field>
-              </div>
-              <Field label="Call days">
-                <div className="flex gap-1.5">
-                  {CALL_DAYS.map((d) => (
-                    <button
-                      key={d.value}
-                      onClick={() => toggleDay(d.value)}
-                      disabled={!canEdit}
-                      className={cn(
-                        "w-9 h-9 rounded-lg text-xs font-medium transition-colors",
-                        config.call_days.includes(d.value)
-                          ? "bg-[var(--accent)] text-white"
-                          : "bg-gray-100 text-gray-500"
-                      )}
-                    >
-                      {d.label}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-            </div>
-
             {/* Transfer */}
             <div className="space-y-3">
               <Toggle
@@ -474,16 +374,6 @@ export const VoiceAgentPanel = forwardRef<
                     </Field>
                   </div>
                 </div>
-
-                <Field label="Timezone">
-                  <input
-                    className={inputCls}
-                    value={config.timezone}
-                    onChange={(e) => update("timezone", e.target.value)}
-                    placeholder="America/New_York"
-                    disabled={!canEdit}
-                  />
-                </Field>
 
                 <Toggle
                   label="Call new leads automatically"

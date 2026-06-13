@@ -200,10 +200,11 @@ export async function getUploadsInLastDay(
 ): Promise<number> {
   const admin = createAdminClient();
   try {
-    // Bucket by America/New_York so "50/day" resets at local midnight,
-    // matching the reserve_ingest_quota RPC.
+    // Bucket by the workspace's timezone so "50/day" resets at local
+    // midnight, matching the reserve_ingest_quota RPC.
+    const wsSettings = await (await import("@/lib/settings")).getSettings(workspaceId);
     const fmt = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/New_York",
+      timeZone: wsSettings.timezone,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",

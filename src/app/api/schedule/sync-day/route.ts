@@ -11,6 +11,7 @@ import {
   updateCalendarEvent,
 } from "@/modules/calendar/server";
 import type { Lead } from "@/modules/leads/model";
+import { getSettings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +61,7 @@ export async function POST(req: Request) {
   }
 
   const supabase = createAdminClient();
+  const settings = await getSettings(auth.workspaceId);
   const { data, error } = await supabase
     .from("leads")
     .select("*")
@@ -117,8 +119,8 @@ export async function POST(req: Request) {
 
     try {
       const event = realEventId
-        ? await updateCalendarEvent(token, realEventId, leadForEvent)
-        : await createCalendarEvent(token, leadForEvent);
+        ? await updateCalendarEvent(token, realEventId, leadForEvent, settings.timezone)
+        : await createCalendarEvent(token, leadForEvent, settings.timezone);
       await supabase
         .from("leads")
         .update({

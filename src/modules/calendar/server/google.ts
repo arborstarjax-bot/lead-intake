@@ -35,7 +35,8 @@ function buildLocation(lead: Lead): string | undefined {
 
 function buildStartEnd(
   day: string,
-  time: string | null
+  time: string | null,
+  tz = "America/New_York"
 ): { start: { dateTime: string; timeZone: string }; end: { dateTime: string; timeZone: string } } | null {
   // `day` is ISO YYYY-MM-DD. `time` may come back from Postgres `time` column
   // as "HH:MM" or "HH:MM:SS"; accept both and fall back to 09:00 if absent.
@@ -47,8 +48,8 @@ function buildStartEnd(
   const endH = String((Number(hh) + 1) % 24).padStart(2, "0");
   const end = `${day}T${endH}:${mm}:00`;
   return {
-    start: { dateTime: start, timeZone: "America/New_York" },
-    end: { dateTime: end, timeZone: "America/New_York" },
+    start: { dateTime: start, timeZone: tz },
+    end: { dateTime: end, timeZone: tz },
   };
 }
 
@@ -77,12 +78,13 @@ export function realCalendarEventId(id: string | null | undefined): string | nul
 
 export async function createCalendarEvent(
   accessToken: string,
-  lead: Lead
+  lead: Lead,
+  tz = "America/New_York"
 ): Promise<GoogleEvent> {
   if (!canSchedule(lead)) {
     throw new Error("Lead has no valid scheduled_day (YYYY-MM-DD).");
   }
-  const times = buildStartEnd(lead.scheduled_day!, lead.scheduled_time);
+  const times = buildStartEnd(lead.scheduled_day!, lead.scheduled_time, tz);
   if (!times) throw new Error("Invalid scheduled_day.");
 
   const body = {
@@ -143,12 +145,13 @@ export async function deleteCalendarEvent(
 export async function updateCalendarEvent(
   accessToken: string,
   eventId: string,
-  lead: Lead
+  lead: Lead,
+  tz = "America/New_York"
 ): Promise<GoogleEvent> {
   if (!canSchedule(lead)) {
     throw new Error("Lead has no valid scheduled_day (YYYY-MM-DD).");
   }
-  const times = buildStartEnd(lead.scheduled_day!, lead.scheduled_time);
+  const times = buildStartEnd(lead.scheduled_day!, lead.scheduled_time, tz);
   if (!times) throw new Error("Invalid scheduled_day.");
 
   const body = {

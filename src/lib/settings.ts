@@ -8,11 +8,13 @@ export type AppSettings = {
   home_city: string | null;
   home_state: string | null;
   home_zip: string | null;
-  /** "HH:MM" in local time (America/New_York). */
+  /** "HH:MM" in local time. */
   work_start_time: string;
   work_end_time: string;
   /** 0-6 where 0 = Sunday. */
   work_days: number[];
+  /** IANA timezone identifier e.g. "America/New_York". */
+  timezone: string;
   default_job_minutes: number;
   travel_buffer_minutes: number;
   min_time_between_appointments: number;
@@ -50,6 +52,7 @@ export type AppSettingsPatch = Partial<
     | "work_start_time"
     | "work_end_time"
     | "work_days"
+    | "timezone"
     | "default_job_minutes"
     | "travel_buffer_minutes"
     | "min_time_between_appointments"
@@ -82,6 +85,7 @@ export function defaultSettings(workspaceId: string): AppSettings {
     work_start_time: "08:00",
     work_end_time: "17:00",
     work_days: [1, 2, 3, 4, 5, 6],
+    timezone: "America/New_York",
     default_job_minutes: 60,
     travel_buffer_minutes: 15,
     min_time_between_appointments: 60,

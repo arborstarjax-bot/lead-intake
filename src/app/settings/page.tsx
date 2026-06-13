@@ -423,6 +423,28 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+
+        <Field label="Timezone">
+          <select
+            className={inputCls}
+            value={s.timezone}
+            onChange={(e) => update("timezone", e.target.value)}
+          >
+            {[
+              "America/New_York",
+              "America/Chicago",
+              "America/Denver",
+              "America/Los_Angeles",
+              "America/Phoenix",
+              "America/Anchorage",
+              "Pacific/Honolulu",
+            ].map((tz) => (
+              <option key={tz} value={tz}>
+                {tz.replace(/_/g, " ").replace("America/", "")}
+              </option>
+            ))}
+          </select>
+        </Field>
       </Panel>
 
       {/* Job timing */}

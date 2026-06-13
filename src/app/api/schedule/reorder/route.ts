@@ -267,8 +267,8 @@ export async function POST(req: Request) {
 
     try {
       const event = realEventId
-        ? await updateCalendarEvent(token, realEventId, leadNext)
-        : await createCalendarEvent(token, leadNext);
+        ? await updateCalendarEvent(token, realEventId, leadNext, settings.timezone)
+        : await createCalendarEvent(token, leadNext, settings.timezone);
       await supabase
         .from("leads")
         .update({

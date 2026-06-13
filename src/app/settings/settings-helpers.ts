@@ -58,6 +58,7 @@ export const EDITABLE_KEYS = [
   "work_start_time",
   "work_end_time",
   "work_days",
+  "timezone",
   "default_job_minutes",
   "travel_buffer_minutes",
   "min_time_between_appointments",

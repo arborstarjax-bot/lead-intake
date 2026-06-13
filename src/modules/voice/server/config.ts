@@ -14,10 +14,6 @@ export type VoiceAgentConfig = {
   voice_provider: string;
   voice_id: string | null;
   voice_cloned: boolean;
-  call_window_start: string;
-  call_window_end: string;
-  call_days: number[];
-  timezone: string;
   max_attempts: number;
   retry_delay_mins: number;
   concurrent_calls: number;
@@ -51,10 +47,6 @@ export function defaultVoiceConfig(workspaceId: string): VoiceAgentConfig {
     voice_provider: "elevenlabs",
     voice_id: null,
     voice_cloned: false,
-    call_window_start: "09:00",
-    call_window_end: "17:00",
-    call_days: [1, 2, 3, 4, 5],
-    timezone: "America/New_York",
     max_attempts: 3,
     retry_delay_mins: 60,
     concurrent_calls: 2,

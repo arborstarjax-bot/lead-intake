@@ -28,22 +28,20 @@ export async function GET() {
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createAdminClient();
-  // Pin to America/New_York so the route always reflects the workspace's
+  const settings = await getSettings(auth.workspaceId);
+  // Pin to the workspace's timezone so the route always reflects the
   // business day. Vercel runs UTC; without this, between ~8 PM and
-  // midnight ET we'd query tomorrow's leads and show an empty route.
-  const iso = todayIsoInBusinessTz();
+  // midnight we'd query tomorrow's leads and show an empty route.
+  const iso = todayIsoInBusinessTz(settings.timezone);
 
-  const [settings, rowsResp] = await Promise.all([
-    getSettings(auth.workspaceId),
-    supabase
-      .from("leads")
-      .select("*")
-      .eq("workspace_id", auth.workspaceId)
-      .eq("scheduled_day", iso)
-      .not("scheduled_time", "is", null)
-      .neq("status", "Completed")
-      .order("scheduled_time", { ascending: true }),
-  ]);
+  const rowsResp = await supabase
+    .from("leads")
+    .select("*")
+    .eq("workspace_id", auth.workspaceId)
+    .eq("scheduled_day", iso)
+    .not("scheduled_time", "is", null)
+    .neq("status", "Completed")
+    .order("scheduled_time", { ascending: true });
 
   if (rowsResp.error) {
     return NextResponse.json({ error: rowsResp.error.message }, { status: 500 });

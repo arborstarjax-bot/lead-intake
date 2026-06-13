@@ -11,7 +11,7 @@ const timeSchema = z
     // Strip non-ASCII whitespace (iOS inserts \u202f or \u00a0 before AM/PM)
     const cleaned = val.replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
     // Normalize 12h AM/PM → 24h (e.g. "5:00 PM" → "17:00", "9:00 AM" → "09:00")
-    const ampm = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm|a\.m\.|p\.m\.)$/i);
+    const ampm = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)$/i);
     if (ampm) {
       let h = parseInt(ampm[1]);
       const m = ampm[2];
@@ -20,8 +20,8 @@ const timeSchema = z
       if (period === "AM" && h === 12) h = 0;
       return `${h.toString().padStart(2, "0")}:${m}`;
     }
-    // Normalize single-digit hour (e.g. "9:00" → "09:00")
-    const simple = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+    // Normalize HH:MM or HH:MM:SS (strip seconds, pad hour)
+    const simple = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
     if (simple) return `${simple[1].padStart(2, "0")}:${simple[2]}`;
     return cleaned;
   })
@@ -40,6 +40,7 @@ const bodySchema = z
     work_start_time: timeSchema.optional(),
     work_end_time: timeSchema.optional(),
     work_days: z.array(z.number().int().min(0).max(6)).optional(),
+    timezone: z.string().min(1).max(50).optional(),
     default_job_minutes: z.number().int().min(5).max(600).optional(),
     travel_buffer_minutes: z.number().int().min(0).max(120).optional(),
     min_time_between_appointments: z.number().int().min(0).max(480).optional(),

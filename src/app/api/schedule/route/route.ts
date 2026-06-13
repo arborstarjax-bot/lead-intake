@@ -107,8 +107,8 @@ type RouteResponse = {
   ghostError: string | null;
 };
 
-function validDate(d: string | null): string {
-  const fallback = todayIsoInBusinessTz();
+function validDate(d: string | null, tz: string): string {
+  const fallback = todayIsoInBusinessTz(tz);
   if (!d) return fallback;
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : fallback;
 }
@@ -118,12 +118,12 @@ export async function GET(req: Request) {
   if (auth instanceof NextResponse) return auth;
 
   const url = new URL(req.url);
-  const iso = validDate(url.searchParams.get("date"));
   const ghostLeadId = url.searchParams.get("ghost");
 
   const supabase = createAdminClient();
-  const [settings, rowsResp, ghostResp] = await Promise.all([
-    getSettings(auth.workspaceId),
+  const settings = await getSettings(auth.workspaceId);
+  const iso = validDate(url.searchParams.get("date"), settings.timezone);
+  const [rowsResp, ghostResp] = await Promise.all([
     // Pull all leads booked onto this day (timed + flex). We split them
     // after the fetch so flex leads aren't dropped by a NOT NULL filter
     // on scheduled_time — they still belong to the day, just without a
