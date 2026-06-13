@@ -121,6 +121,10 @@ export function ActiveCallBar() {
     formatDetectedRef.current = null;
 
     const audioCtx = new AudioContext({ sampleRate: PLAYBACK_RATE });
+    // Mobile browsers require explicit resume() — AudioContext starts suspended
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
     audioCtxRef.current = audioCtx;
     nextPlayTimeRef.current = audioCtx.currentTime;
 
@@ -128,12 +132,21 @@ export function ActiveCallBar() {
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       // Skip text frames (JSON control messages from Vapi)
       if (typeof event.data === "string") return;
-      if (!(event.data instanceof ArrayBuffer)) return;
 
-      const raw = new Uint8Array(event.data);
+      // Handle both ArrayBuffer and Blob (some mobile browsers send Blob)
+      let buffer: ArrayBuffer;
+      if (event.data instanceof ArrayBuffer) {
+        buffer = event.data;
+      } else if (event.data instanceof Blob) {
+        buffer = await event.data.arrayBuffer();
+      } else {
+        return;
+      }
+
+      const raw = new Uint8Array(buffer);
       // Skip very small frames (likely keep-alive or control)
       if (raw.length < 160) return;
 
@@ -174,7 +187,7 @@ export function ActiveCallBar() {
         sampleRate = 16000;
         const frameCount = Math.floor(raw.length / 4);
         pcm = new Float32Array(frameCount);
-        const view = new DataView(event.data);
+        const view = new DataView(buffer);
         for (let i = 0; i < frameCount; i++) {
           const ch0 = view.getInt16(i * 4, true) / 32768;
           const ch1 = view.getInt16(i * 4 + 2, true) / 32768;
@@ -185,22 +198,22 @@ export function ActiveCallBar() {
         sampleRate = 16000;
         const sampleCount = Math.floor(raw.length / 2);
         pcm = new Float32Array(sampleCount);
-        const view = new DataView(event.data);
+        const view = new DataView(buffer);
         for (let i = 0; i < sampleCount; i++) {
           pcm[i] = view.getInt16(i * 2, true) / 32768;
         }
       }
 
       // Create audio buffer at the detected sample rate
-      const buffer = audioCtx.createBuffer(1, pcm.length, sampleRate);
-      buffer.getChannelData(0).set(pcm);
+      const audioBuf = audioCtx.createBuffer(1, pcm.length, sampleRate);
+      audioBuf.getChannelData(0).set(pcm);
       const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
+      source.buffer = audioBuf;
       source.connect(audioCtx.destination);
       const now = audioCtx.currentTime;
       const playAt = Math.max(nextPlayTimeRef.current, now);
       source.start(playAt);
-      nextPlayTimeRef.current = playAt + buffer.duration;
+      nextPlayTimeRef.current = playAt + audioBuf.duration;
     };
 
     ws.onclose = () => {
