@@ -28,6 +28,13 @@ import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { type ClientAppSettings } from "@/lib/client-settings";
 import {
+  DEFAULT_SMS_INTRO,
+  DEFAULT_SMS_CONFIRM,
+  DEFAULT_SMS_ENROUTE,
+  DEFAULT_EMAIL_SUBJECT,
+  DEFAULT_EMAIL_BODY,
+} from "@/lib/templates";
+import {
   DAYS,
   DEFAULT_CLIENT_SETTINGS,
   diffSettings,
@@ -308,19 +315,19 @@ export default function SettingsPage() {
         <TemplateField
           label="First-touch SMS (intro)"
           rows={5}
-          value={s.sms_intro_template ?? ""}
+          value={s.sms_intro_template ?? DEFAULT_SMS_INTRO}
           onChange={(v) => update("sms_intro_template", v)}
         />
         <TemplateField
           label="Confirmation SMS (after booking)"
           rows={4}
-          value={s.sms_confirm_template ?? ""}
+          value={s.sms_confirm_template ?? DEFAULT_SMS_CONFIRM}
           onChange={(v) => update("sms_confirm_template", v)}
         />
         <TemplateField
           label="En route SMS (I'm on my way)"
           rows={4}
-          value={s.sms_enroute_template ?? ""}
+          value={s.sms_enroute_template ?? DEFAULT_SMS_ENROUTE}
           onChange={(v) => update("sms_enroute_template", v)}
         />
       </Panel>
@@ -333,13 +340,13 @@ export default function SettingsPage() {
         <TemplateField
           label="Subject"
           rows={1}
-          value={s.email_subject_template ?? ""}
+          value={s.email_subject_template ?? DEFAULT_EMAIL_SUBJECT}
           onChange={(v) => update("email_subject_template", v)}
         />
         <TemplateField
           label="Body"
           rows={8}
-          value={s.email_body_template ?? ""}
+          value={s.email_body_template ?? DEFAULT_EMAIL_BODY}
           onChange={(v) => update("email_body_template", v)}
         />
       </Panel>

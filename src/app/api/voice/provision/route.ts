@@ -79,12 +79,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Auto-assign a phone number if none was explicitly provided
+  let phoneId = parsed.phone_number_id ?? null;
+  if (!phoneId) {
+    try {
+      const numbers = await listVapiPhoneNumbers();
+      if (numbers.length > 0) {
+        phoneId = numbers[0].id;
+      }
+    } catch {
+      // Non-fatal — phone can be assigned later, but calls won't work
+      console.warn("Could not list Vapi phone numbers for auto-assign");
+    }
+  }
+
   // Save the assistant ID and enable voice config
   try {
     await upsertVoiceConfig(auth.workspaceId, {
       enabled: true,
       vapi_assistant_id: result.assistantId,
-      ...(parsed.phone_number_id && { vapi_phone_id: parsed.phone_number_id }),
+      ...(phoneId && { vapi_phone_id: phoneId }),
       company_name: settings.company_name,
       agent_name: existingConfig.agent_name || "AI Assistant",
     });
