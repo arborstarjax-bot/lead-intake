@@ -1,10 +1,10 @@
 "use client";
 
-import { Bell, BellOff, BellRing } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { getNativePlatform, isIosShellWindow } from "@/lib/ios-shell";
+import { cn } from "@/lib/utils";
 
 type Status = "unsupported" | "denied" | "prompt" | "subscribing" | "subscribed";
 
@@ -53,7 +53,20 @@ export default function EnableNotifications() {
     }
     navigator.serviceWorker.ready.then(async (reg) => {
       const existing = await reg.pushManager.getSubscription();
-      setStatus(existing ? "subscribed" : "prompt");
+      if (existing) {
+        // Re-register with the server so the current workspace gets the
+        // subscription. The user may have switched workspaces since the
+        // browser-level subscription was created — the DB row is keyed
+        // on endpoint so this upsert is safe and idempotent.
+        fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(existing.toJSON()),
+        }).catch(() => {});
+        setStatus("subscribed");
+      } else {
+        setStatus("prompt");
+      }
     });
   }, [publicKey]);
 
@@ -157,50 +170,41 @@ export default function EnableNotifications() {
     }
   }
 
-  if (status === "unsupported") {
-    return (
-      <button
-        disabled
-        title="On iPhone: Add this app to your Home Screen first, then reopen and try again."
-        className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-3 h-9 text-xs text-[var(--muted)]"
-      >
-        <BellOff className="h-4 w-4" />
-        Notifications unavailable
-      </button>
-    );
-  }
-  if (status === "denied") {
-    return (
-      <button
-        disabled
-        title="You blocked notifications. Enable them in your browser/iOS settings for this site."
-        className="inline-flex items-center gap-1 rounded-md border border-[var(--danger)] text-[var(--danger)] px-3 h-9 text-xs"
-      >
-        <BellOff className="h-4 w-4" />
-        Notifications blocked
-      </button>
-    );
-  }
-  if (status === "subscribed") {
-    return (
-      <button
-        onClick={disable}
-        className="inline-flex items-center gap-1 rounded-md border border-emerald-400 bg-emerald-50 text-emerald-700 px-3 h-9 text-xs font-medium"
-        title="Notifications on — click to turn off"
-      >
-        <BellRing className="h-4 w-4" />
-        Notifications On
-      </button>
-    );
-  }
+  const isOn = status === "subscribed";
+  const isDisabled = status === "unsupported" || status === "denied" || status === "subscribing";
+
+  const toggleTitle =
+    status === "unsupported"
+      ? "On iPhone: Add this app to your Home Screen first, then reopen and try again."
+      : status === "denied"
+        ? "You blocked notifications. Enable them in your browser/iOS settings for this site."
+        : isOn
+          ? "Notifications on — tap to turn off"
+          : "Tap to enable notifications";
+
   return (
     <button
-      onClick={enable}
-      disabled={status === "subscribing"}
-      className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)] text-[var(--accent)] hover:bg-blue-50 px-3 h-9 text-xs font-medium"
+      type="button"
+      role="switch"
+      aria-checked={isOn}
+      title={toggleTitle}
+      disabled={isDisabled}
+      onClick={isOn ? disable : enable}
+      className={cn(
+        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+        isDisabled
+          ? "bg-gray-200 cursor-not-allowed opacity-50"
+          : isOn
+            ? "bg-emerald-500"
+            : "bg-gray-200"
+      )}
     >
-      <Bell className="h-4 w-4" />
-      {status === "subscribing" ? "Enabling…" : "Enable Notifications"}
+      <span
+        className={cn(
+          "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+          isOn ? "translate-x-6" : "translate-x-1"
+        )}
+      />
     </button>
   );
 }

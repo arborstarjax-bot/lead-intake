@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
       vapi_assistant_id: result.assistantId,
       ...(phoneId && { vapi_phone_id: phoneId }),
       company_name: settings.company_name,
-      agent_name: existingConfig.agent_name || "AI Assistant",
+      agent_name: existingConfig.agent_name || "Dave",
     });
   } catch (e) {
     // Rollback: delete the assistant we just created
