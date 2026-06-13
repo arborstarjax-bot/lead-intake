@@ -11,6 +11,7 @@ import {
   generateSystemPrompt,
   generateFirstMessage,
   generateVoicemailMessage,
+  generateToolDefinitions,
 } from "@/modules/voice/server";
 
 export const runtime = "nodejs";
@@ -143,6 +144,13 @@ export async function POST(req: NextRequest) {
     const firstMessage = generateFirstMessage(promptVars);
     const voicemailMessage = generateVoicemailMessage(promptVars);
 
+    // Build webhook URL for tool calls (same logic as provision route)
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    const webhookUrl = `${baseUrl}/api/voice/webhook`;
+    const tools = generateToolDefinitions(webhookUrl);
+
     const vapiResponse = await createOutboundCall({
       assistantId: config.vapi_assistant_id,
       phoneNumberId: config.vapi_phone_id,
@@ -155,6 +163,7 @@ export async function POST(req: NextRequest) {
           provider: "openai",
           model: "gpt-4o",
           messages: [{ role: "system", content: systemPrompt }],
+          tools,
         },
         voicemailDetection: {
           provider: "vapi",

@@ -21,6 +21,15 @@ export type VapiCreateCallParams = {
       provider: string;
       model: string;
       messages: { role: string; content: string }[];
+      tools?: Array<{
+        type: string;
+        function: {
+          name: string;
+          description: string;
+          parameters: Record<string, unknown>;
+        };
+        server?: { url: string };
+      }>;
     };
     voicemailDetection?: {
       provider: string;
