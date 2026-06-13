@@ -81,11 +81,12 @@ async function handleToolCall(
   switch (name) {
     case "lookup_lead":
       return lookupLead(args.lead_id as string);
-    case "update_lead_info":
-      return updateLeadInfo(
-        args.lead_id as string,
-        args.updates as Record<string, unknown>
-      );
+    case "update_lead_info": {
+      // The tool schema sends { lead_id, ai_notes } as flat params.
+      // Build an updates object from all args except lead_id.
+      const { lead_id: _lid, ...updates } = args;
+      return updateLeadInfo(args.lead_id as string, updates);
+    }
     case "check_availability":
       return checkAvailability(args);
     case "book_appointment":
