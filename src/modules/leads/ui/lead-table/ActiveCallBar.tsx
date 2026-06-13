@@ -136,12 +136,14 @@ export function ActiveCallBar() {
       // Skip text frames (JSON control messages from Vapi)
       if (typeof event.data === "string") return;
 
-      // Handle both ArrayBuffer and Blob (some mobile browsers send Blob)
+      // Handle both ArrayBuffer and Blob (defensive for non-conformant browsers)
       let buffer: ArrayBuffer;
       if (event.data instanceof ArrayBuffer) {
         buffer = event.data;
       } else if (event.data instanceof Blob) {
         buffer = await event.data.arrayBuffer();
+        // After awaiting, verify we haven't stopped (AudioContext may be closed)
+        if (stoppedRef.current) return;
       } else {
         return;
       }
