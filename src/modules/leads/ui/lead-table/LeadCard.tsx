@@ -234,6 +234,7 @@ export function LeadCard({
                 ai_last_call_status: lead.ai_last_call_status,
                 ai_notes: lead.ai_notes,
               }}
+              onCallTriggered={() => setActivityRefreshKey((k) => k + 1)}
             />
             <AiCallHistory
               leadId={lead.id}

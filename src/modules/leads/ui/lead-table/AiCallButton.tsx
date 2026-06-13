@@ -20,9 +20,11 @@ type AiCallInfo = {
 export function AiCallButton({
   leadId,
   callInfo,
+  onCallTriggered,
 }: {
   leadId: string;
   callInfo?: AiCallInfo;
+  onCallTriggered?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<"idle" | "success" | "error">("idle");
@@ -54,6 +56,7 @@ export function AiCallButton({
           ai_last_call_status: "in_progress",
           ai_notes: prev?.ai_notes ?? null,
         }));
+        onCallTriggered?.();
       } else {
         const json = await res.json().catch(() => ({}));
         console.error("AI call trigger failed:", json);

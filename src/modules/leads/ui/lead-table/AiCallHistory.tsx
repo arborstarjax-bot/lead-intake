@@ -62,7 +62,11 @@ export function AiCallHistory({
     };
   }, [open, leadId, refreshKey]);
 
-  if (!open && loaded && calls.length === 0) return null;
+  // Reset loaded state when refreshKey changes so the panel re-fetches
+  // next time it's opened (e.g. after an AI call completes).
+  useEffect(() => {
+    setLoaded(false);
+  }, [refreshKey]);
 
   return (
     <div className="mt-2">
