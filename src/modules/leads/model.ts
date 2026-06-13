@@ -168,7 +168,7 @@ export type Lead = {
   calendar_scheduled_time: string | null;
   intake_source: LeadIntakeSource;
   intake_status: LeadIntakeStatus;
-  lead_source: LeadSource | null;
+  lead_source: string | null;
   lead_type: LeadType | null;
   estimate_outcome: EstimateOutcome | null;
   no_proposal_reason: NoProposalReason | null;

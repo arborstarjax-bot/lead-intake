@@ -64,6 +64,10 @@ const bodySchema = z
     sms_enroute_template: z.string().nullable().optional(),
     email_subject_template: z.string().nullable().optional(),
     email_body_template: z.string().nullable().optional(),
+    lead_sources: z
+      .array(z.string().trim().min(1).max(80))
+      .max(50)
+      .optional(),
   })
   .strict();
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
-import { LEAD_SOURCES, type Lead, type LeadPatch, type LeadSource } from "@/modules/leads/model";
+import { type Lead, type LeadPatch } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
+import { useAppSettings } from "@/components/SettingsProvider";
 
 const SOURCE_STYLES: Record<string, { bg: string; fg: string; border: string }> = {
   Facebook:              { bg: "bg-blue-50",    fg: "text-blue-700",    border: "border-blue-200" },
@@ -24,7 +25,24 @@ const SOURCE_STYLES: Record<string, { bg: string; fg: string; border: string }> 
   Other:                 { bg: "bg-gray-50",    fg: "text-gray-600",   border: "border-gray-200" },
 };
 
+const STYLE_POOL = [
+  { bg: "bg-rose-50",    fg: "text-rose-700",    border: "border-rose-200" },
+  { bg: "bg-fuchsia-50", fg: "text-fuchsia-700", border: "border-fuchsia-200" },
+  { bg: "bg-purple-50",  fg: "text-purple-700",  border: "border-purple-200" },
+  { bg: "bg-teal-50",    fg: "text-teal-700",    border: "border-teal-200" },
+  { bg: "bg-amber-50",   fg: "text-amber-700",   border: "border-amber-200" },
+  { bg: "bg-cyan-50",    fg: "text-cyan-700",    border: "border-cyan-200" },
+];
+
 const DEFAULT_STYLE = { bg: "bg-gray-50", fg: "text-gray-600", border: "border-gray-200" };
+
+function styleFor(name: string) {
+  if (SOURCE_STYLES[name]) return SOURCE_STYLES[name];
+  // Deterministic color for custom sources based on name hash
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  return STYLE_POOL[Math.abs(hash) % STYLE_POOL.length];
+}
 
 export function LeadSourceBadge({
   lead,
@@ -33,6 +51,8 @@ export function LeadSourceBadge({
   lead: Lead;
   onPatch: (p: LeadPatch) => void;
 }) {
+  const { settings } = useAppSettings();
+  const sources = settings.lead_sources;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -47,7 +67,7 @@ export function LeadSourceBadge({
   const source = lead.lead_source;
   const conf = lead.extraction_confidence?.lead_source;
   const isAI = typeof conf === "number" && conf > 0;
-  const style = source ? (SOURCE_STYLES[source] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
+  const style = source ? styleFor(source) : DEFAULT_STYLE;
 
   if (!source) {
     return (
@@ -61,6 +81,7 @@ export function LeadSourceBadge({
         </button>
         {open && (
           <SourceDropdown
+            sources={sources}
             onSelect={(s) => {
               onPatch({ lead_source: s });
               setOpen(false);
@@ -91,6 +112,7 @@ export function LeadSourceBadge({
       </button>
       {open && (
         <SourceDropdown
+          sources={sources}
           current={source}
           onSelect={(s) => {
             onPatch({
@@ -106,16 +128,18 @@ export function LeadSourceBadge({
 }
 
 function SourceDropdown({
+  sources,
   current,
   onSelect,
 }: {
-  current?: LeadSource | null;
-  onSelect: (s: LeadSource) => void;
+  sources: string[];
+  current?: string | null;
+  onSelect: (s: string) => void;
 }) {
   return (
     <div className="absolute left-0 top-full mt-1 z-40 w-48 max-h-64 overflow-y-auto rounded-xl border border-[var(--border)] bg-white shadow-lg py-1">
-      {LEAD_SOURCES.map((s) => {
-        const style = SOURCE_STYLES[s] ?? DEFAULT_STYLE;
+      {sources.map((s) => {
+        const style = styleFor(s);
         return (
           <button
             key={s}

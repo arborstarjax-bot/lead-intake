@@ -41,6 +41,7 @@ import { TemplateField } from "./components/TemplateField";
 import { NumberField } from "./components/NumberField";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
 import { VoiceAgentPanel, type VoiceAgentHandle } from "./components/VoiceAgentPanel";
+import { LeadSourcesEditor } from "./components/LeadSourcesEditor";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -285,6 +286,17 @@ export default function SettingsPage() {
           roster={s.salespeople}
           value={s.default_salesperson}
           onChange={(next) => update("default_salesperson", next)}
+        />
+      </Panel>
+
+      {/* Lead sources */}
+      <Panel
+        title="Lead sources"
+        description="The list of sources shown when tagging where a lead came from. Add or remove sources to match your business."
+      >
+        <LeadSourcesEditor
+          sources={s.lead_sources}
+          onChange={(next) => update("lead_sources", next)}
         />
       </Panel>
 
