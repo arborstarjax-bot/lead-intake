@@ -24,8 +24,8 @@ export type VapiCreateCallParams = {
     };
     voicemailDetection?: {
       provider: string;
-      enabled: boolean;
-      voicemailDetectionTypes: string[];
+      enabled?: boolean;
+      voicemailDetectionTypes?: string[];
       backoffPlan?: {
         startAtSeconds?: number;
         frequencySeconds?: number;
