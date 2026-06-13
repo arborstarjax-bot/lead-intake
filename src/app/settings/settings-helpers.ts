@@ -64,6 +64,7 @@ export const EDITABLE_KEYS = [
   "min_time_between_appointments",
   "days_until_lost",
   "days_until_not_sold",
+  "lead_sources",
 ] as const satisfies ReadonlyArray<keyof ClientAppSettings>;
 
 /**

@@ -36,6 +36,7 @@ export type ClientAppSettings = {
   sms_enroute_template: string | null;
   email_subject_template: string | null;
   email_body_template: string | null;
+  lead_sources: string[];
 
   created_at: string;
   updated_at: string;
@@ -69,6 +70,21 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
   sms_enroute_template: null,
   email_subject_template: null,
   email_body_template: null,
+  lead_sources: [
+    "Facebook",
+    "Instagram",
+    "Google Ads",
+    "Website Form",
+    "Nextdoor",
+    "Thumbtack",
+    "Angi",
+    "Craigslist",
+    "Email",
+    "Referral",
+    "Direct Mail",
+    "Text Message",
+    "Other",
+  ],
   created_at: "",
   updated_at: "",
 };
