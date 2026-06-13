@@ -137,10 +137,16 @@ export default function EnableNotifications() {
       if (!res.ok) throw new Error(await res.text());
       setStatus("subscribed");
     } catch (e) {
-      console.error(e);
+      console.error("Push subscribe error:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      // DOMException "Registration failed" usually means the service
+      // worker hasn't finished installing yet.  A reload fixes it.
+      const hint = msg.includes("Registration failed")
+        ? "Try refreshing the page and enabling again."
+        : "On iPhone, make sure the app is added to your Home Screen.";
       toast({
         kind: "error",
-        message: `Couldn't enable notifications. On iPhone, Add to Home Screen first.`,
+        message: `Couldn't enable notifications. ${hint}`,
         duration: 6000,
       });
       setStatus("prompt");
