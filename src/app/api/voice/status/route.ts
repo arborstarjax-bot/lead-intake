@@ -353,6 +353,45 @@ function getFollowUpResult(finalStatus: string, summary: string | null): string 
   // For completed calls, analyze the summary to determine sub-category
   if (finalStatus === "completed" && summary) {
     const lower = summary.toLowerCase();
+
+    // Decision maker — needs spouse/family/HOA approval
+    if (
+      lower.includes("spouse") ||
+      lower.includes("wife") ||
+      lower.includes("husband") ||
+      lower.includes("decision maker") ||
+      lower.includes("landlord") ||
+      lower.includes("hoa") ||
+      lower.includes("need to check with") ||
+      lower.includes("needs approval")
+    ) {
+      return "Awaiting Decision Maker";
+    }
+
+    // Price shopping — comparing quotes
+    if (
+      lower.includes("price shopping") ||
+      lower.includes("other quotes") ||
+      lower.includes("comparing") ||
+      lower.includes("getting other estimates") ||
+      lower.includes("shopping around") ||
+      lower.includes("how much")
+    ) {
+      return "Price Shopping";
+    }
+
+    // Could not connect — anti-loop triggered or couldn't progress
+    if (
+      lower.includes("could not progress") ||
+      lower.includes("unable to schedule") ||
+      lower.includes("could not connect") ||
+      lower.includes("no meaningful conversation") ||
+      lower.includes("disconnected before")
+    ) {
+      return "Could Not Connect";
+    }
+
+    // Callback requested
     if (
       lower.includes("call back") ||
       lower.includes("call you back") ||
@@ -365,6 +404,7 @@ function getFollowUpResult(finalStatus: string, summary: string | null): string 
     ) {
       return "Requested Callback";
     }
+
     // They answered and talked but didn't book
     return "Spoke With Customer";
   }
