@@ -63,7 +63,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary"
-      className="md:hidden fixed bottom-0 inset-x-0 z-[9999] border-t border-[var(--border)] bg-white/95 backdrop-blur"
+      className="md:hidden fixed bottom-0 inset-x-0 z-[9999] border-t border-[var(--border)] bg-white"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
         transform: "translate3d(0,0,0)",

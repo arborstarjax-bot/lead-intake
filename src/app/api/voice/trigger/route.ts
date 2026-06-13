@@ -157,13 +157,12 @@ export async function POST(req: NextRequest) {
           messages: [{ role: "system", content: systemPrompt }],
         },
         voicemailDetection: {
-          provider: "twilio",
-          enabled: true,
-          voicemailDetectionTypes: [
-            "machine_end_beep",
-            "machine_end_silence",
-            "machine_end_other",
-          ],
+          provider: "vapi",
+          backoffPlan: {
+            startAtSeconds: 3,
+            frequencySeconds: 3,
+            maxRetries: 3,
+          },
         },
         variableValues: {
           lead_id: lead.id,
