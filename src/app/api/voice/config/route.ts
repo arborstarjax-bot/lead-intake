@@ -36,6 +36,8 @@ const patchSchema = z
   .object({
     enabled: z.boolean().optional(),
     agent_name: z.string().trim().min(1).max(80).optional(),
+    agent_name_male: z.string().trim().min(1).max(80).nullable().optional(),
+    agent_name_female: z.string().trim().min(1).max(80).nullable().optional(),
     company_name: z.string().trim().nullable().optional(),
     greeting_template: z.string().nullable().optional(),
     system_prompt: z.string().nullable().optional(),

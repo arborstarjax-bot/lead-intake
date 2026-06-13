@@ -7,6 +7,7 @@ import {
   insertCall,
   getActiveCallCount,
   createOutboundCall,
+  selectVoiceForLead,
 } from "@/modules/voice/server";
 
 export const runtime = "nodejs";
@@ -126,6 +127,9 @@ export async function POST(req: NextRequest) {
     status: "queued",
   });
 
+  // Select voice based on lead's name gender
+  const voiceSelection = selectVoiceForLead(lead.first_name, config);
+
   // Place the call via Vapi
   try {
     const vapiResponse = await createOutboundCall({
@@ -133,6 +137,8 @@ export async function POST(req: NextRequest) {
       phoneNumberId: config.vapi_phone_id,
       customerNumber: lead.phone_number,
       assistantOverrides: {
+        voice: { provider: voiceSelection.provider, voiceId: voiceSelection.voiceId },
+        firstMessage: `Hello ${lead.first_name ?? "there"}, this is ${voiceSelection.agentName} with ${settings.company_name ?? config.company_name ?? "our company"}. I'm calling in regards to your request for a free estimate on some tree work. Is now a good time to chat for a minute?`,
         variableValues: {
           lead_id: lead.id,
           first_name: lead.first_name ?? "",
@@ -143,7 +149,7 @@ export async function POST(req: NextRequest) {
           zip: lead.zip ?? "",
           lead_source: lead.lead_source ?? "",
           company_name: settings.company_name ?? config.company_name ?? "",
-          agent_name: config.agent_name,
+          agent_name: voiceSelection.agentName,
           callback_number: settings.company_phone ?? "",
         },
       },
