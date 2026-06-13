@@ -16,6 +16,11 @@ export type VapiCreateCallParams = {
     variableValues?: Record<string, string>;
     voice?: { provider: string; voiceId: string; language?: string };
     firstMessage?: string;
+    model?: {
+      provider: string;
+      model: string;
+      messages: { role: string; content: string }[];
+    };
   };
   schedulePlan?: {
     earliestAt?: string;

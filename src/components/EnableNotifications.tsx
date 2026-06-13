@@ -54,16 +54,25 @@ export default function EnableNotifications() {
     navigator.serviceWorker.ready.then(async (reg) => {
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
-        // Re-register with the server so the current workspace gets the
-        // subscription. The user may have switched workspaces since the
-        // browser-level subscription was created — the DB row is keyed
-        // on endpoint so this upsert is safe and idempotent.
-        fetch("/api/push/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(existing.toJSON()),
-        }).catch(() => {});
-        setStatus("subscribed");
+        // Try to re-register with the server for the current workspace.
+        // If the user switched accounts (different user_id), this upsert
+        // will fail — show "prompt" so they can re-enable cleanly.
+        try {
+          const res = await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(existing.toJSON()),
+          });
+          if (res.ok) {
+            setStatus("subscribed");
+          } else {
+            // Stale subscription from a different account — clear it
+            await existing.unsubscribe();
+            setStatus("prompt");
+          }
+        } catch {
+          setStatus("prompt");
+        }
       } else {
         setStatus("prompt");
       }
@@ -125,6 +134,16 @@ export default function EnableNotifications() {
         return;
       }
       const reg = await navigator.serviceWorker.ready;
+
+      // If the browser already has a subscription from a previous
+      // account / workspace, unsubscribe it first so we get a clean
+      // subscription keyed to the current user.  Without this the
+      // server-side upsert can fail when user_id changes.
+      const stale = await reg.pushManager.getSubscription();
+      if (stale) {
+        await stale.unsubscribe();
+      }
+
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey),
@@ -139,15 +158,20 @@ export default function EnableNotifications() {
     } catch (e) {
       console.error("Push subscribe error:", e);
       const msg = e instanceof Error ? e.message : String(e);
-      // DOMException "Registration failed" usually means the service
-      // worker hasn't finished installing yet.  A reload fixes it.
-      const hint = msg.includes("Registration failed")
-        ? "Try refreshing the page and enabling again."
-        : "On iPhone, make sure the app is added to your Home Screen.";
+      let hint: string;
+      if (msg.includes("Registration failed")) {
+        hint = "Try refreshing the page and enabling again.";
+      } else if (msg.includes("permission")) {
+        hint = "Notification permission was not granted. Check your device settings.";
+      } else if (msg.includes("applicationServerKey") || msg.includes("VAPID")) {
+        hint = "Server configuration issue. Please contact support.";
+      } else {
+        hint = `Error: ${msg.slice(0, 80)}`;
+      }
       toast({
         kind: "error",
         message: `Couldn't enable notifications. ${hint}`,
-        duration: 6000,
+        duration: 8000,
       });
       setStatus("prompt");
     }

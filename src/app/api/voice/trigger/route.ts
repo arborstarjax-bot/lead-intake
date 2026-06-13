@@ -8,6 +8,8 @@ import {
   getActiveCallCount,
   createOutboundCall,
   selectVoiceForLead,
+  generateSystemPrompt,
+  generateFirstMessage,
 } from "@/modules/voice/server";
 
 export const runtime = "nodejs";
@@ -132,12 +134,25 @@ export async function POST(req: NextRequest) {
 
   // Place the call via Vapi
   try {
+    // Generate the latest system prompt + first message so prompt
+    // changes take effect immediately without re-provisioning the
+    // Vapi assistant.
+    const promptVars = { businessType: settings.business_type ?? undefined };
+    const systemPrompt = generateSystemPrompt(promptVars);
+    const firstMessage = generateFirstMessage(promptVars);
+
     const vapiResponse = await createOutboundCall({
       assistantId: config.vapi_assistant_id,
       phoneNumberId: config.vapi_phone_id,
       customerNumber: lead.phone_number,
       assistantOverrides: {
         voice: { provider: voiceSelection.provider, voiceId: voiceSelection.voiceId },
+        firstMessage,
+        model: {
+          provider: "anthropic",
+          model: "claude-haiku-4-5-20251001",
+          messages: [{ role: "system", content: systemPrompt }],
+        },
         variableValues: {
           lead_id: lead.id,
           first_name: lead.first_name ?? "",
