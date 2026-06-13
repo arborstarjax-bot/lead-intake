@@ -80,8 +80,8 @@ export async function createVapiAssistant(
       provider: "vapi",
       backoffPlan: {
         startAtSeconds: 3,
-        frequencySeconds: 3,
-        maxRetries: 3,
+        frequencySeconds: 5,
+        maxRetries: 6,
       },
     },
     endCallPhrases: ["goodbye", "bye now", "have a good one"],
