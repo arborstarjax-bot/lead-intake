@@ -273,80 +273,78 @@ async function checkAvailability(args: Record<string, unknown>) {
         .neq("id", lead.id);
 
       const leadWithDay = { ...lead, scheduled_day: day } as Lead;
+      let routeSlots: SlotResult[] = [];
       try {
-        const { slots, warnings } = await suggestSlots({
+        const { slots } = await suggestSlots({
           lead: leadWithDay,
           settings,
           others: (sameDay ?? []) as Lead[],
           half,
         });
 
-        if (warnings.length && slots.length === 0) return [];
-
-        const existing = sameDay?.length ?? 0;
-        const dayName = new Date(day + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-        return slots.map((slot) => ({
-          date: day,
-          display_date: dayName,
-          time: slot.startTime,
-          display_time: formatClock(
-            parseInt(slot.startTime.split(":")[0]) * 60 +
-              parseInt(slot.startTime.split(":")[1])
-          ),
-          drive_minutes: slot.driveMinutesBefore,
-          route_score: Math.max(0, 100 - slot.totalDriveMinutes * 2),
-          context:
-            existing > 0
-              ? `${existing} other estimate${existing > 1 ? "s" : ""} already on this day — fits route`
-              : "Open day — first estimate",
-        }));
-      } catch {
-        // Fallback to basic time-gap availability
-        const { data: sameDayBasic } = await supabase
-          .from("leads")
-          .select("scheduled_time")
-          .eq("workspace_id", workspaceId)
-          .eq("scheduled_day", day)
-          .not("scheduled_time", "is", null)
-          .neq("status", "Completed");
-
-        const takenTimes = (sameDayBasic ?? []).map(
-          (l) => l.scheduled_time as string
-        );
-        const workStart = settings.work_start_time;
-        const workEnd = settings.work_end_time;
-        const minGap = settings.min_time_between_appointments;
-        const wsMin =
-          parseInt(workStart.split(":")[0]) * 60 +
-          parseInt(workStart.split(":")[1]);
-        const weMin =
-          parseInt(workEnd.split(":")[0]) * 60 +
-          parseInt(workEnd.split(":")[1]);
-
-        const daySlots: SlotResult[] = [];
-        for (let m = wsMin; m + minGap <= weMin; m += 30) {
-          const timeStr = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-          const hasConflict = takenTimes.some((t) => {
-            const tMin =
-              parseInt(t.split(":")[0]) * 60 + parseInt(t.split(":")[1]);
-            return Math.abs(m - tMin) < minGap;
-          });
-          if (hasConflict) continue;
-          if (half === "morning" && m >= 12 * 60) continue;
-          if (half === "afternoon" && m < 12 * 60) continue;
-
-          daySlots.push({
+        if (slots.length > 0) {
+          const existing = sameDay?.length ?? 0;
+          const dayName = new Date(day + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+          routeSlots = slots.map((slot) => ({
             date: day,
-            display_date: new Date(day + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
-            time: timeStr,
-            display_time: formatClock(m),
-            drive_minutes: 0,
-            route_score: 50,
-            context: "Basic availability (route optimization unavailable)",
-          });
+            display_date: dayName,
+            time: slot.startTime,
+            display_time: formatClock(
+              parseInt(slot.startTime.split(":")[0]) * 60 +
+                parseInt(slot.startTime.split(":")[1])
+            ),
+            drive_minutes: slot.driveMinutesBefore,
+            route_score: Math.max(0, 100 - slot.totalDriveMinutes * 2),
+            context:
+              existing > 0
+                ? `${existing} other estimate${existing > 1 ? "s" : ""} already on this day — fits route`
+                : "Open day — first estimate",
+          }));
         }
-        return daySlots;
+      } catch {
+        // Route optimization failed — fall through to basic availability
       }
+
+      // If route optimization returned slots, use them
+      if (routeSlots.length > 0) return routeSlots;
+
+      // Fallback: basic time-gap availability (ignores drive constraints)
+      const takenTimes = (sameDay ?? [])
+        .map((l) => l.scheduled_time as string)
+        .filter(Boolean);
+      const workStart = settings.work_start_time;
+      const workEnd = settings.work_end_time;
+      const minGap = settings.min_time_between_appointments;
+      const wsMin =
+        parseInt(workStart.split(":")[0]) * 60 +
+        parseInt(workStart.split(":")[1]);
+      const weMin =
+        parseInt(workEnd.split(":")[0]) * 60 +
+        parseInt(workEnd.split(":")[1]);
+
+      const daySlots: SlotResult[] = [];
+      for (let m = wsMin; m + minGap <= weMin; m += 30) {
+        const timeStr = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+        const hasConflict = takenTimes.some((t) => {
+          const tMin =
+            parseInt(t.split(":")[0]) * 60 + parseInt(t.split(":")[1]);
+          return Math.abs(m - tMin) < minGap;
+        });
+        if (hasConflict) continue;
+        if (half === "morning" && m >= 12 * 60) continue;
+        if (half === "afternoon" && m < 12 * 60) continue;
+
+        daySlots.push({
+          date: day,
+          display_date: new Date(day + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+          time: timeStr,
+          display_time: formatClock(m),
+          drive_minutes: 0,
+          route_score: 40,
+          context: "Available slot (not route-optimized)",
+        });
+      }
+      return daySlots;
     })
   );
 
