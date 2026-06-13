@@ -100,26 +100,30 @@ async function handleToolCall(
 async function lookupLead(leadId: string) {
   if (!leadId) return { error: "lead_id is required" };
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("leads")
-    .select(
-      "id, first_name, last_name, client, phone_number, email, address, city, state, zip, status, lead_source, lead_type, notes, scheduled_day, scheduled_time, flex_window, ai_call_count, ai_last_call_at, ai_last_call_status, ai_do_not_call, ai_notes, sales_person, created_at"
-    )
-    .eq("id", leadId)
-    .maybeSingle();
-  if (error || !data) return { error: "Lead not found" };
 
-  // Also get recent call history for context
-  const { data: recentCalls } = await supabase
-    .from("ai_calls")
-    .select("status, call_summary, appointment_booked, created_at")
-    .eq("lead_id", leadId)
-    .order("created_at", { ascending: false })
-    .limit(3);
+  // Run both queries in parallel for faster response
+  const [leadResult, callsResult] = await Promise.all([
+    supabase
+      .from("leads")
+      .select(
+        "id, first_name, last_name, client, phone_number, email, address, city, state, zip, status, lead_source, lead_type, notes, scheduled_day, scheduled_time, flex_window, ai_call_count, ai_last_call_at, ai_last_call_status, ai_do_not_call, ai_notes, sales_person, created_at"
+      )
+      .eq("id", leadId)
+      .maybeSingle(),
+    supabase
+      .from("ai_calls")
+      .select("status, call_summary, appointment_booked, created_at")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
+      .limit(3),
+  ]);
+
+  if (leadResult.error || !leadResult.data) return { error: "Lead not found" };
+  const data = leadResult.data;
 
   return {
     ...data,
-    recent_calls: recentCalls ?? [],
+    recent_calls: callsResult.data ?? [],
     context: {
       has_been_called_before: (data.ai_call_count ?? 0) > 0,
       is_already_scheduled: data.status === "Scheduled",
@@ -207,9 +211,9 @@ async function checkAvailability(args: Record<string, unknown>) {
         ? "afternoon"
         : "all";
 
-  // Determine which days to check
+  // Determine which days to check (default 3 for speed — AI only needs 1-2 good slots)
   const todayIso = todayIsoInBusinessTz();
-  const daysToCheck = days_ahead ?? 5;
+  const daysToCheck = days_ahead ?? 3;
   const daysList: string[] = [];
 
   if (preferred_date) {
@@ -245,43 +249,40 @@ async function checkAvailability(args: Record<string, unknown>) {
   }
 
   // For each day, use the real suggestSlots to get route-optimized options
-  const allSlots: Array<{
+  // Process all days IN PARALLEL for much faster response
+  type SlotResult = {
     date: string;
     time: string;
     display_time: string;
     drive_minutes: number;
     route_score: number;
     context: string;
-  }> = [];
+  };
 
-  for (const day of daysList) {
-    // Get other leads scheduled on this day
-    const { data: sameDay } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .eq("scheduled_day", day)
-      .not("scheduled_time", "is", null)
-      .neq("status", "Completed")
-      .neq("id", lead.id);
+  const dayResults = await Promise.all(
+    daysList.map(async (day): Promise<SlotResult[]> => {
+      const { data: sameDay } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("scheduled_day", day)
+        .not("scheduled_time", "is", null)
+        .neq("status", "Completed")
+        .neq("id", lead.id);
 
-    // Use the real scheduling engine
-    const leadWithDay = { ...lead, scheduled_day: day } as Lead;
-    try {
-      const { slots, warnings } = await suggestSlots({
-        lead: leadWithDay,
-        settings,
-        others: (sameDay ?? []) as Lead[],
-        half,
-      });
+      const leadWithDay = { ...lead, scheduled_day: day } as Lead;
+      try {
+        const { slots, warnings } = await suggestSlots({
+          lead: leadWithDay,
+          settings,
+          others: (sameDay ?? []) as Lead[],
+          half,
+        });
 
-      if (warnings.length && slots.length === 0) continue;
+        if (warnings.length && slots.length === 0) return [];
 
-      for (const slot of slots) {
         const existing = sameDay?.length ?? 0;
-        // Route score: lower drive time = higher score (max 100)
-        const routeScore = Math.max(0, 100 - slot.totalDriveMinutes * 2);
-        allSlots.push({
+        return slots.map((slot) => ({
           date: day,
           time: slot.startTime,
           display_time: formatClock(
@@ -289,66 +290,66 @@ async function checkAvailability(args: Record<string, unknown>) {
               parseInt(slot.startTime.split(":")[1])
           ),
           drive_minutes: slot.driveMinutesBefore,
-          route_score: routeScore,
+          route_score: Math.max(0, 100 - slot.totalDriveMinutes * 2),
           context:
             existing > 0
               ? `${existing} other estimate${existing > 1 ? "s" : ""} already on this day — fits route`
               : "Open day — first estimate",
-        });
+        }));
+      } catch {
+        // Fallback to basic time-gap availability
+        const { data: sameDayBasic } = await supabase
+          .from("leads")
+          .select("scheduled_time")
+          .eq("workspace_id", workspaceId)
+          .eq("scheduled_day", day)
+          .not("scheduled_time", "is", null)
+          .neq("status", "Completed");
+
+        const takenTimes = (sameDayBasic ?? []).map(
+          (l) => l.scheduled_time as string
+        );
+        const workStart = settings.work_start_time;
+        const workEnd = settings.work_end_time;
+        const minGap = settings.min_time_between_appointments;
+        const wsMin =
+          parseInt(workStart.split(":")[0]) * 60 +
+          parseInt(workStart.split(":")[1]);
+        const weMin =
+          parseInt(workEnd.split(":")[0]) * 60 +
+          parseInt(workEnd.split(":")[1]);
+
+        const daySlots: SlotResult[] = [];
+        for (let m = wsMin; m + minGap <= weMin; m += 30) {
+          const timeStr = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+          const hasConflict = takenTimes.some((t) => {
+            const tMin =
+              parseInt(t.split(":")[0]) * 60 + parseInt(t.split(":")[1]);
+            return Math.abs(m - tMin) < minGap;
+          });
+          if (hasConflict) continue;
+          if (half === "morning" && m >= 12 * 60) continue;
+          if (half === "afternoon" && m < 12 * 60) continue;
+
+          daySlots.push({
+            date: day,
+            time: timeStr,
+            display_time: formatClock(m),
+            drive_minutes: 0,
+            route_score: 50,
+            context: "Basic availability (route optimization unavailable)",
+          });
+        }
+        return daySlots;
       }
-    } catch {
-      // If suggestSlots fails (e.g. no Google Maps key), fall back to
-      // basic time-gap availability for this day
-      const { data: sameDayBasic } = await supabase
-        .from("leads")
-        .select("scheduled_time")
-        .eq("workspace_id", workspaceId)
-        .eq("scheduled_day", day)
-        .not("scheduled_time", "is", null)
-        .neq("status", "Completed");
+    })
+  );
 
-      const takenTimes = (sameDayBasic ?? []).map(
-        (l) => l.scheduled_time as string
-      );
-      const workStart = settings.work_start_time;
-      const workEnd = settings.work_end_time;
-      const minGap = settings.min_time_between_appointments;
-      const wsMin =
-        parseInt(workStart.split(":")[0]) * 60 +
-        parseInt(workStart.split(":")[1]);
-      const weMin =
-        parseInt(workEnd.split(":")[0]) * 60 +
-        parseInt(workEnd.split(":")[1]);
+  const allSlots = dayResults.flat();
 
-      for (let m = wsMin; m + minGap <= weMin; m += 30) {
-        const timeStr = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-        // Check for overlap with existing appointments
-        const hasConflict = takenTimes.some((t) => {
-          const tMin =
-            parseInt(t.split(":")[0]) * 60 + parseInt(t.split(":")[1]);
-          return Math.abs(m - tMin) < minGap;
-        });
-        if (hasConflict) continue;
-
-        // Apply half-day filter
-        if (half === "morning" && m >= 12 * 60) continue;
-        if (half === "afternoon" && m < 12 * 60) continue;
-
-        allSlots.push({
-          date: day,
-          time: timeStr,
-          display_time: formatClock(m),
-          drive_minutes: 0,
-          route_score: 50,
-          context: "Basic availability (route optimization unavailable)",
-        });
-      }
-    }
-  }
-
-  // Sort by route_score descending, take top 6
+  // Sort by route_score descending, take top 3 (AI offers 1 at a time)
   allSlots.sort((a, b) => b.route_score - a.route_score);
-  const best = allSlots.slice(0, 6);
+  const best = allSlots.slice(0, 3);
 
   if (best.length === 0) {
     return {
