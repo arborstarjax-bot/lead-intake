@@ -34,7 +34,7 @@ export type TemplateVars = Partial<Record<TemplatePlaceholder, string | null | u
 // Keep in sync with `/settings` placeholder hint text.
 export const DEFAULT_SMS_INTRO =
   "Hi {firstName}, this is {salesPerson} with {companyName}. I'm reaching " +
-  "out regarding your recent inquiry. " +
+  "out regarding your request for an estimate. " +
   "Feel free to call or text me to schedule a day and time that works " +
   "best for you. I look forward to helping you out!";
 

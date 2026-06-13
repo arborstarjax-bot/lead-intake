@@ -69,7 +69,7 @@ body {
      Desktop breakpoints zero out the bottom nav reserve since the nav
      is hidden there; safe-area insets are already 0 on desktop. */
   padding-top: env(safe-area-inset-top);
-  padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 6rem);
 }
 @media (min-width: 768px) {
   body {
