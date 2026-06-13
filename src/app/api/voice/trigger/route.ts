@@ -138,7 +138,6 @@ export async function POST(req: NextRequest) {
       customerNumber: lead.phone_number,
       assistantOverrides: {
         voice: { provider: voiceSelection.provider, voiceId: voiceSelection.voiceId },
-        firstMessage: `Hello ${lead.first_name ?? "there"}, this is ${voiceSelection.agentName} with ${settings.company_name ?? config.company_name ?? "our company"}. I'm calling in regards to your request for a free estimate on some tree work. Is now a good time to chat for a minute?`,
         variableValues: {
           lead_id: lead.id,
           first_name: lead.first_name ?? "",

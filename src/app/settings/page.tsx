@@ -21,7 +21,7 @@
  * without a reload.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
@@ -40,7 +40,7 @@ import { SalespeopleEditor } from "./components/SalespeopleEditor";
 import { TemplateField } from "./components/TemplateField";
 import { NumberField } from "./components/NumberField";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
-import { VoiceAgentPanel } from "./components/VoiceAgentPanel";
+import { VoiceAgentPanel, type VoiceAgentHandle } from "./components/VoiceAgentPanel";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -50,6 +50,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [s, setS] = useState<ClientAppSettings>(DEFAULT_CLIENT_SETTINGS);
   const [saving, setSaving] = useState(false);
+  const voiceRef = useRef<VoiceAgentHandle>(null);
   // The last-saved snapshot. Used to compute dirty state and the diff
   // we send on Save. Updated on mount from ctxSettings and after each
   // successful PUT.
@@ -79,37 +80,45 @@ export default function SettingsPage() {
   // we disable the warning here.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const patch = useMemo(() => diffSettings(s, savedRef.current), [s, savedTick]);
-  const dirty = Object.keys(patch).length > 0;
+  const [voiceDirty, setVoiceDirty] = useState(false);
+  const checkVoiceDirty = useCallback(() => {
+    setVoiceDirty(voiceRef.current?.isDirty() ?? false);
+  }, []);
+  const settingsDirty = Object.keys(patch).length > 0;
+  const dirty = settingsDirty || voiceDirty;
 
   async function save() {
     if (!dirty || saving) return;
     touchedRef.current = true;
     setSaving(true);
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        toast({ kind: "error", message: json.error ?? "Save failed" });
-        return;
+      // Save workspace settings if changed
+      if (settingsDirty) {
+        const res = await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          toast({ kind: "error", message: json.error ?? "Save failed" });
+          return;
+        }
+        const serverSettings = (json?.settings ?? null) as
+          | ClientAppSettings
+          | null;
+        if (serverSettings) {
+          savedRef.current = serverSettings;
+          apply(serverSettings);
+        }
+        setSavedTick((t) => t + 1);
       }
-      // The server echoes back the full normalized row (`.select("*").single()`).
-      // Use it as the new baseline for dirty computation, but do NOT
-      // overwrite local `s` — the user may have typed more fields while
-      // the fetch was in flight, and those should survive. Any such
-      // edits will naturally show as dirty (they differ from the new
-      // baseline) so the user can tap Save again.
-      const serverSettings = (json?.settings ?? null) as
-        | ClientAppSettings
-        | null;
-      if (serverSettings) {
-        savedRef.current = serverSettings;
-        apply(serverSettings);
+      // Save voice config if changed
+      if (voiceRef.current?.isDirty()) {
+        const ok = await voiceRef.current.save();
+        if (!ok) return;
+        setVoiceDirty(false);
       }
-      setSavedTick((t) => t + 1);
       toast({ kind: "success", message: "Saved" });
     } catch (e) {
       toast({ kind: "error", message: (e as Error).message });
@@ -181,7 +190,7 @@ export default function SettingsPage() {
       <IntegrationsPanel />
 
       {/* AI Voice Agent */}
-      <VoiceAgentPanel canEdit={canEdit} />
+      <VoiceAgentPanel ref={voiceRef} canEdit={canEdit} onDirtyChange={checkVoiceDirty} />
 
       {/* Company info */}
       <Panel
@@ -193,7 +202,7 @@ export default function SettingsPage() {
             className={inputCls}
             value={s.company_name ?? ""}
             onChange={(e) => update("company_name", e.target.value)}
-            placeholder="Arbor Tech 904"
+            placeholder="Your Company Name"
           />
         </Field>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -212,12 +221,20 @@ export default function SettingsPage() {
               className={inputCls}
               value={s.company_email ?? ""}
               onChange={(e) => update("company_email", e.target.value)}
-              placeholder="hello@arbortech904.com"
+              placeholder="hello@example.com"
               inputMode="email"
               autoComplete="email"
             />
           </Field>
         </div>
+        <Field label="Business type">
+          <input
+            className={inputCls}
+            value={s.business_type ?? ""}
+            onChange={(e) => update("business_type", e.target.value || null)}
+            placeholder="e.g. Plumbing, HVAC, Tree Care, Landscaping"
+          />
+        </Field>
       </Panel>
 
       {/* Salespeople */}
@@ -227,6 +244,7 @@ export default function SettingsPage() {
       >
         <SalespeopleEditor
           roster={s.salespeople}
+          titles={s.salesperson_titles}
           onChange={(next) => {
             update("salespeople", next);
             // If the chosen default is no longer in the roster, clear
@@ -240,6 +258,20 @@ export default function SettingsPage() {
             ) {
               update("default_salesperson", null);
             }
+            // Prune titles for removed salespeople
+            const pruned = { ...s.salesperson_titles };
+            for (const k of Object.keys(pruned)) {
+              if (!next.some((n) => n.toLowerCase() === k.toLowerCase())) {
+                delete pruned[k];
+              }
+            }
+            update("salesperson_titles", pruned);
+          }}
+          onTitleChange={(name, title) => {
+            update("salesperson_titles", {
+              ...s.salesperson_titles,
+              [name]: title,
+            });
           }}
         />
       </Panel>

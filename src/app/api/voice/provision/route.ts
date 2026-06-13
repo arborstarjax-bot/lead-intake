@@ -13,12 +13,6 @@ import {
 export const runtime = "nodejs";
 
 const provisionSchema = z.object({
-  /** Service category e.g. "tree service", "plumbing", "HVAC", "landscaping" */
-  service_type: z.string().trim().min(1).max(100).optional(),
-  /** What they schedule e.g. "free estimate", "consultation", "inspection" */
-  appointment_type: z.string().trim().min(1).max(100).optional(),
-  /** Who comes out e.g. "our arborist", "a technician", "our team" */
-  technician_title: z.string().trim().min(1).max(100).optional(),
   /** Which Vapi phone number ID to use (from the available list) */
   phone_number_id: z.string().trim().min(1).optional(),
 });
@@ -75,9 +69,7 @@ export async function POST(req: NextRequest) {
       assistantName: `${settings.company_name} AI`,
       webhookUrl,
       templateVars: {
-        serviceType: parsed.service_type ?? "tree service",
-        appointmentType: parsed.appointment_type ?? "free estimate",
-        technicianTitle: parsed.technician_title ?? "our arborist",
+        businessType: settings.business_type,
       },
     });
   } catch (e) {

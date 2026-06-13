@@ -380,7 +380,7 @@ async function checkAvailability(args: Record<string, unknown>) {
     appointment_window: `${windowStart}–${windowEnd}, ${workDayNames}`,
     instructions:
       "Offer the highest route_score slot first. Say something like: " +
-      "'Our arborist will be in your area on [date] — would [time] work for you?' " +
+      "'We will be in your area on [date] — would [time] work for you?' " +
       `Our full appointment window is ${windowStart} to ${windowEnd}. ` +
       "If the customer asks about other times, any time within this window on a work day is valid — " +
       "these slots are just the BEST options based on route efficiency. " +

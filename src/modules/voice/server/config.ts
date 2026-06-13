@@ -6,8 +6,6 @@ export type VoiceAgentConfig = {
   workspace_id: string;
   enabled: boolean;
   agent_name: string;
-  agent_name_male: string | null;
-  agent_name_female: string | null;
   company_name: string | null;
   greeting_template: string | null;
   system_prompt: string | null;
@@ -45,8 +43,6 @@ export function defaultVoiceConfig(workspaceId: string): VoiceAgentConfig {
     workspace_id: workspaceId,
     enabled: false,
     agent_name: "AI Assistant",
-    agent_name_male: null,
-    agent_name_female: null,
     company_name: null,
     greeting_template: null,
     system_prompt: null,

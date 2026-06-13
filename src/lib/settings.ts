@@ -25,7 +25,9 @@ export type AppSettings = {
   company_name: string | null;
   company_phone: string | null;
   company_email: string | null;
+  business_type: string | null;
   salespeople: string[];
+  salesperson_titles: Record<string, string>;
   default_salesperson: string | null;
   sms_intro_template: string | null;
   sms_confirm_template: string | null;
@@ -56,7 +58,9 @@ export type AppSettingsPatch = Partial<
     | "company_name"
     | "company_phone"
     | "company_email"
+    | "business_type"
     | "salespeople"
+    | "salesperson_titles"
     | "default_salesperson"
     | "sms_intro_template"
     | "sms_confirm_template"
@@ -86,7 +90,9 @@ export function defaultSettings(workspaceId: string): AppSettings {
     company_name: null,
     company_phone: null,
     company_email: null,
+    business_type: null,
     salespeople: [],
+    salesperson_titles: {},
     default_salesperson: null,
     sms_intro_template: null,
     sms_confirm_template: null,
