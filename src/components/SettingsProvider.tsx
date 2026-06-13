@@ -93,6 +93,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           event === "SIGNED_OUT" ||
           event === "TOKEN_REFRESHED"
         ) {
+          // On sign-out, immediately clear stale workspace data so it's
+          // never shown even if the subsequent fetch fails.
+          if (event === "SIGNED_OUT") {
+            setSettings(DEFAULT_CLIENT_SETTINGS);
+            setRole(null);
+          }
           // Reset the loaded guard so subsequent SIGNED_IN events
           // also trigger a fetch (not just the first one).
           loaded.current = false;
