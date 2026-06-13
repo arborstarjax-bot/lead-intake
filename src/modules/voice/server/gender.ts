@@ -87,11 +87,9 @@ export function guessGender(firstName: string | null | undefined): GenderGuess {
 }
 
 /**
- * Select voice based on lead's detected gender.
- * Strategy: opposite gender voice for more natural conversation.
- * - Male lead → Female voice (Clara V2 — warm, professional, 30s)
- * - Female lead → Male voice (Elliot)
- * - Unknown → Default male voice (Elliot)
+ * Select voice for a lead.
+ * Currently uses Elliot (male) for all calls — non-default voices
+ * (Savannah, Clara, Tara) fail with pipeline-error when passed as overrides.
  */
 export function selectVoiceForLead(
   firstName: string | null | undefined,
@@ -105,13 +103,7 @@ export function selectVoiceForLead(
   voiceId: string;
   agentName: string;
 } {
-  const gender = guessGender(firstName);
-  if (gender === "male") {
-    // Male lead → female voice + female agent name
-    const femaleName = config?.agent_name_female || "Sarah";
-    return { provider: "vapi", voiceId: "Savannah", agentName: femaleName };
-  }
-  // Female or unknown → male voice + male agent name
+  // Use male voice (Elliot) for all calls — voice overrides cause pipeline errors
   const maleName = config?.agent_name_male || config?.agent_name || "David";
   return { provider: "vapi", voiceId: "Elliot", agentName: maleName };
 }
