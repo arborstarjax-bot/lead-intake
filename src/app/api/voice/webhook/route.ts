@@ -351,21 +351,40 @@ async function checkAvailability(args: Record<string, unknown>) {
   allSlots.sort((a, b) => b.route_score - a.route_score);
   const best = allSlots.slice(0, 3);
 
+  const windowStart = formatClock(
+    parseInt(settings.work_start_time.split(":")[0]) * 60 +
+      parseInt(settings.work_start_time.split(":")[1])
+  );
+  const windowEnd = formatClock(
+    parseInt(settings.work_end_time.split(":")[0]) * 60 +
+      parseInt(settings.work_end_time.split(":")[1])
+  );
+  const workDayNames = settings.work_days
+    .map((n: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][n])
+    .join(", ");
+
   if (best.length === 0) {
     return {
       slots: [],
+      appointment_window: `${windowStart}–${windowEnd}, ${workDayNames}`,
       message:
         "No available slots found in the next " +
         daysToCheck +
-        " work days. All time slots are booked.",
+        " work days. All time slots are booked. " +
+        `Our appointment window is ${windowStart} to ${windowEnd}, ${workDayNames}.`,
     };
   }
 
   return {
     slots: best,
+    appointment_window: `${windowStart}–${windowEnd}, ${workDayNames}`,
     instructions:
       "Offer the highest route_score slot first. Say something like: " +
-      "'Our arborist will be in your area on [date] — would [time] work for you?'",
+      "'Our arborist will be in your area on [date] — would [time] work for you?' " +
+      `Our full appointment window is ${windowStart} to ${windowEnd}. ` +
+      "If the customer asks about other times, any time within this window on a work day is valid — " +
+      "these slots are just the BEST options based on route efficiency. " +
+      "Do NOT tell the customer the window is smaller than it actually is.",
   };
 }
 
