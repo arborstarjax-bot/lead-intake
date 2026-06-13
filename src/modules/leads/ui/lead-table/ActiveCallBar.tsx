@@ -13,8 +13,13 @@ interface ActiveCall {
 }
 
 /**
- * Decode mu-law byte to 16-bit linear PCM sample.
- * Standard ITU-T G.711 mu-law expansion table.
+ * Vapi listen stream sends linear16 PCM at either 16kHz (2ch) or 8kHz (1ch).
+ * We use AudioContext at 16kHz and resample 8kHz data if needed.
+ */
+const PLAYBACK_RATE = 16000;
+
+/**
+ * Decode mu-law byte to 16-bit linear PCM sample (ITU-T G.711).
  */
 function mulawDecode(mulaw: number): number {
   mulaw = ~mulaw & 0xff;
@@ -37,6 +42,8 @@ export function ActiveCallBar() {
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const nextPlayTimeRef = useRef(0);
+  const stoppedRef = useRef(false);
+  const formatDetectedRef = useRef<"pcm16_stereo" | "pcm16_mono" | "mulaw" | null>(null);
 
   const fetchActive = useCallback(async () => {
     try {
@@ -79,6 +86,7 @@ export function ActiveCallBar() {
   }, [call]);
 
   function stopListening() {
+    stoppedRef.current = true;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -93,8 +101,10 @@ export function ActiveCallBar() {
 
   function startListening() {
     if (!call?.listen_url) return;
+    stoppedRef.current = false;
+    formatDetectedRef.current = null;
 
-    const audioCtx = new AudioContext({ sampleRate: 8000 });
+    const audioCtx = new AudioContext({ sampleRate: PLAYBACK_RATE });
     audioCtxRef.current = audioCtx;
     nextPlayTimeRef.current = audioCtx.currentTime;
 
@@ -103,13 +113,70 @@ export function ActiveCallBar() {
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
+      // Skip text frames (JSON control messages from Vapi)
+      if (typeof event.data === "string") return;
       if (!(event.data instanceof ArrayBuffer)) return;
+
       const raw = new Uint8Array(event.data);
-      const pcm = new Float32Array(raw.length);
-      for (let i = 0; i < raw.length; i++) {
-        pcm[i] = mulawDecode(raw[i]) / 32768;
+      // Skip very small frames (likely keep-alive or control)
+      if (raw.length < 160) return;
+
+      let pcm: Float32Array;
+      let sampleRate: number;
+
+      // Auto-detect format from first substantial frame
+      if (!formatDetectedRef.current) {
+        // Heuristic: if every byte is in mu-law range and frame size matches
+        // 8kHz * 20ms = 160 bytes for mu-law, or multiples thereof.
+        // PCM16 mono at 16kHz * 20ms = 640 bytes (320 samples * 2 bytes).
+        // PCM16 stereo at 16kHz * 20ms = 1280 bytes.
+        // Telephony mu-law is typically 160/320 byte frames at 8kHz.
+        const isLikelyMulaw = raw.length === 160 || raw.length === 320;
+        const isLikelyPcmStereo = raw.length % 4 === 0 && raw.length >= 1280;
+
+        if (isLikelyMulaw) {
+          formatDetectedRef.current = "mulaw";
+        } else if (isLikelyPcmStereo && raw.length >= 1280) {
+          formatDetectedRef.current = "pcm16_stereo";
+        } else {
+          // Default: treat as PCM16 mono
+          formatDetectedRef.current = "pcm16_mono";
+        }
       }
-      const buffer = audioCtx.createBuffer(1, pcm.length, 8000);
+
+      const format = formatDetectedRef.current;
+
+      if (format === "mulaw") {
+        // Mu-law 8kHz mono: each byte is one sample
+        sampleRate = 8000;
+        pcm = new Float32Array(raw.length);
+        for (let i = 0; i < raw.length; i++) {
+          pcm[i] = mulawDecode(raw[i]) / 32768;
+        }
+      } else if (format === "pcm16_stereo") {
+        // PCM s16le 16kHz stereo: mix to mono
+        sampleRate = 16000;
+        const frameCount = Math.floor(raw.length / 4);
+        pcm = new Float32Array(frameCount);
+        const view = new DataView(event.data);
+        for (let i = 0; i < frameCount; i++) {
+          const ch0 = view.getInt16(i * 4, true) / 32768;
+          const ch1 = view.getInt16(i * 4 + 2, true) / 32768;
+          pcm[i] = (ch0 + ch1) * 0.5;
+        }
+      } else {
+        // PCM s16le mono (16kHz or 8kHz — assume 16kHz)
+        sampleRate = 16000;
+        const sampleCount = Math.floor(raw.length / 2);
+        pcm = new Float32Array(sampleCount);
+        const view = new DataView(event.data);
+        for (let i = 0; i < sampleCount; i++) {
+          pcm[i] = view.getInt16(i * 2, true) / 32768;
+        }
+      }
+
+      // Create audio buffer at the detected sample rate
+      const buffer = audioCtx.createBuffer(1, pcm.length, sampleRate);
       buffer.getChannelData(0).set(pcm);
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
@@ -120,9 +187,22 @@ export function ActiveCallBar() {
       nextPlayTimeRef.current = playAt + buffer.duration;
     };
 
-    ws.onclose = () => setListening(false);
+    ws.onclose = () => {
+      if (!stoppedRef.current) {
+        // Unexpected close — try to reconnect after 1s
+        setListening(false);
+        setTimeout(() => {
+          if (!stoppedRef.current && call?.listen_url) {
+            startListening();
+          }
+        }, 1000);
+      } else {
+        setListening(false);
+      }
+    };
+
     ws.onerror = () => {
-      stopListening();
+      // Let onclose handle reconnect
     };
 
     setListening(true);
