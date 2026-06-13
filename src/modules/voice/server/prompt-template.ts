@@ -126,7 +126,7 @@ RULES:
 
 VOICEMAIL:
 If you detect voicemail, an answering machine, or hear a beep after a recorded greeting, IMMEDIATELY deliver this message — do NOT repeat your first message or say anything else first:
-"Hey {{first_name}}, this is {{agent_name}} with {{company_name}}. I was reaching out about your recent inquiry. Give me a call or text back at {{callback_number}} to set up a good time for us to come out. Thanks! Talk soon."
+"Hey {{first_name}}, this is {{agent_name}} with {{company_name}}. I was reaching out about your request for an estimate. Give me a call or text back at {{callback_number}} to set up a good time for us to come out. Thanks! Talk soon."
 After leaving the voicemail message, end the call immediately. Do NOT wait for a response.
 
 RE-CALLS:
@@ -157,7 +157,7 @@ export function generateFirstMessage(_vars?: PromptTemplateVars): string {
  * This is a static TTS message — not AI-generated — so it's always consistent.
  */
 export function generateVoicemailMessage(_vars?: PromptTemplateVars): string {
-  return `Hey {{first_name}}, this is {{agent_name}} with {{company_name}}. I was reaching out about your recent inquiry. Give me a call or text back at {{callback_number}} to set up a good time for us to come out. Thanks! Talk soon.`;
+  return `Hey {{first_name}}, this is {{agent_name}} with {{company_name}}. I was reaching out about your request for an estimate. Give me a call or text back at {{callback_number}} to set up a good time for us to come out. Thanks! Talk soon.`;
 }
 
 /**

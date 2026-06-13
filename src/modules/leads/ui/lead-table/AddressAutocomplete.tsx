@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import type { Lead, LeadPatch } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
-import { loadGoogleMaps } from "@/modules/routing/client/maps-loader";
 
 type Prediction = {
   placeId: string;
@@ -23,10 +22,8 @@ export function AddressAutocomplete({
   const [query, setQuery] = useState(lead.address ?? "");
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [open, setOpen] = useState(false);
-  const [mapsReady, setMapsReady] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
   const focused = useRef(false);
   const onPatchRef = useRef(onPatch);
   onPatchRef.current = onPatch;
@@ -34,19 +31,6 @@ export function AddressAutocomplete({
   useEffect(() => {
     if (!focused.current) setQuery(lead.address ?? "");
   }, [lead.address]);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadGoogleMaps()
-      .then(async (g) => {
-        await g.maps.importLibrary("places");
-        if (!cancelled) setMapsReady(true);
-      })
-      .catch((err) => {
-        console.warn("[AddressAutocomplete] Maps unavailable:", err);
-      });
-    return () => { cancelled = true; };
-  }, []);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -58,60 +42,28 @@ export function AddressAutocomplete({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  const fetchPredictions = useCallback(
-    async (input: string) => {
-      if (!mapsReady || !input.trim()) {
+  const fetchPredictions = useCallback(async (input: string) => {
+    if (!input.trim()) {
+      setPredictions([]);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/places/autocomplete?input=${encodeURIComponent(input)}`
+      );
+      if (!res.ok) {
         setPredictions([]);
         return;
       }
-      try {
-        if (!sessionTokenRef.current) {
-          sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
-        }
-        const service = new google.maps.places.AutocompleteService();
-        // getPlacePredictions supports both callback and promise styles.
-        // Use the callback form for maximum compatibility.
-        const preds = await new Promise<google.maps.places.AutocompletePrediction[]>(
-          (resolve, reject) => {
-            service.getPlacePredictions(
-              {
-                input,
-                componentRestrictions: { country: "us" },
-                types: ["address"],
-                sessionToken: sessionTokenRef.current ?? undefined,
-              },
-              (results, status) => {
-                if (
-                  status === google.maps.places.PlacesServiceStatus.OK &&
-                  results
-                ) {
-                  resolve(results);
-                } else if (
-                  status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS
-                ) {
-                  resolve([]);
-                } else {
-                  reject(new Error(`Places API error: ${status}`));
-                }
-              }
-            );
-          }
-        );
-        const items: Prediction[] = preds.slice(0, 5).map((p) => ({
-          placeId: p.place_id,
-          description: p.description,
-          mainText: p.structured_formatting?.main_text ?? p.description,
-          secondaryText: p.structured_formatting?.secondary_text ?? "",
-        }));
-        setPredictions(items);
-        if (items.length > 0) setOpen(true);
-      } catch (err) {
-        console.warn("[AddressAutocomplete] prediction error:", err);
-        setPredictions([]);
-      }
-    },
-    [mapsReady]
-  );
+      const data = await res.json();
+      const items: Prediction[] = data.predictions ?? [];
+      setPredictions(items);
+      if (items.length > 0) setOpen(true);
+    } catch (err) {
+      console.warn("[AddressAutocomplete] prediction error:", err);
+      setPredictions([]);
+    }
+  }, []);
 
   function onInputChange(value: string) {
     setQuery(value);
@@ -125,54 +77,25 @@ export function AddressAutocomplete({
     setQuery(pred.mainText);
 
     try {
-      const service = new google.maps.places.PlacesService(
-        document.createElement("div")
+      const res = await fetch(
+        `/api/places/details?place_id=${encodeURIComponent(pred.placeId)}`
       );
-      const details = await new Promise<google.maps.places.PlaceResult | null>(
-        (resolve) => {
-          service.getDetails(
-            {
-              placeId: pred.placeId,
-              fields: ["address_components", "formatted_address"],
-              sessionToken: sessionTokenRef.current ?? undefined,
-            },
-            (result, status) => {
-              if (status === google.maps.places.PlacesServiceStatus.OK) {
-                resolve(result);
-              } else {
-                resolve(null);
-              }
-            }
-          );
-        }
-      );
-      sessionTokenRef.current = null;
-
-      if (!details?.address_components) {
+      if (!res.ok) {
         onPatchRef.current({ address: pred.mainText });
         return;
       }
-
-      const components = details.address_components;
-      const get = (type: string) =>
-        components.find((c) => c.types.includes(type));
-
-      const streetNumber = get("street_number")?.long_name ?? "";
-      const route = get("route")?.long_name ?? "";
-      const street = [streetNumber, route].filter(Boolean).join(" ");
-      const city =
-        get("locality")?.long_name ??
-        get("sublocality_level_1")?.long_name ??
-        "";
-      const state = get("administrative_area_level_1")?.short_name ?? "";
-      const zip = get("postal_code")?.long_name ?? "";
-
-      const patch: LeadPatch = { address: street || pred.mainText };
-      if (city) patch.city = city;
-      if (state) patch.state = state;
-      if (zip) patch.zip = zip;
-      onPatchRef.current(patch);
-      setQuery(street || pred.mainText);
+      const data = await res.json();
+      if (data.parts) {
+        const street = data.parts.street || pred.mainText;
+        const patch: LeadPatch = { address: street };
+        if (data.parts.city) patch.city = data.parts.city;
+        if (data.parts.state) patch.state = data.parts.state;
+        if (data.parts.zip) patch.zip = data.parts.zip;
+        onPatchRef.current(patch);
+        setQuery(street);
+      } else {
+        onPatchRef.current({ address: pred.mainText });
+      }
     } catch {
       onPatchRef.current({ address: pred.mainText });
     }
@@ -215,9 +138,7 @@ export function AddressAutocomplete({
           title={lowConf ? `Low confidence (${Math.round((conf ?? 0) * 100)}%)` : undefined}
           autoComplete="off"
         />
-        {mapsReady && (
-          <MapPin className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--subtle)] pointer-events-none" />
-        )}
+        <MapPin className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--subtle)] pointer-events-none" />
       </div>
       {open && predictions.length > 0 && (
         <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-[var(--border)] rounded-xl shadow-lg overflow-hidden">
