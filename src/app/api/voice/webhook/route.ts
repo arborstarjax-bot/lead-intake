@@ -419,6 +419,16 @@ async function bookAppointment(args: Record<string, unknown>) {
 
   const workspaceId = lead.workspace_id as string;
   const settings = await getSettings(workspaceId);
+
+  // Validate date is not in the past and not more than 90 days out
+  const todayStr = todayIsoInBusinessTz(settings.timezone);
+  if (date < todayStr) {
+    return { error: `Date ${date} is in the past. Please offer a future date.` };
+  }
+  const maxDate = addDaysToBusinessTzIso(todayStr, 90, settings.timezone);
+  if (date > maxDate) {
+    return { error: `Date ${date} is more than 90 days in the future. Please offer a date within the next 90 days.` };
+  }
   const minGap = settings.min_time_between_appointments;
 
   // Double-booking check — same logic as the leads/[id] PUT route

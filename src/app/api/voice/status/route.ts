@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getCallByVapiId, updateCall } from "@/modules/voice/server";
 import { sendWorkspacePush } from "@/lib/push";
+import { getSettings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 
@@ -238,11 +239,15 @@ async function advanceCampaign(
   const results = (campaign.results as Array<Record<string, unknown>>) ?? [];
   results.push({ lead_id: completedLeadId, name: leadName, outcome, summary });
 
-  const completedCount = results.length;
+  const currentCount = (campaign.completed_leads as number) ?? 0;
+  const completedCount = currentCount + 1;
   const nextIdx = currentIdx + 1;
   const isFinished = nextIdx >= queue.length;
 
-  await supabase
+  // Atomic update: only the first invocation wins by requiring completed_leads
+  // hasn't been incremented yet. Prevents duplicate calls from race conditions
+  // when Vapi sends duplicate end-of-call-report webhooks.
+  const { data: updatedRows } = await supabase
     .from("ai_campaigns")
     .update({
       completed_leads: completedCount,
@@ -251,7 +256,12 @@ async function advanceCampaign(
       status: isFinished ? "completed" : "running",
       updated_at: new Date().toISOString(),
     })
-    .eq("id", campaign.id);
+    .eq("id", campaign.id)
+    .eq("completed_leads", currentCount)
+    .select("id");
+
+  // If 0 rows updated, another invocation already advanced — bail out
+  if (!updatedRows || updatedRows.length === 0) return;
 
   if (isFinished) {
     // Send completion notification
@@ -275,6 +285,23 @@ async function advanceCampaign(
     .eq("id", campaign.id)
     .maybeSingle();
   if (refreshed?.status !== "running") return;
+
+  // Respect work_days/calling hours — pause campaign if outside window
+  const settings = await getSettings(workspaceId);
+  if (!isWithinCallWindow(settings)) {
+    await supabase
+      .from("ai_campaigns")
+      .update({ status: "paused", updated_at: new Date().toISOString() })
+      .eq("id", campaign.id);
+    sendWorkspacePush({
+      workspaceId,
+      title: "Campaign Paused",
+      body: "Outside calling hours — campaign will resume during next work window.",
+      url: "/leads",
+      tag: `campaign-${campaign.id}`,
+    }).catch(() => {});
+    return;
+  }
 
   // Trigger next call
   const nextLeadId = queue[nextIdx];
@@ -426,4 +453,41 @@ async function queueFollowUp(
     scheduled_at: scheduledAt,
     priority: reason === "voicemail" ? 3 : 5,
   });
+}
+
+function isWithinCallWindow(settings: {
+  work_start_time: string;
+  work_end_time: string;
+  work_days: number[];
+  timezone: string;
+}): boolean {
+  const now = new Date();
+  const tz = settings.timezone;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const dayFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "short",
+  });
+
+  const timeStr = formatter.format(now);
+  const dayStr = dayFormatter.format(now);
+
+  const dayMap: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+  };
+  const dayNum = dayMap[dayStr] ?? 0;
+
+  const start = settings.work_start_time.slice(0, 5);
+  const end = settings.work_end_time.slice(0, 5);
+
+  if (!settings.work_days.includes(dayNum)) return false;
+  if (timeStr < start) return false;
+  if (timeStr >= end) return false;
+
+  return true;
 }
