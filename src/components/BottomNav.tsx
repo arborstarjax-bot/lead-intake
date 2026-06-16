@@ -63,7 +63,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary"
-      className="md:hidden sticky bottom-0 inset-x-0 z-[9999] border-t border-[var(--border)] bg-white shrink-0"
+      className="md:hidden sticky bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-white shrink-0"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
