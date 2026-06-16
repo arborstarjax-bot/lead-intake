@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { loadGoogleMaps } from "../client/maps-loader";
 
 export type RouteMapStop = {
@@ -422,21 +422,53 @@ export default function RouteMap({
     // need to be declared here.
   }, [selectedLeg, previewing, status]);
 
+  const [mapExpanded, setMapExpanded] = useState(false);
+
+  const toggleMap = useCallback(() => {
+    setMapExpanded((prev) => !prev);
+    // Trigger a resize so Google Maps re-renders tiles for the new container
+    // size. Without this the map can show grey tiles after expanding.
+    setTimeout(() => {
+      if (mapRef.current) {
+        window.google?.maps?.event?.trigger(mapRef.current, "resize");
+      }
+    }, 350);
+  }, []);
+
   return (
-    <div className="relative w-full h-[60vh] min-h-[320px] rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-2)]">
-      <div ref={containerRef} className="absolute inset-0" />
-      {status === "loading" && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted)] gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading map…
-        </div>
-      )}
-      {status === "error" && (
-        <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
-          <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 max-w-md">
-            {errorMessage ?? "Couldn't load Google Maps."}
+    <div className="relative">
+      <div
+        className={`relative w-full rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-2)] transition-[height] duration-300 ease-in-out ${
+          mapExpanded
+            ? "h-[60vh] min-h-[320px]"
+            : "h-[200px] md:h-[55vh] md:min-h-[320px]"
+        }`}
+      >
+        <div ref={containerRef} className="absolute inset-0" />
+        {status === "loading" && (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted)] gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading map…
           </div>
-        </div>
-      )}
+        )}
+        {status === "error" && (
+          <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
+            <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 max-w-md">
+              {errorMessage ?? "Couldn't load Google Maps."}
+            </div>
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={toggleMap}
+        className="md:hidden mx-auto -mt-3 relative z-10 flex items-center gap-1 rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-medium text-[var(--muted)] shadow-sm active:scale-95 transition"
+      >
+        {mapExpanded ? (
+          <><ChevronUp className="h-3 w-3" /> Collapse map</>
+        ) : (
+          <><ChevronDown className="h-3 w-3" /> Expand map</>
+        )}
+      </button>
     </div>
   );
 }
