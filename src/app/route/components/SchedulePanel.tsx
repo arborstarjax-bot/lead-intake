@@ -22,7 +22,6 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useConfirm } from "@/components/ConfirmDialog";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
 import {
@@ -32,7 +31,6 @@ import {
 import {
   formatClock,
   formatDateLong,
-  handleCalendarDisconnected,
   type Half,
   type RouteResponse,
   type Slot,
@@ -165,7 +163,6 @@ export function SchedulePanel({
   const [customTime, setCustomTime] = useState<string>("");
   const [flexWindow, setFlexWindow] = useState<LeadFlexWindow | null>(null);
 
-  const confirmDialog = useConfirm();
   const requestIdRef = useRef(0);
 
   const stops = useMemo(() => routeData?.stops ?? [], [routeData]);
@@ -327,6 +324,7 @@ export function SchedulePanel({
           scheduled_time: previewSlot.startTime,
           scheduled_day: selectedDay,
           flex_window: null,
+          status: "Scheduled",
         },
         { updated_at: leadUpdatedAt },
         headers
@@ -344,8 +342,7 @@ export function SchedulePanel({
       }
       const calRes = await fetch(`/api/leads/${leadId}/calendar`, { method: "POST" });
       const calJson = await calRes.json();
-      if (await handleCalendarDisconnected(calRes, calJson, confirmDialog)) return;
-      if (!calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
+      if (calRes.status !== 428 && !calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
       onBooked(`Booked ${leadLabel} at ${formatClock(previewSlot.startTime)}`);
     } catch (e) {
       setError((e as Error).message);
@@ -365,6 +362,7 @@ export function SchedulePanel({
           scheduled_day: selectedDay,
           scheduled_time: null,
           flex_window: flexWindow,
+          status: "Scheduled",
         },
         { updated_at: leadUpdatedAt }
       );

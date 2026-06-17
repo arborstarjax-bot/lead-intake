@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import type { Lead } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/components/Toast";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { SmsPickerModal } from "@/modules/leads";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
@@ -60,7 +59,6 @@ export default function ScheduleModal({
   onClose: () => void;
   onBooked: (updatedLead: Lead, htmlLink?: string) => void;
 }) {
-  const { toast } = useToast();
   // Path A vs Path B is determined by whether the lead already has a day.
   // Once in the modal, the user can also jump back from Path A's day view
   // to the week picker to override the customer's requested day.
@@ -193,6 +191,7 @@ export default function ScheduleModal({
       const patchBody: Record<string, string> = {
         scheduled_time: slot.startTime,
         scheduled_day: selectedDay,
+        status: "Scheduled",
       };
       const patchRes = await patchLead(
         lead.id,
@@ -218,27 +217,17 @@ export default function ScheduleModal({
         throw new Error(formatLeadPatchError(patchRes, patchJson, "Failed to set time"));
       }
 
+      let htmlLink: string | undefined;
       const calRes = await fetch(`/api/leads/${lead.id}/calendar`, { method: "POST" });
       const calJson = await calRes.json();
       if (calRes.status === 428) {
-        toast({
-          kind: "info",
-          message: "Google Calendar isn't connected.",
-          duration: 6000,
-          action: {
-            label: "Connect",
-            onClick: () => {
-              window.location.href = calJson.connectUrl;
-            },
-          },
-        });
-        return;
+        // Calendar not connected — silently skip, booking is already saved
+      } else if (!calRes.ok) {
+        throw new Error(calJson.error ?? "Calendar sync failed");
+      } else {
+        htmlLink = calJson.htmlLink;
       }
-      if (!calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
 
-      // Re-fetch so the UI reflects status=Scheduled and calendar_event_id,
-      // which the calendar endpoint writes but the earlier PATCH response
-      // doesn't include.
       const freshRes = await fetch(`/api/leads`);
       let updated: Lead = patchJson.lead as Lead;
       if (freshRes.ok) {
@@ -246,14 +235,11 @@ export default function ScheduleModal({
         const found = (freshJson.leads as Lead[]).find((l) => l.id === lead.id);
         if (found) updated = found;
       }
-      // Fire the parent update so the leads list and today's route refresh
-      // immediately, then flip the modal to the SMS confirm step instead of
-      // closing. The user closes manually when they're done with the text.
-      onBooked(updated, calJson.htmlLink);
+      onBooked(updated, htmlLink);
       setBooked({
         day: selectedDay,
         time: slot.startTime,
-        htmlLink: calJson.htmlLink,
+        htmlLink,
       });
     } catch (e) {
       setError((e as Error).message);
@@ -270,6 +256,7 @@ export default function ScheduleModal({
       const patchBody: Record<string, string> = {
         scheduled_time: timingConflict.slot.startTime,
         scheduled_day: selectedDay,
+        status: "Scheduled",
       };
       const patchRes = await patchLead(
         lead.id,
@@ -282,22 +269,16 @@ export default function ScheduleModal({
         throw new Error(formatLeadPatchError(patchRes, patchJson, "Failed to override"));
       }
 
+      let htmlLink: string | undefined;
       const calRes = await fetch(`/api/leads/${lead.id}/calendar`, { method: "POST" });
       const calJson = await calRes.json();
       if (calRes.status === 428) {
-        toast({
-          kind: "info",
-          message: "Google Calendar isn't connected.",
-          duration: 6000,
-          action: {
-            label: "Connect",
-            onClick: () => { window.location.href = calJson.connectUrl; },
-          },
-        });
-        setTimingConflict(null);
-        return;
+        // Calendar not connected — silently skip, booking is already saved
+      } else if (!calRes.ok) {
+        throw new Error(calJson.error ?? "Calendar sync failed");
+      } else {
+        htmlLink = calJson.htmlLink;
       }
-      if (!calRes.ok) throw new Error(calJson.error ?? "Calendar sync failed");
 
       const freshRes = await fetch(`/api/leads`);
       let updated: Lead = patchJson.lead as Lead;
@@ -306,11 +287,11 @@ export default function ScheduleModal({
         const found = (freshJson.leads as Lead[]).find((l) => l.id === lead.id);
         if (found) updated = found;
       }
-      onBooked(updated, calJson.htmlLink);
+      onBooked(updated, htmlLink);
       setBooked({
         day: selectedDay,
         time: timingConflict.slot.startTime,
-        htmlLink: calJson.htmlLink,
+        htmlLink,
       });
       setTimingConflict(null);
     } catch (e) {
