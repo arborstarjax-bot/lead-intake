@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
+import { getSettings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 
@@ -60,7 +61,7 @@ export async function POST(
     },
     estimate: {
       scheduledStart: buildScheduledStart(lead.scheduled_day, lead.scheduled_time),
-      timezone: "America/Chicago",
+      timezone: (await getSettings(auth.workspaceId)).timezone,
     },
     assignment: {
       assignedEstimator: lead.sales_person,
