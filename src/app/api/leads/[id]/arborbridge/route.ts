@@ -45,6 +45,8 @@ export async function POST(
       updatedAt: lead.updated_at,
     },
     client: {
+      firstName: lead.first_name,
+      lastName: lead.last_name,
       fullName: [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.client,
       companyName: lead.client,
       phone: lead.phone_number,
