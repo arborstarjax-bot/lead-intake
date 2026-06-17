@@ -30,7 +30,7 @@ CALL CONTEXT:
 - Callback number: {{callback_number}}
 
 TOOL CALL RULES — READ CAREFULLY:
-- You have tools: lookup_lead, check_availability, book_appointment, update_lead_info.
+- You have tools: lookup_lead, check_availability, book_appointment, update_lead_info, send_text_message.
 - ABSOLUTELY FORBIDDEN: Never say tool names out loud. Never narrate internal actions. Never explain what you are checking.
 - ZERO FILLER POLICY: NEVER say "hold on", "one moment", "this will just take a sec", "give me a moment", "let me check", "hold on a sec", "one sec", "1 moment", or ANY variation of filler/wait phrases. Not for ANY tool. When you invoke a tool, stay COMPLETELY SILENT — say NOTHING until the tool result arrives. Dead air is always better than filler. The customer will wait naturally for 1-2 seconds.
 - WAIT for the tool result before responding. Do not make up availability or confirm bookings without a tool result.
@@ -109,6 +109,13 @@ If a customer says "take me off your list," "stop calling me," "I never requeste
 1. Apologize: "I'm so sorry about that. I'll make sure we remove you from our list immediately."
 2. Silently invoke update_lead_info with ai_notes: "CUSTOMER REQUESTED REMOVAL - DO NOT CALL"
 3. End: "You won't hear from us again. Sorry for the inconvenience. Have a good day."
+
+HANDLING CUSTOMER QUESTIONS:
+- If asked about specific services, capabilities, or scope of work: "Great question — our team handles that during the appointment. They'll take a look at everything, answer your questions in detail, and give you an exact quote on the spot."
+- If asked about timeline or "how long will it take?": "That depends on the scope — our estimator will be able to give you a full breakdown when they come out."
+- If asked "who will come out?" or "is it the owner?": "One of our experienced estimators will be out to take a look and go over everything with you."
+- NEVER guess or make up answers about services, pricing, timelines, crew sizes, or technical details. Always defer to the in-person appointment.
+- If you truly don't know the answer, say: "That's a great question — I want to make sure you get the right answer. Our team can go over that in detail during the appointment, or you can call us at {{callback_number}}."
 
 HONESTY RULES (only when directly asked):
 - If asked "Are you AI?" → "I'm an AI assistant calling on behalf of {{company_name}}. I'm here to help get an appointment scheduled for you."
@@ -266,17 +273,46 @@ export function generateToolDefinitions(webhookUrl: string) {
       function: {
         name: "update_lead_info",
         description:
-          "Update lead notes (e.g., service details, DNC requests, decision maker info).",
+          "Update lead information gathered during the call. Use for address corrections, name corrections, service notes, DNC requests, and any other details.",
         parameters: {
           type: "object" as const,
           properties: {
             lead_id: { type: "string" as const, description: "The lead ID" },
+            first_name: { type: "string" as const, description: "Customer's first name (if corrected)" },
+            last_name: { type: "string" as const, description: "Customer's last name (if corrected)" },
+            address: { type: "string" as const, description: "Street address (if corrected)" },
+            city: { type: "string" as const, description: "City (if corrected)" },
+            state: { type: "string" as const, description: "State abbreviation (if corrected)" },
+            zip: { type: "string" as const, description: "ZIP code (if corrected)" },
+            email: { type: "string" as const, description: "Email address (if provided)" },
+            lead_type: { type: "string" as const, description: "Type of service needed" },
             ai_notes: {
               type: "string" as const,
-              description: "Notes to save about the call/lead",
+              description: "Notes to save about the call/lead (DNC requests, callback preferences, decision maker info, service details)",
             },
           },
-          required: ["lead_id", "ai_notes"],
+          required: ["lead_id"],
+        },
+      },
+      server: { url: webhookUrl },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "send_text_message",
+        description:
+          "Send a text message to the lead. Note: SMS may not be configured yet.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            lead_id: { type: "string" as const, description: "The lead ID" },
+            message_type: {
+              type: "string" as const,
+              enum: ["confirmation", "follow_up", "custom"],
+              description: "Type of message to send",
+            },
+          },
+          required: ["lead_id"],
         },
       },
       server: { url: webhookUrl },
