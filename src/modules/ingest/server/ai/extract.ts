@@ -87,6 +87,7 @@ Rules:
     "Facebook", "Craigslist", "Instagram",
     "Text Message", "Google Ads",
     "Website Form", "Nextdoor", "Thumbtack", "Angi",
+    "Close AI", "Certified Lead Kings",
     "Email", "Referral", "Direct Mail", "Other"
   If the source is uncertain, return your best guess with a lower confidence.
   Only return null if you truly cannot determine the source at all.

@@ -16,6 +16,8 @@ const SOURCE_STYLES: Record<string, { bg: string; fg: string; border: string }> 
   Nextdoor:              { bg: "bg-lime-50",    fg: "text-lime-700",   border: "border-lime-200" },
   Thumbtack:             { bg: "bg-orange-50",  fg: "text-orange-700", border: "border-orange-200" },
   Angi:                  { bg: "bg-red-50",     fg: "text-red-700",    border: "border-red-200" },
+  "Close AI":            { bg: "bg-purple-50",  fg: "text-purple-700", border: "border-purple-200" },
+  "Certified Lead Kings":{ bg: "bg-amber-50",   fg: "text-amber-700",  border: "border-amber-200" },
   Email:                 { bg: "bg-sky-50",     fg: "text-sky-700",    border: "border-sky-200" },
   Referral:              { bg: "bg-indigo-50",  fg: "text-indigo-700", border: "border-indigo-200" },
   "Direct Mail":         { bg: "bg-cyan-50",    fg: "text-cyan-700",   border: "border-cyan-200" },

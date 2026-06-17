@@ -57,6 +57,8 @@ export const LEAD_SOURCES = [
   "Nextdoor",
   "Thumbtack",
   "Angi",
+  "Close AI",
+  "Certified Lead Kings",
   "Email",
   "Referral",
   "Direct Mail",
