@@ -64,6 +64,9 @@ function buildPendingLead(): Lead {
     ai_last_call_status: null,
     ai_notes: null,
     ai_do_not_call: null,
+    arborbridge_status: null,
+    arborbridge_record_id: null,
+    arborbridge_last_pushed_at: null,
   };
 }
 

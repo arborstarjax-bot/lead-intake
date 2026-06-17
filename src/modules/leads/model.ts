@@ -180,6 +180,9 @@ export type Lead = {
   ai_last_call_status: string | null;
   ai_notes: string | null;
   ai_do_not_call: boolean | null;
+  arborbridge_status: "not_pushed" | "pushed_to_arborbridge" | "push_failed" | null;
+  arborbridge_record_id: string | null;
+  arborbridge_last_pushed_at: string | null;
 };
 
 /* ── Outcome reason tracking (Lost / Not Sold) ───────────────── */
