@@ -54,7 +54,8 @@ import { AddressInput } from "@/components/AddressInput";
 export default function SettingsPage() {
   const { toast } = useToast();
   const { settings: ctxSettings, role, apply } = useAppSettings();
-  const canEdit = role === "admin";
+  const isAdmin = role === "admin";
+  const canEdit = role === "admin" || role === "user";
 
   const [loading, setLoading] = useState(true);
   const [s, setS] = useState<ClientAppSettings>(DEFAULT_CLIENT_SETTINGS);
@@ -188,7 +189,11 @@ export default function SettingsPage() {
         }
       />
 
-      {!canEdit && role === "user" ? (
+      {!isAdmin && canEdit ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 text-blue-800 text-sm px-3 py-2">
+          You can edit lead sources. Other settings require admin access.
+        </div>
+      ) : !canEdit && role === "user" ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm px-3 py-2">
           Only workspace admins can change settings. Ask an admin to make
           edits on your behalf.
@@ -199,7 +204,7 @@ export default function SettingsPage() {
       <IntegrationsPanel />
 
       {/* AI Voice Agent */}
-      <VoiceAgentPanel ref={voiceRef} canEdit={canEdit} onDirtyChange={checkVoiceDirty} />
+      <VoiceAgentPanel ref={voiceRef} canEdit={isAdmin} onDirtyChange={checkVoiceDirty} />
 
       {/* Company info */}
       <Panel

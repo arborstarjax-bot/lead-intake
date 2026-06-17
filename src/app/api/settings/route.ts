@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSettings, updateSettings, type AppSettingsPatch } from "@/lib/settings";
-import { requireMembership, requireAdmin } from "@/modules/auth/server";
+import { requireMembership } from "@/modules/auth/server";
 
 export const dynamic = "force-dynamic";
 
@@ -79,8 +79,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  // Only admins can persist settings. Regular members still read via GET.
-  const auth = await requireAdmin();
+  // Any workspace member can update lead_sources; all other fields require admin.
+  const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
 
   let parsed;
@@ -90,6 +90,18 @@ export async function PUT(req: Request) {
   } catch (e) {
     const msg = e instanceof z.ZodError ? e.issues.map((i) => i.message).join("; ") : "invalid body";
     return NextResponse.json({ error: msg }, { status: 400 });
+  }
+
+  if (auth.role !== "admin") {
+    const nonAdminAllowed: (keyof typeof parsed)[] = ["lead_sources"];
+    for (const key of Object.keys(parsed) as (keyof typeof parsed)[]) {
+      if (!nonAdminAllowed.includes(key)) {
+        return NextResponse.json(
+          { error: "Only admins can change this setting" },
+          { status: 403 }
+        );
+      }
+    }
   }
 
   // work_end_time must be strictly after work_start_time when both present.
