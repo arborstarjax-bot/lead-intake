@@ -140,10 +140,34 @@ export async function getSettings(workspaceId: string): Promise<AppSettings> {
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (error || !data) return defaultSettings(workspaceId);
-  return {
+  const merged = {
     ...defaultSettings(workspaceId),
     ...(data as Partial<AppSettings>),
   } as AppSettings;
+
+  // Ensure new default lead sources appear in existing workspaces that
+  // were created before these sources were added.
+  const defaults = defaultSettings(workspaceId);
+  const storedLower = new Set(merged.lead_sources.map((s) => s.toLowerCase()));
+  const missing = defaults.lead_sources.filter(
+    (s) => !storedLower.has(s.toLowerCase())
+  );
+  if (missing.length > 0) {
+    const otherIdx = merged.lead_sources.findIndex(
+      (s) => s.toLowerCase() === "other"
+    );
+    if (otherIdx >= 0) {
+      merged.lead_sources = [
+        ...merged.lead_sources.slice(0, otherIdx),
+        ...missing,
+        ...merged.lead_sources.slice(otherIdx),
+      ];
+    } else {
+      merged.lead_sources = [...merged.lead_sources, ...missing];
+    }
+  }
+
+  return merged;
 }
 
 export async function updateSettings(
