@@ -40,6 +40,7 @@ import { AiCallHistory } from "./AiCallHistory";
 import { formatDateHuman, formatScheduleDisplay, buildNavigationHref, templateVars } from "./lead-table-helpers";
 import { logContactActivity } from "./LifecycleTimeline";
 import { SmsPickerModal } from "./SmsPickerModal";
+import { ArborBridgeButton } from "./ArborBridgeButton";
 
 export function LeadCard({
   lead,
@@ -169,6 +170,7 @@ export function LeadCard({
                   View original screenshot
                 </a>
               )}
+              <ArborBridgeButton lead={lead} onDone={() => setMenuOpen(false)} />
               <button
                 onClick={() => {
                   setMenuOpen(false);
