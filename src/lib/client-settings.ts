@@ -78,6 +78,7 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
     "Nextdoor",
     "Thumbtack",
     "Angi",
+    "SingleOps",
     "Craigslist",
     "Email",
     "Referral",
