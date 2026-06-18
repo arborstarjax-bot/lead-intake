@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
+import { getSettings } from "@/lib/settings";
 import { TASK_EDITABLE_COLUMNS, nextOccurrenceDate } from "@/modules/tasks/model";
+import { syncCompletionToSingleOps } from "@/lib/singleops-sync";
 
 export const runtime = "nodejs";
 
@@ -38,7 +40,7 @@ export async function PATCH(
   // Verify ownership
   const { data: existing } = await supabase
     .from("tasks")
-    .select("id, status, recurrence_rule, parent_task_id, start_at, end_at, name, notes, address, city, state, zip, assignee, recurrence_end_date, recurrence_end_count, occurrence_index")
+    .select("id, status, recurrence_rule, parent_task_id, start_at, end_at, name, notes, address, city, state, zip, assignee, recurrence_end_date, recurrence_end_count, occurrence_index, singleops_task_id")
     .eq("id", id)
     .eq("workspace_id", auth.workspaceId)
     .maybeSingle();
@@ -112,6 +114,29 @@ export async function PATCH(
           });
         }
       }
+    }
+  }
+
+  // Push task completion to SingleOps if the task has a sync ID
+  if (
+    updates.status === "Completed" &&
+    existing.status !== "Completed" &&
+    existing.singleops_task_id
+  ) {
+    try {
+      const settings = await getSettings(auth.workspaceId);
+      if (settings.auto_sync_to_singleops) {
+        void syncCompletionToSingleOps(
+          {
+            leadId: id,
+            clientName: existing.name as string,
+            singleopsTaskId: existing.singleops_task_id as string,
+          },
+          auth.workspaceId,
+        ).catch(() => {});
+      }
+    } catch {
+      // Non-blocking
     }
   }
 
