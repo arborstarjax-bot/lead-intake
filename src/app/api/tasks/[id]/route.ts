@@ -3,7 +3,7 @@ import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
 import { getSettings } from "@/lib/settings";
 import { TASK_EDITABLE_COLUMNS, nextOccurrenceDate } from "@/modules/tasks/model";
-import { syncCompletionToSingleOps } from "@/lib/singleops-sync";
+import { syncCompletionToSingleOps, syncScheduleToSingleOps } from "@/lib/singleops-sync";
 
 export const runtime = "nodejs";
 
@@ -114,6 +114,35 @@ export async function PATCH(
           });
         }
       }
+    }
+  }
+
+  // Push task reschedule to SingleOps if start_at changed
+  if (
+    updates.start_at &&
+    existing.singleops_task_id &&
+    String(updates.start_at) !== String(existing.start_at)
+  ) {
+    try {
+      const settings = await getSettings(auth.workspaceId);
+      if (settings.auto_sync_to_singleops) {
+        const newStart = new Date(updates.start_at as string);
+        const scheduledDate = newStart.toISOString().split("T")[0];
+        const scheduledTime = `${String(newStart.getHours()).padStart(2, "0")}:${String(newStart.getMinutes()).padStart(2, "0")}`;
+        void syncScheduleToSingleOps(
+          {
+            leadId: id,
+            clientName: existing.name as string,
+            singleopsTaskId: existing.singleops_task_id as string,
+            scheduledDate,
+            scheduledTime,
+            timezone: "America/New_York",
+          },
+          auth.workspaceId,
+        ).catch(() => {});
+      }
+    } catch {
+      // Non-blocking
     }
   }
 
