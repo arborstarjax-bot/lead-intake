@@ -219,11 +219,19 @@ export function LeadCard({
               </span>
             </>
           )}
+          {lead.arborbridge_status === "pushed_to_arborbridge" && (
+            <>
+              <span className="text-[var(--subtle)]">·</span>
+              <span className="inline-flex items-center gap-1 text-blue-600 font-medium">
+                ↗ Pushed to SingleOps
+              </span>
+            </>
+          )}
           {lead.calendar_sync_status === "synced" && (
             <>
               <span className="text-[var(--subtle)]">·</span>
               <span className="inline-flex items-center gap-1 text-green-600 font-medium">
-                synced
+                ↙ Synced from SingleOps
               </span>
             </>
           )}
