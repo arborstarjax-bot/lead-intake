@@ -8,6 +8,7 @@ import {
 } from "@/modules/shared/format";
 import { sendWorkspacePush } from "@/lib/push";
 import { getSettings } from "@/lib/settings";
+import { syncCompletionToSingleOps } from "@/lib/singleops-sync";
 import { detectLeadSource } from "./detect-lead-source";
 
 export const runtime = "nodejs";
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
       if (entry.sourceLeadId) {
         const { data } = await supabase
           .from("leads")
-          .select("id, status, scheduled_day, scheduled_time, sales_person, lead_source, lead_type")
+          .select("id, status, scheduled_day, scheduled_time, sales_person, lead_source, lead_type, singleops_task_id")
           .eq("workspace_id", workspaceId)
           .eq("id", entry.sourceLeadId)
           .maybeSingle();
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
         // Try matching by client name + scheduled date
         const { data } = await supabase
           .from("leads")
-          .select("id, status, scheduled_day, scheduled_time, sales_person, lead_source, lead_type")
+          .select("id, status, scheduled_day, scheduled_time, sales_person, lead_source, lead_type, singleops_task_id")
           .eq("workspace_id", workspaceId)
           .ilike("client", client)
           .eq("scheduled_day", entry.scheduledDate)
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
         // (could be a reschedule — don't create a duplicate)
         const { data: clientMatch } = await supabase
           .from("leads")
-          .select("id, status, scheduled_day, scheduled_time, sales_person, calendar_sync_status, lead_source, lead_type")
+          .select("id, status, scheduled_day, scheduled_time, sales_person, calendar_sync_status, lead_source, lead_type, singleops_task_id")
           .eq("workspace_id", workspaceId)
           .ilike("client", client)
           .order("created_at", { ascending: false })
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // Leads in terminal states (Completed, Pending, Lost) should not
+        // Leads in terminal states (Completed, Pending, Lost, Sold) should not
         // have their schedule, rep, or address overwritten by a re-sync.
         // Only update the task-id mapping and sync timestamp so we can
         // still track the link back to SingleOps.
@@ -192,12 +193,33 @@ export async function POST(req: NextRequest) {
             calendar_sync_status: "synced",
             calendar_sync_at: new Date().toISOString(),
           };
+          const taskId = entry.singleopsTaskId || existingLead.singleops_task_id;
           if (entry.singleopsTaskId) touchUpdates.singleops_task_id = entry.singleopsTaskId;
           await supabase
             .from("leads")
             .update(touchUpdates)
             .eq("id", existingLead.id)
             .eq("workspace_id", workspaceId);
+
+          // Push completion back to SingleOps if the task is still active there.
+          // The entry from SingleOps won't have a completed jobStatus if it's
+          // still green on the calendar — so we need to tell ArborBridge to
+          // mark it complete.
+          const singleopsStillActive =
+            !entry.jobStatus?.toLowerCase().includes("complete") &&
+            entry.changeType !== "completed";
+          if (taskId && singleopsStillActive) {
+            void syncCompletionToSingleOps(
+              {
+                leadId: existingLead.id,
+                clientName: client,
+                singleopsTaskId: taskId,
+              },
+              workspaceId,
+            ).catch(() => {});
+            completedLeadNames.push(client);
+          }
+
           synced++;
           continue;
         }
