@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
   let failed = 0;
   const errors: string[] = [];
   const newLeadNames: string[] = [];
+  const rescheduledLeadNames: string[] = [];
   const detectedSources = new Set<string>();
 
   for (const entry of entries) {
@@ -191,6 +192,13 @@ export async function POST(req: NextRequest) {
           .eq("id", existingLead.id)
           .eq("workspace_id", workspaceId);
 
+        // Track schedule changes for push notifications
+        const dateChanged = existingLead.scheduled_day !== entry.scheduledDate;
+        const timeChanged = entry.scheduledTime && existingLead.scheduled_time !== entry.scheduledTime;
+        if (dateChanged || timeChanged) {
+          rescheduledLeadNames.push(client);
+        }
+
         synced++;
       } else {
         // Create a new lead card
@@ -295,6 +303,24 @@ export async function POST(req: NextRequest) {
         body,
         url: "/leads",
         tag: "calendar-sync",
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  // Send push notification for rescheduled leads
+  if (rescheduledLeadNames.length > 0) {
+    try {
+      const body = rescheduledLeadNames.length === 1
+        ? `${rescheduledLeadNames[0]} — schedule updated from SingleOps`
+        : `${rescheduledLeadNames.length} leads rescheduled from SingleOps`;
+      await sendWorkspacePush({
+        workspaceId,
+        title: "Schedule Change",
+        body,
+        url: "/leads",
+        tag: "calendar-sync-reschedule",
       });
     } catch {
       // Non-blocking
