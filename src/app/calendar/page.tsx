@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, RefreshCw, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -13,6 +13,22 @@ import {
   normalizeSalespersonKey,
   UNASSIGNED_LABEL,
 } from "@/lib/salesperson-color";
+
+/** Drag-and-drop state for calendar items */
+interface DragState {
+  type: "lead" | "task";
+  id: string;
+  /** Original day ISO string */
+  originDay: string;
+  /** Original time (HH:MM) */
+  originTime: string | null;
+}
+
+interface DropTarget {
+  dayIso: string;
+  hour: number;
+  minute: number;
+}
 
 type CalendarView = "month" | "week";
 
@@ -56,6 +72,9 @@ export default function CalendarPage() {
   // Sync Now state
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  // Drag-and-drop state
+  const [dragItem, setDragItem] = useState<DragState | null>(null);
+  const [dropping, setDropping] = useState(false);
 
   // Salesperson filter. Default is "View all" so a new workspace sees the
   // same calendar as before this feature shipped.
@@ -193,6 +212,47 @@ export default function CalendarPage() {
     }
     return byDay;
   }, [tasks]);
+
+  const handleDrop = useCallback(async (target: DropTarget) => {
+    if (!dragItem || dropping) return;
+    setDropping(true);
+    try {
+      const newTime = `${String(target.hour).padStart(2, "0")}:${String(target.minute).padStart(2, "0")}`;
+      if (dragItem.type === "lead") {
+        await fetch(`/api/leads/${dragItem.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scheduled_day: target.dayIso,
+            scheduled_time: newTime,
+          }),
+        });
+      } else {
+        // Task: compute new start_at and end_at
+        const existingTask = tasks.find((t) => t.id === dragItem.id);
+        const durationMs = existingTask
+          ? new Date(existingTask.end_at).getTime() - new Date(existingTask.start_at).getTime()
+          : 60 * 60 * 1000;
+        const [y, m, d] = target.dayIso.split("-").map(Number);
+        const startAt = new Date(y, m - 1, d, target.hour, target.minute, 0);
+        const endAt = new Date(startAt.getTime() + durationMs);
+        await fetch(`/api/tasks/${dragItem.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            start_at: startAt.toISOString(),
+            end_at: endAt.toISOString(),
+          }),
+        });
+      }
+      fetchAll();
+    } catch {
+      // Silently fail — the item will snap back to its original position
+    } finally {
+      setDragItem(null);
+      setDropping(false);
+    }
+  }, [dragItem, dropping, tasks, fetchAll]);
 
   function handleSlotClick(dayIso: string, hour: number) {
     const [y, m, d] = dayIso.split("-").map(Number);
@@ -343,6 +403,10 @@ export default function CalendarPage() {
           tasksByDay={tasksByDay}
           onSlotClick={handleSlotClick}
           loading={loading}
+          dragItem={dragItem}
+          onDragStart={setDragItem}
+          onDrop={handleDrop}
+          dropping={dropping}
         />
       )}
 
@@ -465,6 +529,10 @@ function WeekView({
   tasksByDay,
   onSlotClick,
   loading,
+  dragItem,
+  onDragStart,
+  onDrop,
+  dropping,
 }: {
   anchorIso: string;
   onShift: (delta: -1 | 1) => void;
@@ -474,6 +542,10 @@ function WeekView({
   tasksByDay?: Map<string, Task[]>;
   onSlotClick?: (dayIso: string, hour: number) => void;
   loading: boolean;
+  dragItem?: DragState | null;
+  onDragStart?: (item: DragState | null) => void;
+  onDrop?: (target: DropTarget) => void;
+  dropping?: boolean;
 }) {
   const days = useMemo(() => {
     const out: { iso: string; dayNum: number; label: string }[] = [];
@@ -623,61 +695,144 @@ function WeekView({
           const dayLeads = leadsByDay.get(d.iso) ?? [];
           const dayTasks = tasksByDay?.get(d.iso) ?? [];
           return (
-            <div
+            <DayColumn
               key={d.iso}
-              className="bg-white relative"
-              style={{ height: totalPx }}
-            >
-              {hours.map((h) => (
-                <div
-                  key={h}
-                  className="absolute left-0 right-0 border-t border-dashed border-[var(--border)]/60 cursor-pointer hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/5"
-                  style={{ top: (h - START_HOUR) * HOUR_PX, height: HOUR_PX }}
-                  onClick={() => onSlotClick?.(d.iso, h)}
-                  title={`Click to create task at ${formatHour(h)}`}
-                />
-              ))}
-              {(() => {
-                const flexLeads = dayLeads.filter((l) => !l.scheduled_time);
-                const timedLeads = dayLeads.filter((l) => l.scheduled_time);
-                return (
-                  <>
-                    {flexLeads.map((l, idx) => (
-                      <WeekEventBlock
-                        key={l.id}
-                        lead={l}
-                        startHour={START_HOUR}
-                        endHour={END_HOUR}
-                        hourPx={HOUR_PX}
-                        flexIndex={idx}
-                      />
-                    ))}
-                    {timedLeads.map((l) => (
-                      <WeekEventBlock
-                        key={l.id}
-                        lead={l}
-                        startHour={START_HOUR}
-                        endHour={END_HOUR}
-                        hourPx={HOUR_PX}
-                      />
-                    ))}
-                    {dayTasks.map((t) => (
-                      <WeekTaskBlock
-                        key={t.id}
-                        task={t}
-                        startHour={START_HOUR}
-                        endHour={END_HOUR}
-                        hourPx={HOUR_PX}
-                      />
-                    ))}
-                  </>
-                );
-              })()}
-            </div>
+              dayIso={d.iso}
+              dayLeads={dayLeads}
+              dayTasks={dayTasks}
+              startHour={START_HOUR}
+              endHour={END_HOUR}
+              hourPx={HOUR_PX}
+              hours={hours}
+              totalPx={totalPx}
+              onSlotClick={onSlotClick}
+              dragItem={dragItem}
+              onDragStart={onDragStart}
+              onDrop={onDrop}
+              dropping={dropping}
+            />
           );
         })}
       </div>
     </section>
+  );
+}
+
+function DayColumn({
+  dayIso,
+  dayLeads,
+  dayTasks,
+  startHour,
+  endHour,
+  hourPx,
+  hours,
+  totalPx,
+  onSlotClick,
+  dragItem,
+  onDragStart,
+  onDrop,
+  dropping,
+}: {
+  dayIso: string;
+  dayLeads: Lead[];
+  dayTasks: Task[];
+  startHour: number;
+  endHour: number;
+  hourPx: number;
+  hours: number[];
+  totalPx: number;
+  onSlotClick?: (dayIso: string, hour: number) => void;
+  dragItem?: DragState | null;
+  onDragStart?: (item: DragState | null) => void;
+  onDrop?: (target: DropTarget) => void;
+  dropping?: boolean;
+}) {
+  const colRef = useRef<HTMLDivElement>(null);
+  const isDragTarget = !!dragItem;
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handleDropEvent = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (!colRef.current || !onDrop) return;
+    const rect = colRef.current.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const minutesFromStart = (y / hourPx) * 60;
+    // Snap to 15-minute increments
+    const snapped = Math.round(minutesFromStart / 15) * 15;
+    const hour = startHour + Math.floor(snapped / 60);
+    const minute = snapped % 60;
+    if (hour >= startHour && hour <= endHour) {
+      onDrop({ dayIso, hour, minute });
+    }
+  }, [dayIso, hourPx, startHour, endHour, onDrop]);
+
+  const flexLeads = dayLeads.filter((l) => !l.scheduled_time);
+  const timedLeads = dayLeads.filter((l) => l.scheduled_time);
+
+  return (
+    <div
+      ref={colRef}
+      className={cn(
+        "bg-white relative",
+        isDragTarget && "ring-2 ring-inset ring-[var(--accent)]/20",
+      )}
+      style={{ height: totalPx }}
+      onDragOver={handleDragOver}
+      onDrop={handleDropEvent}
+    >
+      {hours.map((h) => (
+        <div
+          key={h}
+          className="absolute left-0 right-0 border-t border-dashed border-[var(--border)]/60 cursor-pointer hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/5"
+          style={{ top: (h - startHour) * hourPx, height: hourPx }}
+          onClick={() => onSlotClick?.(dayIso, h)}
+          title={`Click to create task at ${formatHour(h)}`}
+        />
+      ))}
+      {flexLeads.map((l, idx) => (
+        <WeekEventBlock
+          key={l.id}
+          lead={l}
+          startHour={startHour}
+          endHour={endHour}
+          hourPx={hourPx}
+          flexIndex={idx}
+          dayIso={dayIso}
+          onDragStart={onDragStart}
+          isDragging={dragItem?.type === "lead" && dragItem.id === l.id}
+          dropping={dropping}
+        />
+      ))}
+      {timedLeads.map((l) => (
+        <WeekEventBlock
+          key={l.id}
+          lead={l}
+          startHour={startHour}
+          endHour={endHour}
+          hourPx={hourPx}
+          dayIso={dayIso}
+          onDragStart={onDragStart}
+          isDragging={dragItem?.type === "lead" && dragItem.id === l.id}
+          dropping={dropping}
+        />
+      ))}
+      {dayTasks.map((t) => (
+        <WeekTaskBlock
+          key={t.id}
+          task={t}
+          startHour={startHour}
+          endHour={endHour}
+          hourPx={hourPx}
+          onDragStart={onDragStart}
+          isDragging={dragItem?.type === "task" && dragItem.id === t.id}
+          dropping={dropping}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -687,15 +842,20 @@ function WeekEventBlock({
   endHour,
   hourPx,
   flexIndex,
+  dayIso,
+  onDragStart,
+  isDragging,
+  dropping,
 }: {
   lead: Lead;
   startHour: number;
   endHour: number;
   hourPx: number;
-  /** Index within this day's flex-window leads. Used to stack chips
-   *  vertically so multiple flex leads on the same day don't render on
-   *  top of each other. Undefined for timed leads. */
   flexIndex?: number;
+  dayIso?: string;
+  onDragStart?: (item: DragState | null) => void;
+  isDragging?: boolean;
+  dropping?: boolean;
 }) {
   // Default job length when scheduled_time is set but there's no explicit
   // duration column on the lead. 60 min is a safe guess for estimates.
@@ -747,16 +907,34 @@ function WeekEventBlock({
   const clampedStart = Math.max(0, Math.min(minutesFromStart, totalMinutes));
   const top = (clampedStart / 60) * hourPx;
   const height = Math.max(22, (DEFAULT_MIN / 60) * hourPx);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", lead.id);
+    onDragStart?.({
+      type: "lead",
+      id: lead.id,
+      originDay: dayIso ?? lead.scheduled_day ?? "",
+      originTime: lead.scheduled_time ?? null,
+    });
+  };
+
   return (
-    <Link
-      href={href}
-      className="absolute left-1 right-1 rounded-md text-white px-1.5 py-0.5 text-[10px] leading-tight overflow-hidden hover:brightness-110"
-      style={{ top, height, background: color.solid }}
-      title={`${lead.client ?? "Untitled"} at ${formatHMM(time)} · ${owner}`}
+    <div
+      draggable={!dropping}
+      onDragStart={handleDragStart}
+      onDragEnd={() => onDragStart?.(null)}
+      onClick={() => { window.location.href = href; }}
+      className={cn(
+        "absolute left-1 right-1 rounded-md text-white px-1.5 py-0.5 text-[10px] leading-tight overflow-hidden hover:brightness-110 cursor-grab active:cursor-grabbing select-none",
+        isDragging && "opacity-40",
+      )}
+      style={{ top, height, background: color.solid, zIndex: isDragging ? 50 : 5 }}
+      title={`${lead.client ?? "Untitled"} at ${formatHMM(time)} · ${owner} — Drag to reschedule`}
     >
       <div className="font-semibold truncate">{lead.client ?? "Untitled"}</div>
       <div className="opacity-90 truncate">{formatHMM(time)}</div>
-    </Link>
+    </div>
   );
 }
 
@@ -765,11 +943,17 @@ function WeekTaskBlock({
   startHour,
   endHour,
   hourPx,
+  onDragStart,
+  isDragging,
+  dropping,
 }: {
   task: Task;
   startHour: number;
   endHour: number;
   hourPx: number;
+  onDragStart?: (item: DragState | null) => void;
+  isDragging?: boolean;
+  dropping?: boolean;
 }) {
   const start = new Date(task.start_at);
   const end = new Date(task.end_at);
@@ -785,19 +969,39 @@ function WeekTaskBlock({
     hour: "numeric",
     minute: "2-digit",
   });
+
+  const dayIso = toIso(start);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", task.id);
+    onDragStart?.({
+      type: "task",
+      id: task.id,
+      originDay: dayIso,
+      originTime: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
+    });
+  };
+
   return (
-    <Link
-      href="/tasks"
-      className="absolute left-1 right-1 rounded-md text-white px-1.5 py-0.5 text-[10px] leading-tight overflow-hidden hover:brightness-110 z-10"
-      style={{ top, height, background: "#7c3aed" }}
-      title={`${task.name} at ${timeLabel}`}
+    <div
+      draggable={!dropping}
+      onDragStart={handleDragStart}
+      onDragEnd={() => onDragStart?.(null)}
+      onClick={() => { window.location.href = "/tasks"; }}
+      className={cn(
+        "absolute left-1 right-1 rounded-md text-white px-1.5 py-0.5 text-[10px] leading-tight overflow-hidden hover:brightness-110 z-10 cursor-grab active:cursor-grabbing select-none",
+        isDragging && "opacity-40",
+      )}
+      style={{ top, height, background: "#7c3aed", zIndex: isDragging ? 50 : 10 }}
+      title={`${task.name} at ${timeLabel} — Drag to reschedule`}
     >
       <div className="font-semibold truncate flex items-center gap-0.5">
         {task.recurrence_rule && <Repeat className="h-2.5 w-2.5 flex-shrink-0" />}
         {task.name}
       </div>
       <div className="opacity-90 truncate">{timeLabel}</div>
-    </Link>
+    </div>
   );
 }
 

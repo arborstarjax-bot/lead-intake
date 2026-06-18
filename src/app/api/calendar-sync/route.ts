@@ -10,6 +10,7 @@ import { sendWorkspacePush } from "@/lib/push";
 import { getSettings } from "@/lib/settings";
 import { syncCompletionToSingleOps } from "@/lib/singleops-sync";
 import { detectLeadSource } from "./detect-lead-source";
+import { logSyncAudit, type AuditLogEntry } from "@/lib/sync-audit";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
   const detectedSources = new Set<string>();
   const newTaskNames: string[] = [];
   const completedTaskNames: string[] = [];
+  const auditEntries: AuditLogEntry[] = [];
 
   for (const entry of entries) {
     try {
@@ -556,6 +558,57 @@ export async function POST(req: NextRequest) {
     } catch {
       // Non-blocking
     }
+  }
+
+  // Write audit log entries for all synced items
+  for (const name of newLeadNames) {
+    auditEntries.push({
+      workspace_id: workspaceId,
+      entity_type: "lead",
+      entity_name: name,
+      action: "synced_from_singleops",
+      direction: "singleops_to_leadflow",
+      details: { changeType: "new" },
+    });
+  }
+  for (const name of rescheduledLeadNames) {
+    auditEntries.push({
+      workspace_id: workspaceId,
+      entity_type: "lead",
+      entity_name: name,
+      action: "rescheduled",
+      direction: "singleops_to_leadflow",
+    });
+  }
+  for (const name of completedLeadNames) {
+    auditEntries.push({
+      workspace_id: workspaceId,
+      entity_type: "lead",
+      entity_name: name,
+      action: "completed",
+      direction: "singleops_to_leadflow",
+    });
+  }
+  for (const name of newTaskNames) {
+    auditEntries.push({
+      workspace_id: workspaceId,
+      entity_type: "task",
+      entity_name: name,
+      action: "synced_from_singleops",
+      direction: "singleops_to_leadflow",
+    });
+  }
+  for (const name of completedTaskNames) {
+    auditEntries.push({
+      workspace_id: workspaceId,
+      entity_type: "task",
+      entity_name: name,
+      action: "completed",
+      direction: "singleops_to_leadflow",
+    });
+  }
+  if (auditEntries.length > 0) {
+    void logSyncAudit(auditEntries).catch(() => {});
   }
 
   // Include sync_interval_minutes so ArborBridge can adjust its cron

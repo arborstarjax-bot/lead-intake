@@ -1,5 +1,6 @@
 import "server-only";
 import { sendWorkspacePush } from "@/lib/push";
+import { logSyncAudit } from "@/lib/sync-audit";
 
 interface ScheduleUpdatePayload {
   leadId: string;
@@ -47,6 +48,15 @@ export async function syncScheduleToSingleOps(
 
       if (res.ok) {
         console.log(`[SingleOpsSync] Success: ${payload.clientName} synced to SingleOps`);
+        void logSyncAudit({
+          workspace_id: workspaceId,
+          entity_type: "lead",
+          entity_id: payload.leadId,
+          entity_name: payload.clientName,
+          action: "rescheduled",
+          direction: "leadflow_to_singleops",
+          details: { scheduledDate: payload.scheduledDate, scheduledTime: payload.scheduledTime },
+        }).catch(() => {});
         return { ok: true };
       }
 
@@ -63,6 +73,16 @@ export async function syncScheduleToSingleOps(
           body: `Could not update ${payload.clientName} in SingleOps: ${errText}`,
           url: "/leads",
           tag: `singleops-sync-fail-${payload.leadId}`,
+        }).catch(() => {});
+        void logSyncAudit({
+          workspace_id: workspaceId,
+          entity_type: "lead",
+          entity_id: payload.leadId,
+          entity_name: payload.clientName,
+          action: "sync_failed",
+          direction: "leadflow_to_singleops",
+          status: "failed",
+          error_message: errText,
         }).catch(() => {});
 
         return { ok: false, error: errText };
