@@ -18,7 +18,7 @@ interface CalendarSyncEntry {
   scheduledDate: string;
   scheduledTime: string | null;
   assignedRep: string | null;
-  changeType: "new" | "rescheduled" | "cancelled" | "rep_changed";
+  changeType: "new" | "rescheduled" | "cancelled" | "rep_changed" | "updated";
   previousDate?: string | null;
   previousTime?: string | null;
   sourceLeadId?: string | null;
