@@ -171,3 +171,49 @@ export async function syncCompletionToSingleOps(
 
   return { ok: false, error: "Max retries exceeded" };
 }
+
+/**
+ * Ask ArborBridge to run an immediate calendar sync cycle.
+ * Returns the sync result from ArborBridge.
+ */
+export async function triggerCalendarSync(): Promise<{
+  ok: boolean;
+  entriesFound?: number;
+  changesDetected?: number;
+  syncedToLeadFlow?: number;
+  error?: string;
+}> {
+  const arborbridgeUrl = process.env.ARBORBRIDGE_URL;
+  const arborbridgeApiKey = process.env.ARBORBRIDGE_API_KEY;
+
+  if (!arborbridgeUrl || !arborbridgeApiKey) {
+    return { ok: false, error: "ArborBridge not configured" };
+  }
+
+  const url = `${arborbridgeUrl.replace(/\/$/, "")}/api/sync-now`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": arborbridgeApiKey,
+      },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        ok: true,
+        entriesFound: data.entriesFound ?? 0,
+        changesDetected: data.changesDetected ?? 0,
+        syncedToLeadFlow: data.syncedToLeadFlow ?? 0,
+      };
+    }
+
+    const text = await res.text().catch(() => `HTTP ${res.status}`);
+    return { ok: false, error: text.slice(0, 200) };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Network error";
+    return { ok: false, error: msg };
+  }
+}

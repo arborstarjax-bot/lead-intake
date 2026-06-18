@@ -21,7 +21,7 @@ interface CalendarSyncEntry {
   scheduledDate: string;
   scheduledTime: string | null;
   assignedRep: string | null;
-  changeType: "new" | "rescheduled" | "cancelled" | "rep_changed" | "updated";
+  changeType: "new" | "rescheduled" | "cancelled" | "rep_changed" | "updated" | "completed";
   previousDate?: string | null;
   previousTime?: string | null;
   sourceLeadId?: string | null;
@@ -31,6 +31,7 @@ interface CalendarSyncEntry {
   zip?: string | null;
   notes?: string | null;
   singleopsTaskId?: string | null;
+  jobStatus?: string | null;
 }
 
 /**
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
   const rescheduledLeadNames: string[] = [];
   const cancelledLeadNames: string[] = [];
   const repChangedLeadNames: string[] = [];
+  const completedLeadNames: string[] = [];
   const detectedSources = new Set<string>();
 
   for (const entry of entries) {
@@ -156,6 +158,30 @@ export async function POST(req: NextRequest) {
       }
 
       if (existingLead) {
+        // Handle completion coming FROM SingleOps: if the task is now
+        // completed in SingleOps but the lead is still active in Lead Flow,
+        // mark the lead as Completed.
+        const isCompletedInSingleOps =
+          entry.changeType === "completed" ||
+          entry.jobStatus?.toLowerCase().includes("complete") === true;
+
+        if (isCompletedInSingleOps && existingLead.status === "Scheduled") {
+          const completionUpdates: Record<string, unknown> = {
+            status: "Completed",
+            calendar_sync_status: "synced",
+            calendar_sync_at: new Date().toISOString(),
+          };
+          if (entry.singleopsTaskId) completionUpdates.singleops_task_id = entry.singleopsTaskId;
+          await supabase
+            .from("leads")
+            .update(completionUpdates)
+            .eq("id", existingLead.id)
+            .eq("workspace_id", workspaceId);
+          completedLeadNames.push(client);
+          synced++;
+          continue;
+        }
+
         // Leads in terminal states (Completed, Pending, Lost) should not
         // have their schedule, rep, or address overwritten by a re-sync.
         // Only update the task-id mapping and sync timestamp so we can
@@ -390,6 +416,24 @@ export async function POST(req: NextRequest) {
         body,
         url: "/leads",
         tag: "calendar-sync-rep-change",
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  // Send push notification for completed leads from SingleOps
+  if (completedLeadNames.length > 0) {
+    try {
+      const body = completedLeadNames.length === 1
+        ? `${completedLeadNames[0]} — completed in SingleOps`
+        : `${completedLeadNames.length} leads completed in SingleOps`;
+      await sendWorkspacePush({
+        workspaceId,
+        title: "Estimate Complete",
+        body,
+        url: "/leads",
+        tag: "calendar-sync-completed",
       });
     } catch {
       // Non-blocking

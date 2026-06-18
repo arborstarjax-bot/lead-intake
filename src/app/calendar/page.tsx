@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { LEAD_FLEX_WINDOW_DISPLAY, type Lead } from "@/modules/leads/model";
@@ -53,6 +53,10 @@ export default function CalendarPage() {
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTaskStart, setNewTaskStart] = useState<string | undefined>();
   const [newTaskEnd, setNewTaskEnd] = useState<string | undefined>();
+  // Sync Now state
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
   // Salesperson filter. Default is "View all" so a new workspace sees the
   // same calendar as before this feature shipped.
   const [selectedSalesperson, setSelectedSalesperson] =
@@ -84,6 +88,28 @@ export default function CalendarPage() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const handleSyncNow = useCallback(async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/sync-now", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncResult(
+          `${data.entriesFound} found, ${data.changesDetected} changes`,
+        );
+        fetchAll();
+      } else {
+        setSyncResult(data.error || "Sync failed");
+      }
+    } catch {
+      setSyncResult("Network error");
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncResult(null), 5000);
+    }
+  }, [fetchAll]);
 
   useEffect(() => {
     fetchAll();
@@ -227,7 +253,24 @@ export default function CalendarPage() {
             </select>
           </label>
         )}
+
+        {/* Sync Now */}
+        <button
+          type="button"
+          onClick={handleSyncNow}
+          disabled={syncing}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-white px-3 h-9 text-xs font-semibold text-[var(--fg)] hover:bg-gray-50 disabled:opacity-50"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
+          {syncing ? "Syncing…" : "Sync Now"}
+        </button>
       </div>
+
+      {syncResult && (
+        <div className="text-center text-xs text-[var(--muted)]">
+          {syncResult}
+        </div>
+      )}
 
       {/* Color legend. Mirrors the filter dropdown but stays visible so
          users can always see who owns which color. Hidden when nobody
