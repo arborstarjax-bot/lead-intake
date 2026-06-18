@@ -319,7 +319,7 @@ function RoutePageInner() {
       )}
 
       {flash && (
-        <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center pointer-events-none px-4">
+        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] md:bottom-6 z-50 flex justify-center pointer-events-none px-4">
           <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-[var(--accent)] text-white px-4 py-2.5 shadow-lg text-sm">
             <CalendarCheck className="h-4 w-4" />
             {flash}

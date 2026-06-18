@@ -63,9 +63,9 @@ h1, h2, h3, h4 {
 body {
   min-height: 100dvh;
   /* Respect iOS notch / Dynamic Island at the top. Bottom spacing is
-     handled by the flex layout in layout.tsx — the BottomNav sits
-     as a sticky element at the bottom of the flex container, so no
-     manual padding-bottom is needed. */
+     handled by layout.tsx's <main> wrapper which reserves
+     pb-[calc(3.5rem+env(safe-area-inset-bottom))] on mobile to
+     keep content above the fixed BottomNav. */
   padding-top: env(safe-area-inset-top);
 }
 
