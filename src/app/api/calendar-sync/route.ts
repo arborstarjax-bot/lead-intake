@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       if (entry.sourceLeadId) {
         const { data } = await supabase
           .from("leads")
-          .select("id, status, scheduled_day, scheduled_time, sales_person")
+          .select("id, status, scheduled_day, scheduled_time, sales_person, lead_source, lead_type")
           .eq("workspace_id", workspaceId)
           .eq("id", entry.sourceLeadId)
           .maybeSingle();
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         // Try matching by client name + scheduled date
         const { data } = await supabase
           .from("leads")
-          .select("id, status, scheduled_day, scheduled_time, sales_person")
+          .select("id, status, scheduled_day, scheduled_time, sales_person, lead_source, lead_type")
           .eq("workspace_id", workspaceId)
           .ilike("client", client)
           .eq("scheduled_day", entry.scheduledDate)
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
         // (could be a reschedule — don't create a duplicate)
         const { data: clientMatch } = await supabase
           .from("leads")
-          .select("id, status, scheduled_day, scheduled_time, sales_person, calendar_sync_status")
+          .select("id, status, scheduled_day, scheduled_time, sales_person, calendar_sync_status, lead_source, lead_type")
           .eq("workspace_id", workspaceId)
           .ilike("client", client)
           .order("created_at", { ascending: false })
@@ -175,6 +175,14 @@ export async function POST(req: NextRequest) {
         // If the lead isn't already scheduled or completed, mark as Scheduled
         if (existingLead.status !== "Completed" && existingLead.status !== "Scheduled") {
           updates.status = "Scheduled";
+        }
+
+        // Default lead_source and lead_type if not already set
+        if (!existingLead.lead_source) {
+          updates.lead_source = await detectAndTrack(entry.notes, detectedSources);
+        }
+        if (!existingLead.lead_type) {
+          updates.lead_type = "Residential";
         }
 
         await supabase
