@@ -7,6 +7,7 @@ import {
   normalizeZip,
 } from "@/modules/shared/format";
 import { sendWorkspacePush } from "@/lib/push";
+import { detectLeadSource } from "./detect-lead-source";
 
 export const runtime = "nodejs";
 
@@ -201,7 +202,7 @@ export async function POST(req: NextRequest) {
           status: "Scheduled" as const,
           intake_source: "calendar_sync" as const,
           intake_status: "ready" as const,
-          lead_source: "SingleOps",
+          lead_source: await detectLeadSource(entry.notes),
           lead_type: "Residential",
           calendar_sync_status: "synced" as const,
           calendar_sync_at: new Date().toISOString(),

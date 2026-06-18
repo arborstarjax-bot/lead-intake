@@ -114,6 +114,8 @@ export function defaultSettings(workspaceId: string): AppSettings {
       "Thumbtack",
       "Angi",
       "SingleOps",
+      "Hubspot",
+      "Target Tree",
       "Close AI",
       "Certified Lead Kings",
       "Craigslist",

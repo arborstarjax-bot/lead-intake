@@ -79,6 +79,8 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
     "Thumbtack",
     "Angi",
     "SingleOps",
+    "Hubspot",
+    "Target Tree",
     "Craigslist",
     "Email",
     "Referral",
