@@ -219,6 +219,14 @@ export function LeadCard({
               </span>
             </>
           )}
+          {lead.calendar_sync_status === "synced" && (
+            <>
+              <span className="text-[var(--subtle)]">·</span>
+              <span className="inline-flex items-center gap-1 text-green-600 font-medium">
+                synced
+              </span>
+            </>
+          )}
         </div>
         {lead.outcome_badge && (
           <div className="mt-1.5">
