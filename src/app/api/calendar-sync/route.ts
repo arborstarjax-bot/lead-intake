@@ -6,6 +6,7 @@ import {
   normalizeState,
   normalizeZip,
 } from "@/modules/shared/format";
+import { sendWorkspacePush } from "@/lib/push";
 
 export const runtime = "nodejs";
 
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
   let skipped = 0;
   let failed = 0;
   const errors: string[] = [];
+  const newLeadNames: string[] = [];
 
   for (const entry of entries) {
     try {
@@ -227,11 +229,30 @@ export async function POST(req: NextRequest) {
         }
 
         synced++;
+        newLeadNames.push(client);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       errors.push(`Error processing ${entry.clientName}: ${msg}`);
       failed++;
+    }
+  }
+
+  // Send push notification for newly created leads
+  if (newLeadNames.length > 0) {
+    try {
+      const body = newLeadNames.length === 1
+        ? `${newLeadNames[0]} — synced from SingleOps`
+        : `${newLeadNames.length} leads synced from SingleOps`;
+      await sendWorkspacePush({
+        workspaceId,
+        title: "Calendar Sync",
+        body,
+        url: "/leads",
+        tag: "calendar-sync",
+      });
+    } catch {
+      // Non-blocking
     }
   }
 
