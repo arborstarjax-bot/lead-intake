@@ -68,6 +68,7 @@ const bodySchema = z
       .array(z.string().trim().min(1).max(80))
       .max(50)
       .optional(),
+    auto_sync_to_singleops: z.boolean().optional(),
   })
   .strict();
 

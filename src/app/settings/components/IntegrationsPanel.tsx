@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarCheck2, CalendarX2 } from "lucide-react";
+import { CalendarCheck2, CalendarX2, RefreshCw } from "lucide-react";
 import EnableNotifications from "@/components/EnableNotifications";
 import { Panel } from "./Panel";
 
-/**
- * Google Calendar + Push notifications live here together because they're
- * both per-user (not per-workspace) toggles that the app uses to keep
- * bookings and alerts in sync. Previously they sat in the home-page
- * header; they're consolidated into /settings so they're easy to find
- * from anywhere via the global nav.
- */
-export function IntegrationsPanel() {
+interface IntegrationsPanelProps {
+  autoSyncToSingleOps: boolean;
+  onAutoSyncChange: (value: boolean) => void;
+  canEdit: boolean;
+}
+
+export function IntegrationsPanel({
+  autoSyncToSingleOps,
+  onAutoSyncChange,
+  canEdit,
+}: IntegrationsPanelProps) {
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -57,6 +60,27 @@ export function IntegrationsPanel() {
         title="Push notifications"
         subtitle="Get pinged when a new lead lands. Requires Add-to-Home-Screen on iPhone."
         right={<EnableNotifications />}
+      />
+      <Row
+        title="Auto-sync to SingleOps"
+        subtitle="When you reschedule a lead in Lead Flow, automatically update the task in SingleOps."
+        right={
+          <button
+            type="button"
+            disabled={!canEdit}
+            onClick={() => onAutoSyncChange(!autoSyncToSingleOps)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              autoSyncToSingleOps ? "bg-emerald-600" : "bg-gray-300"
+            } ${!canEdit ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                autoSyncToSingleOps ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+            <RefreshCw className="sr-only" />
+          </button>
+        }
       />
     </Panel>
   );
