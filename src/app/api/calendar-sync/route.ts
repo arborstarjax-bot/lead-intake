@@ -7,6 +7,7 @@ import {
   normalizeZip,
 } from "@/modules/shared/format";
 import { sendWorkspacePush } from "@/lib/push";
+import { getSettings } from "@/lib/settings";
 import { detectLeadSource } from "./detect-lead-source";
 
 export const runtime = "nodejs";
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
   let failed = 0;
   const errors: string[] = [];
   const newLeadNames: string[] = [];
+  const detectedSources = new Set<string>();
 
   for (const entry of entries) {
     try {
@@ -202,7 +204,7 @@ export async function POST(req: NextRequest) {
           status: "Scheduled" as const,
           intake_source: "calendar_sync" as const,
           intake_status: "ready" as const,
-          lead_source: await detectLeadSource(entry.notes),
+          lead_source: await detectAndTrack(entry.notes, detectedSources),
           lead_type: "Residential",
           calendar_sync_status: "synced" as const,
           calendar_sync_at: new Date().toISOString(),
@@ -244,6 +246,35 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Auto-add any new AI-detected lead sources to workspace settings
+  if (detectedSources.size > 0) {
+    try {
+      const settings = await getSettings(workspaceId);
+      const existingLower = new Set(settings.lead_sources.map((s) => s.toLowerCase()));
+      const newSources = [...detectedSources].filter(
+        (s) => !existingLower.has(s.toLowerCase())
+      );
+      if (newSources.length > 0) {
+        const otherIdx = settings.lead_sources.findIndex(
+          (s) => s.toLowerCase() === "other"
+        );
+        const updated = otherIdx >= 0
+          ? [
+              ...settings.lead_sources.slice(0, otherIdx),
+              ...newSources,
+              ...settings.lead_sources.slice(otherIdx),
+            ]
+          : [...settings.lead_sources, ...newSources];
+        await supabase
+          .from("app_settings")
+          .update({ lead_sources: updated })
+          .eq("workspace_id", workspaceId);
+      }
+    } catch {
+      // Non-blocking
+    }
+  }
+
   // Send push notification for newly created leads
   if (newLeadNames.length > 0) {
     try {
@@ -268,6 +299,15 @@ export async function POST(req: NextRequest) {
     failed,
     errors: errors.length > 0 ? errors : undefined,
   });
+}
+
+async function detectAndTrack(
+  notes: string | null | undefined,
+  tracked: Set<string>
+): Promise<string> {
+  const source = await detectLeadSource(notes);
+  tracked.add(source);
+  return source;
 }
 
 function parseFirstName(fullName: string): string | null {
