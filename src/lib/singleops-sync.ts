@@ -25,8 +25,11 @@ export async function syncScheduleToSingleOps(
   const arborbridgeApiKey = process.env.ARBORBRIDGE_API_KEY;
 
   if (!arborbridgeUrl || !arborbridgeApiKey) {
+    console.warn("[SingleOpsSync] Skipped: ARBORBRIDGE_URL or ARBORBRIDGE_API_KEY not set");
     return { ok: false, error: "ArborBridge not configured" };
   }
+
+  console.log(`[SingleOpsSync] Pushing schedule change for ${payload.clientName} (task ${payload.singleopsTaskId}) to ${arborbridgeUrl}`);
 
   const url = `${arborbridgeUrl.replace(/\/$/, "")}/api/schedule-update`;
   const maxRetries = 3;
@@ -43,6 +46,7 @@ export async function syncScheduleToSingleOps(
       });
 
       if (res.ok) {
+        console.log(`[SingleOpsSync] Success: ${payload.clientName} synced to SingleOps`);
         return { ok: true };
       }
 
@@ -51,8 +55,8 @@ export async function syncScheduleToSingleOps(
         ? (await res.json()).error || `HTTP ${res.status}`
         : `HTTP ${res.status}`;
 
+      console.warn(`[SingleOpsSync] Attempt ${attempt}/${maxRetries} failed: ${errText}`);
       if (attempt === maxRetries) {
-        // Final failure — notify the user
         sendWorkspacePush({
           workspaceId,
           title: "SingleOps Sync Failed",
@@ -64,8 +68,9 @@ export async function syncScheduleToSingleOps(
         return { ok: false, error: errText };
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      console.warn(`[SingleOpsSync] Attempt ${attempt}/${maxRetries} network error: ${msg}`);
       if (attempt === maxRetries) {
-        const msg = err instanceof Error ? err.message : "Network error";
         sendWorkspacePush({
           workspaceId,
           title: "SingleOps Sync Failed",

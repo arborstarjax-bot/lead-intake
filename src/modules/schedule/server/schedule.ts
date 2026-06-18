@@ -109,13 +109,14 @@ export type SuggestResult = {
 /**
  * Build ranked slot suggestions for a given lead on its `scheduled_day`.
  *
- * Algorithm:
- * 1. Build timeline of other same-day stops (sorted by start time).
- * 2. Enumerate candidate 30-minute slots inside working hours, filtered by half.
- * 3. For each candidate, compute prior + next stop and the drive time cost.
- * 4. Drop infeasible ones (can't arrive on time / can't make next job on time).
- * 5. Sort by total drive minutes ascending; dedup to spread picks by ≥ 45 min.
- * 6. Return top 3 with human-readable reasoning labels.
+ * Algorithm (hour-block first, drive-aware fallback):
+ * 1. Build timeline of existing same-day stops (sorted by start time).
+ * 2. Enumerate candidate slots on 1-hour boundaries starting at workStart.
+ * 3. Skip slots that overlap an existing stop.
+ * 4. For the nearest existing neighbor, check drive time — only bump past
+ *    the next hour boundary if drive > 30 min.
+ * 5. Return slots in chronological order. Drive time is informational only
+ *    (not used for ranking); slots are ordered earliest-first.
  */
 export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
   const { lead, settings, others, half } = inp;
@@ -144,9 +145,7 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
 
   const workStart = parseHHMM(settings.work_start_time);
   const workEnd = parseHHMM(settings.work_end_time);
-  const minGapMinutes = settings.min_time_between_appointments;
-  const duration = minGapMinutes;
-  const buffer = settings.travel_buffer_minutes;
+  const duration = settings.min_time_between_appointments;
 
   const existing: ExistingStop[] = [];
   for (const other of others) {
@@ -163,29 +162,30 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
   }
   existing.sort((a, b) => a.startMin - b.startMin);
 
-  // Prefetch drive times we'll need. If a shared memo was passed in (week
-  // endpoint) these calls fan into the cache instead of hitting Google again.
+  // Prefetch drive times for informational display + 30-min bump check.
   const [fromHome, toExisting, fromExisting] = await Promise.all([
     drive(home, destAddr).then((r) => r.drive_seconds),
     Promise.all(existing.map((e) => drive(e.address, destAddr).then((r) => r.drive_seconds))),
     Promise.all(existing.map((e) => drive(destAddr, e.address).then((r) => r.drive_seconds))),
   ]);
-  const driveToNewSec = { fromHome, fromExisting: toExisting };
-  const driveFromNewSec = fromExisting;
 
-  const step = 30;
+  // Enumerate 1-hour boundary slots starting at workStart.
+  const step = 60;
   const candidates: SlotSuggestion[] = [];
   for (let start = workStart; start + duration <= workEnd; start += step) {
     if (half === "morning" && start >= 12 * 60) continue;
     if (half === "afternoon" && start < 12 * 60) continue;
 
-    // Prior = last existing stop ending at-or-before start. Else home.
+    // Skip if this slot overlaps an existing stop.
+    const overlaps = existing.some((e) => start < e.endMin && e.startMin < start + duration);
+    if (overlaps) continue;
+
+    // Find nearest prior and next existing stops for context.
     let priorIdx = -1;
     for (let i = 0; i < existing.length; i++) {
       if (existing[i].endMin <= start) priorIdx = i;
       else break;
     }
-    // Next = first existing stop starting at-or-after (start + duration).
     let nextIdx = -1;
     for (let i = 0; i < existing.length; i++) {
       if (existing[i].startMin >= start + duration) {
@@ -194,25 +194,22 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
       }
     }
 
-    // Enforce no overlap with an existing stop.
-    const overlaps = existing.some((e) => {
-      const candStart = start;
-      const candEnd = start + duration;
-      return candStart < e.endMin && e.startMin < candEnd;
-    });
-    if (overlaps) continue;
-
     const driveBeforeSec =
-      priorIdx === -1 ? driveToNewSec.fromHome : driveToNewSec.fromExisting[priorIdx];
-    const priorEnd = priorIdx === -1 ? workStart : existing[priorIdx].endMin;
-    const earliestArrival = priorEnd + buffer + Math.ceil(driveBeforeSec / 60);
-    if (earliestArrival > start) continue;
+      priorIdx === -1 ? fromHome : toExisting[priorIdx];
+    const driveAfterSec =
+      nextIdx === -1 ? 0 : fromExisting[nextIdx];
 
-    let driveAfterSec = 0;
+    // If drive time from the prior stop (or home) is > 30 min, this slot
+    // is too tight — skip it so the next hour boundary is suggested instead.
+    const driveBeforeMin = Math.ceil(driveBeforeSec / 60);
+    if (driveBeforeMin > 30) continue;
+
+    // Similarly, if drive to the next stop is > 30 min and the gap between
+    // this slot's end and the next stop isn't large enough, skip.
     if (nextIdx !== -1) {
-      driveAfterSec = driveFromNewSec[nextIdx];
-      const latestDeparture = start + duration + buffer + Math.ceil(driveAfterSec / 60);
-      if (latestDeparture > existing[nextIdx].startMin) continue;
+      const driveAfterMin = Math.ceil(driveAfterSec / 60);
+      const gapToNext = existing[nextIdx].startMin - (start + duration);
+      if (driveAfterMin > 30 && gapToNext < driveAfterMin) continue;
     }
 
     const before = Math.round(driveBeforeSec / 60);
@@ -236,57 +233,21 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
     });
   }
 
-  candidates.sort((a, b) => a.totalDriveMinutes - b.totalDriveMinutes);
-
-  // Bucket-based diversity: pick the best slot from each time period so we
-  // offer options across the full working day, not just clustered times.
-  // Buckets: morning (start..noon), midday (noon..3PM), late (3PM..end).
-  const NOON = 12 * 60;
-  const MID_END = 15 * 60;
-  const buckets: SlotSuggestion[][] = [[], [], []];
-  for (const c of candidates) {
-    const cMin = parseHHMM(c.startTime);
-    if (cMin < NOON) buckets[0].push(c);
-    else if (cMin < MID_END) buckets[1].push(c);
-    else buckets[2].push(c);
-  }
-
-  // Each bucket is already sorted by drive time (inherits from candidates sort).
-  // Pick best from each bucket first, then fill remaining from overall best.
+  // Slots are already in chronological order (earliest first).
   const PAGE_SIZE = 5;
-  const allPicked: SlotSuggestion[] = [];
-  for (const bucket of buckets) {
-    if (bucket.length > 0) allPicked.push(bucket[0]);
-  }
-  // Fill remaining with next-best overall candidates not already picked
-  for (const c of candidates) {
-    if (allPicked.length >= PAGE_SIZE) break;
-    if (allPicked.some((p) => p.startTime === c.startTime)) continue;
-    // Ensure minimum 30-min spacing from already-picked slots
-    const cMin = parseHHMM(c.startTime);
-    if (allPicked.some((p) => Math.abs(parseHHMM(p.startTime) - cMin) < 30)) continue;
-    allPicked.push(c);
-  }
-
-  // Support pagination for the UI (week view still uses offset)
-  const totalPicked = allPicked.length;
+  const totalPicked = candidates.length;
   const pageStart = offset * PAGE_SIZE;
   const pageEnd = pageStart + PAGE_SIZE;
-  const page = allPicked.slice(pageStart, pageEnd);
+  const page = candidates.slice(pageStart, pageEnd);
   const hasMore = totalPicked > pageEnd;
 
   if (page.length === 0) {
     warnings.push(
       totalPicked > 0
         ? "No more distinct slots — go back to the first page."
-        : candidates.length
-        ? "All slots were too close together to show distinct options."
         : "No feasible slots on this day inside working hours — try a different day."
     );
   }
-
-  // Display in chronological order within the page
-  page.sort((a, b) => parseHHMM(a.startTime) - parseHHMM(b.startTime));
 
   return {
     slots: page,

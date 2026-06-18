@@ -67,9 +67,11 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary"
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-white"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border)] bg-white"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
+        WebkitTransform: "translateZ(0)",
+        transform: "translateZ(0)",
       }}
     >
       <ul className="flex items-stretch justify-around">

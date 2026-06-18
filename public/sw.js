@@ -4,7 +4,7 @@
 // data; stale SSR HTML would silently hide newly-uploaded leads. Runtime
 // caching is limited to static assets.
 
-const STATIC_CACHE = "leadflow-static-v4";
+const STATIC_CACHE = "leadflow-static-v5";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/icon-192.png",
