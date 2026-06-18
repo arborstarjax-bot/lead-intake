@@ -457,9 +457,15 @@ export async function PATCH(
     })();
   }
 
-  // Auto-sync completion to SingleOps when a lead is marked Completed.
-  // Uses the same guard as schedule sync: user-initiated, has task ID, auto-sync ON.
-  if (completing && !isCalendarSyncOrigin && data.singleops_task_id) {
+  // Auto-sync completion to SingleOps when a lead enters a terminal state.
+  // "Completed" (Sold/Not Sold), "Pending", or "Lost" all mean the estimate
+  // is done and the SingleOps task should be marked complete.
+  const TERMINAL_STATUSES = new Set(["Completed", "Pending", "Lost"]);
+  const enteringTerminalState =
+    typeof patch.status === "string" &&
+    TERMINAL_STATUSES.has(patch.status) &&
+    !TERMINAL_STATUSES.has(existing.status ?? "");
+  if (enteringTerminalState && !isCalendarSyncOrigin && data.singleops_task_id) {
     void (async () => {
       try {
         const syncSettings = await getSettings(auth.workspaceId);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, UploadCloud, Loader2, Sparkles } from "lucide-react";
 import type { Task } from "@/modules/tasks/model";
 import { AddressInput, type AddressParts } from "@/components/AddressInput";
@@ -58,6 +58,19 @@ export function NewTaskModal({
   const [assignee, setAssignee] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Workspace salespeople for assignee dropdown
+  const [salespeople, setSalespeople] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.settings?.salespeople)) {
+          setSalespeople(d.settings.salespeople);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Upload & Extract state
   const [extracting, setExtracting] = useState(false);
@@ -237,7 +250,7 @@ export function NewTaskModal({
             )}
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 p-4">
+          <form onSubmit={handleSubmit} className="space-y-4 p-5">
             {error && (
               <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">
                 {error}
@@ -279,35 +292,35 @@ export function NewTaskModal({
               />
             </div>
 
-            {/* Start / End */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Start
-                </label>
-                <input
-                  type="datetime-local"
-                  value={startAt}
-                  onChange={(e) => {
-                    setStartAt(e.target.value);
-                    const s = new Date(e.target.value);
-                    const end = new Date(s.getTime() + 60 * 60 * 1000);
-                    setEndAt(toLocalDatetimeStr(end));
-                  }}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  End
-                </label>
-                <input
-                  type="datetime-local"
-                  value={endAt}
-                  onChange={(e) => setEndAt(e.target.value)}
-                  className={inputClass}
-                />
-              </div>
+            {/* Start */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start
+              </label>
+              <input
+                type="datetime-local"
+                value={startAt}
+                onChange={(e) => {
+                  setStartAt(e.target.value);
+                  const s = new Date(e.target.value);
+                  const end = new Date(s.getTime() + 60 * 60 * 1000);
+                  setEndAt(toLocalDatetimeStr(end));
+                }}
+                className={inputClass}
+              />
+            </div>
+
+            {/* End */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End
+              </label>
+              <input
+                type="datetime-local"
+                value={endAt}
+                onChange={(e) => setEndAt(e.target.value)}
+                className={inputClass}
+              />
             </div>
 
             {/* Assignee */}
@@ -315,13 +328,28 @@ export function NewTaskModal({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Assignee
               </label>
-              <input
-                type="text"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-                placeholder="Name of person assigned"
-                className={inputClass}
-              />
+              {salespeople.length > 0 ? (
+                <select
+                  value={assignee}
+                  onChange={(e) => setAssignee(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Select assignee...</option>
+                  {salespeople.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={assignee}
+                  onChange={(e) => setAssignee(e.target.value)}
+                  placeholder="Name of person assigned"
+                  className={inputClass}
+                />
+              )}
             </div>
 
             {/* Address with autocomplete */}
