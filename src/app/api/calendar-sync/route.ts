@@ -393,11 +393,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Include sync_interval_minutes so ArborBridge can adjust its cron
+  let syncIntervalMinutes = 15;
+  try {
+    const wsSettings = await getSettings(workspaceId);
+    syncIntervalMinutes = wsSettings.sync_interval_minutes;
+  } catch {
+    // Fall back to default
+  }
+
   return NextResponse.json({
     synced,
     skipped,
     failed,
     errors: errors.length > 0 ? errors : undefined,
+    syncIntervalMinutes,
   });
 }
 

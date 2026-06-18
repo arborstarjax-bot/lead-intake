@@ -66,6 +66,7 @@ export const EDITABLE_KEYS = [
   "days_until_not_sold",
   "lead_sources",
   "auto_sync_to_singleops",
+  "sync_interval_minutes",
 ] as const satisfies ReadonlyArray<keyof ClientAppSettings>;
 
 /**
