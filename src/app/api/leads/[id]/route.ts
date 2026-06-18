@@ -10,7 +10,7 @@ import {
 } from "@/modules/calendar/server";
 import { requireMembership } from "@/modules/auth/server";
 import { sendWorkspacePush } from "@/lib/push";
-import { syncScheduleToSingleOps } from "@/lib/singleops-sync";
+import { syncScheduleToSingleOps, syncCompletionToSingleOps } from "@/lib/singleops-sync";
 
 export const runtime = "nodejs";
 
@@ -444,6 +444,36 @@ export async function PATCH(
             scheduledDate: data.scheduled_day,
             scheduledTime: data.scheduled_time,
             timezone: syncSettings.timezone,
+          },
+          auth.workspaceId,
+        );
+        await supabaseSync
+          .from("leads")
+          .update({ singleops_sync_status: result.ok ? "synced" : "failed" })
+          .eq("id", id);
+      } catch {
+        // Non-blocking
+      }
+    })();
+  }
+
+  // Auto-sync completion to SingleOps when a lead is marked Completed.
+  // Uses the same guard as schedule sync: user-initiated, has task ID, auto-sync ON.
+  if (completing && !isCalendarSyncOrigin && data.singleops_task_id) {
+    void (async () => {
+      try {
+        const syncSettings = await getSettings(auth.workspaceId);
+        if (!syncSettings.auto_sync_to_singleops) return;
+        const supabaseSync = createAdminClient();
+        await supabaseSync
+          .from("leads")
+          .update({ singleops_sync_status: "pending" })
+          .eq("id", id);
+        const result = await syncCompletionToSingleOps(
+          {
+            leadId: id,
+            clientName: data.client || displayName(data.first_name, data.last_name) || "Unknown",
+            singleopsTaskId: data.singleops_task_id,
           },
           auth.workspaceId,
         );

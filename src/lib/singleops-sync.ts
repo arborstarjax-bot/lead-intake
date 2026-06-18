@@ -89,3 +89,85 @@ export async function syncScheduleToSingleOps(
 
   return { ok: false, error: "Max retries exceeded" };
 }
+
+interface TaskCompletePayload {
+  leadId: string;
+  clientName: string;
+  singleopsTaskId: string;
+}
+
+/**
+ * Mark a SingleOps task as Complete via ArborBridge Playwright automation.
+ * Fires when a lead is marked Completed in Lead Flow.
+ */
+export async function syncCompletionToSingleOps(
+  payload: TaskCompletePayload,
+  workspaceId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const arborbridgeUrl = process.env.ARBORBRIDGE_URL;
+  const arborbridgeApiKey = process.env.ARBORBRIDGE_API_KEY;
+
+  if (!arborbridgeUrl || !arborbridgeApiKey) {
+    console.warn("[SingleOpsSync] Skipped completion: ARBORBRIDGE_URL or ARBORBRIDGE_API_KEY not set");
+    return { ok: false, error: "ArborBridge not configured" };
+  }
+
+  console.log(`[SingleOpsSync] Marking task ${payload.singleopsTaskId} complete for ${payload.clientName}`);
+
+  const url = `${arborbridgeUrl.replace(/\/$/, "")}/api/task-complete`;
+  const maxRetries = 3;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": arborbridgeApiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        console.log(`[SingleOpsSync] Success: ${payload.clientName} task marked complete in SingleOps`);
+        return { ok: true };
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      const errText = contentType.includes("application/json")
+        ? (await res.json()).error || `HTTP ${res.status}`
+        : `HTTP ${res.status}`;
+
+      console.warn(`[SingleOpsSync] Complete attempt ${attempt}/${maxRetries} failed: ${errText}`);
+      if (attempt === maxRetries) {
+        sendWorkspacePush({
+          workspaceId,
+          title: "SingleOps Complete Failed",
+          body: `Could not mark ${payload.clientName} as complete in SingleOps: ${errText}`,
+          url: "/leads",
+          tag: `singleops-complete-fail-${payload.leadId}`,
+        }).catch(() => {});
+
+        return { ok: false, error: errText };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      console.warn(`[SingleOpsSync] Complete attempt ${attempt}/${maxRetries} network error: ${msg}`);
+      if (attempt === maxRetries) {
+        sendWorkspacePush({
+          workspaceId,
+          title: "SingleOps Complete Failed",
+          body: `Could not reach ArborBridge to complete ${payload.clientName}: ${msg}`,
+          url: "/leads",
+          tag: `singleops-complete-fail-${payload.leadId}`,
+        }).catch(() => {});
+
+        return { ok: false, error: msg };
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+  }
+
+  return { ok: false, error: "Max retries exceeded" };
+}
