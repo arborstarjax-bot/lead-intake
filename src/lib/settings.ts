@@ -113,6 +113,7 @@ export function defaultSettings(workspaceId: string): AppSettings {
       "Nextdoor",
       "Thumbtack",
       "Angi",
+      "SingleOps",
       "Close AI",
       "Certified Lead Kings",
       "Craigslist",
