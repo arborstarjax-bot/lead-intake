@@ -75,6 +75,8 @@ export async function POST(req: NextRequest) {
   const errors: string[] = [];
   const newLeadNames: string[] = [];
   const rescheduledLeadNames: string[] = [];
+  const cancelledLeadNames: string[] = [];
+  const repChangedLeadNames: string[] = [];
   const detectedSources = new Set<string>();
 
   for (const entry of entries) {
@@ -145,6 +147,7 @@ export async function POST(req: NextRequest) {
             })
             .eq("id", existingLead.id)
             .eq("workspace_id", workspaceId);
+          cancelledLeadNames.push(client);
           synced++;
         } else {
           skipped++;
@@ -164,8 +167,9 @@ export async function POST(req: NextRequest) {
           updates.scheduled_time = entry.scheduledTime;
         }
 
-        if (entry.assignedRep) {
+        if (entry.assignedRep && entry.assignedRep !== existingLead.sales_person) {
           updates.sales_person = entry.assignedRep;
+          repChangedLeadNames.push(client);
         }
 
         if (entry.address) updates.address = entry.address;
@@ -175,8 +179,11 @@ export async function POST(req: NextRequest) {
         if (entry.notes) updates.notes = entry.notes;
         if (entry.singleopsTaskId) updates.singleops_task_id = entry.singleopsTaskId;
 
-        // If the lead isn't already scheduled or completed, mark as Scheduled
-        if (existingLead.status !== "Completed" && existingLead.status !== "Scheduled") {
+        // Only promote to Scheduled if the lead is still in an early-funnel
+        // status. Preserve user-set terminal states so a calendar re-sync
+        // doesn't undo "Pending", "Completed", "Lost", etc.
+        const PROTECTED_STATUSES = new Set(["Scheduled", "Completed", "Pending", "Lost"]);
+        if (!PROTECTED_STATUSES.has(existingLead.status ?? "")) {
           updates.status = "Scheduled";
         }
 
@@ -327,6 +334,42 @@ export async function POST(req: NextRequest) {
         body,
         url: "/leads",
         tag: "calendar-sync-reschedule",
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  // Send push notification for cancelled/removed leads
+  if (cancelledLeadNames.length > 0) {
+    try {
+      const body = cancelledLeadNames.length === 1
+        ? `${cancelledLeadNames[0]} — removed from SingleOps calendar`
+        : `${cancelledLeadNames.length} leads removed from SingleOps calendar`;
+      await sendWorkspacePush({
+        workspaceId,
+        title: "Lead Removed",
+        body,
+        url: "/leads",
+        tag: "calendar-sync-cancelled",
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  // Send push notification for rep/salesperson changes
+  if (repChangedLeadNames.length > 0) {
+    try {
+      const body = repChangedLeadNames.length === 1
+        ? `${repChangedLeadNames[0]} — rep changed in SingleOps`
+        : `${repChangedLeadNames.length} leads reassigned in SingleOps`;
+      await sendWorkspacePush({
+        workspaceId,
+        title: "Rep Change",
+        body,
+        url: "/leads",
+        tag: "calendar-sync-rep-change",
       });
     } catch {
       // Non-blocking
