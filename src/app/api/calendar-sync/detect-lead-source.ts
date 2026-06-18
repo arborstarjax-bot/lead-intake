@@ -36,11 +36,36 @@ Rules:
 Respond with ONLY the source name, nothing else.`;
 
 /**
+ * Quick keyword scan for high-confidence source matches.
+ * Catches patterns the AI might miss (e.g. "Target TreeAmy" where
+ * the rep name is concatenated with no separator).
+ */
+function keywordMatch(text: string): string | null {
+  const lower = text.toLowerCase();
+  if (/target\s*tree/i.test(text)) return "Target Tree";
+  if (lower.includes("hubspot")) return "Hubspot";
+  if (lower.includes("nextdoor")) return "Nextdoor";
+  if (lower.includes("thumbtack")) return "Thumbtack";
+  if (/\bangi\b/.test(lower)) return "Angi";
+  if (lower.includes("close ai") || lower.includes("ai agent") || lower.includes("ai call")) return "Close AI";
+  if (lower.includes("certified lead kings")) return "Certified Lead Kings";
+  if (lower.includes("craigslist")) return "Craigslist";
+  if (/\bfacebook\b/.test(lower)) return "Facebook";
+  if (/\binstagram\b/.test(lower)) return "Instagram";
+  if (/\bgoogle\s*ads?\b/.test(lower)) return "Google Ads";
+  return null;
+}
+
+/**
  * Use GPT-4o-mini to detect the lead source from SingleOps task notes.
- * Falls back to "SingleOps" if notes are empty or AI call fails.
+ * Falls back to keyword matching, then "SingleOps" if notes are empty or AI call fails.
  */
 export async function detectLeadSource(notes: string | null | undefined): Promise<string> {
   if (!notes || notes.trim().length === 0) return "SingleOps";
+
+  // Try keyword match first for reliable detection of concatenated names
+  const kw = keywordMatch(notes);
+  if (kw) return kw;
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return "SingleOps";
