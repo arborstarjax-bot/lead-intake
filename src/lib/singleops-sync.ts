@@ -172,6 +172,91 @@ export async function syncCompletionToSingleOps(
   return { ok: false, error: "Max retries exceeded" };
 }
 
+interface TaskCreatePayload {
+  taskId: string;
+  taskName: string;
+  notes: string | null;
+  scheduledDate: string;
+  scheduledTime: string | null;
+  address: string | null;
+  assignee: string | null;
+}
+
+/**
+ * Create a task in SingleOps via ArborBridge Playwright automation.
+ * Returns the new SingleOps task ID if available.
+ */
+export async function syncTaskToSingleOps(
+  payload: TaskCreatePayload,
+  workspaceId: string,
+): Promise<{ ok: boolean; singleopsTaskId?: string; error?: string }> {
+  const arborbridgeUrl = process.env.ARBORBRIDGE_URL;
+  const arborbridgeApiKey = process.env.ARBORBRIDGE_API_KEY;
+
+  if (!arborbridgeUrl || !arborbridgeApiKey) {
+    console.warn("[SingleOpsSync] Skipped task create: ARBORBRIDGE_URL or ARBORBRIDGE_API_KEY not set");
+    return { ok: false, error: "ArborBridge not configured" };
+  }
+
+  console.log(`[SingleOpsSync] Creating task "${payload.taskName}" in SingleOps`);
+
+  const url = `${arborbridgeUrl.replace(/\/$/, "")}/api/task-create`;
+  const maxRetries = 3;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": arborbridgeApiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[SingleOpsSync] Task "${payload.taskName}" created in SingleOps`);
+        return { ok: true, singleopsTaskId: data.singleopsTaskId ?? undefined };
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      const errText = contentType.includes("application/json")
+        ? (await res.json()).error || `HTTP ${res.status}`
+        : `HTTP ${res.status}`;
+
+      console.warn(`[SingleOpsSync] Task create attempt ${attempt}/${maxRetries} failed: ${errText}`);
+      if (attempt === maxRetries) {
+        sendWorkspacePush({
+          workspaceId,
+          title: "SingleOps Task Create Failed",
+          body: `Could not create "${payload.taskName}" in SingleOps: ${errText}`,
+          url: "/tasks",
+          tag: `singleops-task-create-fail-${payload.taskId}`,
+        }).catch(() => {});
+        return { ok: false, error: errText };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      console.warn(`[SingleOpsSync] Task create attempt ${attempt}/${maxRetries} network error: ${msg}`);
+      if (attempt === maxRetries) {
+        sendWorkspacePush({
+          workspaceId,
+          title: "SingleOps Task Create Failed",
+          body: `Could not reach ArborBridge to create "${payload.taskName}": ${msg}`,
+          url: "/tasks",
+          tag: `singleops-task-create-fail-${payload.taskId}`,
+        }).catch(() => {});
+        return { ok: false, error: msg };
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+  }
+
+  return { ok: false, error: "Max retries exceeded" };
+}
+
 /**
  * Ask ArborBridge to run an immediate calendar sync cycle.
  * Returns the sync result from ArborBridge.

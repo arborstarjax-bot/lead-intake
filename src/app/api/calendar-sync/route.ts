@@ -33,6 +33,7 @@ interface CalendarSyncEntry {
   notes?: string | null;
   singleopsTaskId?: string | null;
   jobStatus?: string | null;
+  isTask?: boolean;
 }
 
 /**
@@ -86,11 +87,22 @@ export async function POST(req: NextRequest) {
     singleopsTaskId: string;
   }> = [];
   const detectedSources = new Set<string>();
+  const newTaskNames: string[] = [];
+  const completedTaskNames: string[] = [];
 
   for (const entry of entries) {
     try {
       if (!entry.clientName || !entry.scheduledDate) {
         skipped++;
+        continue;
+      }
+
+      // Handle non-estimate tasks separately — sync to tasks table
+      if (entry.isTask) {
+        const taskResult = await syncTaskEntry(supabase, workspaceId, entry);
+        if (taskResult === "new") newTaskNames.push(entry.clientName);
+        if (taskResult === "completed") completedTaskNames.push(entry.clientName);
+        synced++;
         continue;
       }
 
@@ -512,6 +524,40 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Send notifications for tasks synced from SingleOps
+  if (newTaskNames.length > 0) {
+    try {
+      const body = newTaskNames.length === 1
+        ? `${newTaskNames[0]} — task synced from SingleOps`
+        : `${newTaskNames.length} tasks synced from SingleOps`;
+      await sendWorkspacePush({
+        workspaceId,
+        title: "Task Sync",
+        body,
+        url: "/tasks",
+        tag: "calendar-sync-new-tasks",
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+  if (completedTaskNames.length > 0) {
+    try {
+      const body = completedTaskNames.length === 1
+        ? `${completedTaskNames[0]} — task completed in SingleOps`
+        : `${completedTaskNames.length} tasks completed in SingleOps`;
+      await sendWorkspacePush({
+        workspaceId,
+        title: "Task Complete",
+        body,
+        url: "/tasks",
+        tag: "calendar-sync-completed-tasks",
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
   // Include sync_interval_minutes so ArborBridge can adjust its cron
   let syncIntervalMinutes = 15;
   try {
@@ -547,4 +593,96 @@ function parseFirstName(fullName: string): string | null {
 function parseLastName(fullName: string): string | null {
   const parts = fullName.trim().split(/\s+/);
   return parts.length > 1 ? parts.slice(1).join(" ") : null;
+}
+
+/**
+ * Sync a non-estimate task entry from SingleOps into the tasks table.
+ * Returns "new", "completed", "updated", or "skipped".
+ */
+async function syncTaskEntry(
+  supabase: ReturnType<typeof createAdminClient>,
+  workspaceId: string,
+  entry: CalendarSyncEntry,
+): Promise<"new" | "completed" | "updated" | "skipped"> {
+  const singleopsId = entry.singleopsTaskId;
+
+  // Check if task already exists by SingleOps task ID
+  let existingTask = null;
+  if (singleopsId) {
+    const { data } = await supabase
+      .from("tasks")
+      .select("id, status, singleops_task_id")
+      .eq("workspace_id", workspaceId)
+      .eq("singleops_task_id", singleopsId)
+      .maybeSingle();
+    existingTask = data;
+  }
+
+  // Also try matching by name + date if no singleops_task_id match
+  if (!existingTask) {
+    const { data } = await supabase
+      .from("tasks")
+      .select("id, status, singleops_task_id")
+      .eq("workspace_id", workspaceId)
+      .ilike("name", entry.clientName)
+      .gte("start_at", `${entry.scheduledDate}T00:00:00`)
+      .lte("start_at", `${entry.scheduledDate}T23:59:59`)
+      .maybeSingle();
+    existingTask = data;
+  }
+
+  const isCompleted = entry.jobStatus?.toLowerCase().includes("complete") ||
+    entry.changeType === "completed";
+
+  if (existingTask) {
+    // Update existing task
+    const updates: Record<string, unknown> = {
+      singleops_sync_status: "synced",
+      singleops_last_synced_at: new Date().toISOString(),
+    };
+    if (singleopsId && !existingTask.singleops_task_id) {
+      updates.singleops_task_id = singleopsId;
+    }
+    if (isCompleted && existingTask.status !== "Completed") {
+      updates.status = "Completed";
+      await supabase
+        .from("tasks")
+        .update(updates)
+        .eq("id", existingTask.id)
+        .eq("workspace_id", workspaceId);
+      return "completed";
+    }
+    await supabase
+      .from("tasks")
+      .update(updates)
+      .eq("id", existingTask.id)
+      .eq("workspace_id", workspaceId);
+    return "updated";
+  }
+
+  // Create new task from SingleOps
+  const startTime = entry.scheduledTime || "09:00";
+  const [h, m] = startTime.split(":").map(Number);
+  const startAt = new Date(`${entry.scheduledDate}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+  const endAt = new Date(startAt.getTime() + 60 * 60 * 1000); // 1 hour default
+
+  await supabase.from("tasks").insert({
+    workspace_id: workspaceId,
+    name: entry.clientName,
+    notes: entry.notes ?? null,
+    status: isCompleted ? "Completed" : "Scheduled",
+    start_at: startAt.toISOString(),
+    end_at: endAt.toISOString(),
+    address: entry.address ?? null,
+    city: entry.city ?? null,
+    state: entry.state ?? null,
+    zip: entry.zip ?? null,
+    assignee: entry.assignedRep ?? null,
+    extraction_source: "manual",
+    singleops_task_id: singleopsId ?? null,
+    singleops_sync_status: "synced",
+    singleops_last_synced_at: new Date().toISOString(),
+  });
+
+  return isCompleted ? "completed" : "new";
 }
