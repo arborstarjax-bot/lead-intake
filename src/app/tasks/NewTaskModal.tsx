@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X, UploadCloud, Loader2, Sparkles } from "lucide-react";
-import type { Task } from "@/modules/tasks/model";
+import { RECURRENCE_OPTIONS, type Task } from "@/modules/tasks/model";
 import { AddressInput, type AddressParts } from "@/components/AddressInput";
 import { downscaleImage } from "@/lib/downscale";
 
@@ -56,6 +56,7 @@ export function NewTaskModal({
   const [state, setState] = useState("");
   const [zip, setZip] = useState("");
   const [assignee, setAssignee] = useState("");
+  const [recurrenceRule, setRecurrenceRule] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -147,6 +148,7 @@ export function NewTaskModal({
           zip: zip.trim() || null,
           assignee: assignee.trim() || null,
           extraction_source: extracted ? "upload_extract" : "manual",
+          recurrence_rule: recurrenceRule || null,
         }),
       });
       const data = await res.json();
@@ -321,6 +323,24 @@ export function NewTaskModal({
                 onChange={(e) => setEndAt(e.target.value)}
                 className={inputClass}
               />
+            </div>
+
+            {/* Repeat (optional) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Repeat
+              </label>
+              <select
+                value={recurrenceRule}
+                onChange={(e) => setRecurrenceRule(e.target.value)}
+                className={inputClass}
+              >
+                {RECURRENCE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Assignee */}

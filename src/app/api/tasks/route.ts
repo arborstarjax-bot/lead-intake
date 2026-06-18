@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
 import { getSettings } from "@/lib/settings";
+import { nextOccurrenceDate } from "@/modules/tasks/model";
 
 export const runtime = "nodejs";
 
@@ -74,5 +75,84 @@ export async function POST(req: NextRequest) {
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Auto-generate future occurrences for recurring tasks (4-week lookahead)
+  if (data && safe.recurrence_rule) {
+    void generateRecurringOccurrences(
+      supabase,
+      data,
+      safe.recurrence_rule,
+      auth.workspaceId,
+      auth.userId,
+    ).catch(() => {});
+  }
+
   return NextResponse.json({ task: data });
+}
+
+/**
+ * Generate future occurrences for a recurring task up to 4 weeks ahead.
+ * Each occurrence is a separate task row linked to the parent via parent_task_id.
+ */
+async function generateRecurringOccurrences(
+  supabase: ReturnType<typeof createAdminClient>,
+  parent: Record<string, unknown>,
+  rule: string,
+  workspaceId: string,
+  userId: string,
+) {
+  const LOOKAHEAD_DAYS = 28; // 4 weeks
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() + LOOKAHEAD_DAYS);
+
+  const startAt = new Date(parent.start_at as string);
+  const endAt = new Date(parent.end_at as string);
+  const durationMs = endAt.getTime() - startAt.getTime();
+
+  const rows: Record<string, unknown>[] = [];
+  let cursor = startAt;
+  let idx = 1;
+  const endDate = parent.recurrence_end_date
+    ? new Date(parent.recurrence_end_date as string)
+    : null;
+  const endCount = (parent.recurrence_end_count as number) ?? null;
+
+  while (true) {
+    const next = nextOccurrenceDate(cursor, rule);
+    if (!next || next > cutoff) break;
+    if (endDate && next > endDate) break;
+    if (endCount && idx >= endCount) break;
+    idx++;
+
+    rows.push({
+      workspace_id: workspaceId,
+      created_by: userId,
+      name: parent.name,
+      notes: parent.notes,
+      status: "Scheduled",
+      start_at: next.toISOString(),
+      end_at: new Date(next.getTime() + durationMs).toISOString(),
+      address: parent.address,
+      city: parent.city,
+      state: parent.state,
+      zip: parent.zip,
+      assignee: parent.assignee,
+      extraction_source: "manual",
+      recurrence_rule: rule,
+      parent_task_id: parent.id,
+      occurrence_index: idx,
+    });
+
+    cursor = next;
+  }
+
+  if (rows.length > 0) {
+    // Also mark the parent as occurrence_index=1
+    await supabase
+      .from("tasks")
+      .update({ occurrence_index: 1 })
+      .eq("id", parent.id as string);
+
+    await supabase.from("tasks").insert(rows);
+  }
 }

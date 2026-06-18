@@ -123,18 +123,25 @@ export async function GET(req: Request) {
   const supabase = createAdminClient();
   const settings = await getSettings(auth.workspaceId);
   const iso = validDate(url.searchParams.get("date"), settings.timezone);
-  const [rowsResp, ghostResp] = await Promise.all([
-    // Pull all leads booked onto this day (timed + flex). We split them
-    // after the fetch so flex leads aren't dropped by a NOT NULL filter
-    // on scheduled_time — they still belong to the day, just without a
-    // pinned time. ORDER BY scheduled_time ASC NULLS LAST naturally
-    // groups timed stops first; we still re-partition in JS for clarity.
+  // Fetch leads + tasks for the day + optional ghost lead in parallel.
+  // Tasks are treated like timed stops alongside estimates.
+  const dayStart = `${iso}T00:00:00`;
+  const dayEnd = `${iso}T23:59:59`;
+  const [rowsResp, tasksResp, ghostResp] = await Promise.all([
     supabase
       .from("leads")
       .select("*")
       .eq("workspace_id", auth.workspaceId)
       .eq("scheduled_day", iso)
       .order("scheduled_time", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("workspace_id", auth.workspaceId)
+      .neq("status", "Cancelled")
+      .gte("start_at", dayStart)
+      .lte("start_at", dayEnd)
+      .order("start_at", { ascending: true }),
     ghostLeadId
       ? supabase
           .from("leads")
@@ -147,6 +154,7 @@ export async function GET(req: Request) {
   if (rowsResp.error) {
     return NextResponse.json({ error: rowsResp.error.message }, { status: 500 });
   }
+  const dayTasks = (tasksResp.data ?? []) as Array<Record<string, unknown>>;
   // Exclude the ghost lead from the rendered day so its existing (stale)
   // pin doesn't overlap with the amber ghost preview during a reschedule.
   const leads = ((rowsResp.data ?? []) as Lead[]).filter(
@@ -175,7 +183,7 @@ export async function GET(req: Request) {
     return null;
   }
 
-  const stopsInput = leads
+  const leadStopsInput = leads
     .map((l) => {
       const addr = leadAddressString(l);
       const time = l.scheduled_time;
@@ -196,6 +204,35 @@ export async function GET(req: Request) {
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  // Convert tasks into the same stop format as leads
+  const taskStopsInput = dayTasks
+    .map((t) => {
+      const addr =
+        [t.address, t.city, t.state, t.zip].filter(Boolean).join(", ") || null;
+      if (!addr) return null;
+      const start = new Date(t.start_at as string);
+      const end = new Date(t.end_at as string);
+      const startMin = start.getHours() * 60 + start.getMinutes();
+      const endMin = end.getHours() * 60 + end.getMinutes();
+      return {
+        id: `task-${t.id as string}`,
+        label: `${(t.name as string) || "Task"}`,
+        address: addr,
+        startMin,
+        endMin: Math.max(endMin, startMin + 30),
+        firstName: null as string | null,
+        phoneNumber: null as string | null,
+        salesPerson: (t.assignee as string) ?? null,
+        updatedAt: (t.updated_at as string) ?? null,
+        done: t.status === "Completed",
+        outcomeLabel: t.status === "Completed" ? "Completed" : null,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const stopsInput = [...leadStopsInput, ...taskStopsInput]
+    .sort((a, b) => a.startMin - b.startMin);
 
   const flexInput = leads
     .map((l) => {
