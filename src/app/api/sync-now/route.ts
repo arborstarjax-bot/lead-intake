@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireMembership } from "@/modules/auth/server/session";
+import { requireMembership } from "@/modules/auth/server";
 import { triggerCalendarSync } from "@/lib/singleops-sync";
 
 export const runtime = "nodejs";
