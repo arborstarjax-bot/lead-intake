@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Settings as SettingsIcon, Users } from "lucide-react";
+import { BarChart3, Settings as SettingsIcon, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 
@@ -43,6 +43,13 @@ export function PageHeader({
         ) : null}
         {!hideNavIcons && (
           <>
+            <Link
+              href="/reporting"
+              aria-label="Reports"
+              className="inline-flex items-center justify-center h-11 w-11 rounded-md border border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
+            >
+              <BarChart3 className="h-4 w-4" />
+            </Link>
             <Link
               href="/workspace"
               aria-label="Workspace"
