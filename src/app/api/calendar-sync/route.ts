@@ -27,6 +27,7 @@ interface CalendarSyncEntry {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
+  notes?: string | null;
 }
 
 /**
@@ -166,6 +167,7 @@ export async function POST(req: NextRequest) {
         if (entry.city) updates.city = entry.city;
         if (entry.state) updates.state = normalizeState(entry.state) ?? entry.state;
         if (entry.zip) updates.zip = normalizeZip(entry.zip) ?? entry.zip;
+        if (entry.notes) updates.notes = entry.notes;
 
         // If the lead isn't already scheduled or completed, mark as Scheduled
         if (existingLead.status !== "Completed" && existingLead.status !== "Scheduled") {
@@ -195,6 +197,7 @@ export async function POST(req: NextRequest) {
           sales_person: entry.assignedRep || null,
           scheduled_day: entry.scheduledDate,
           scheduled_time: entry.scheduledTime || null,
+          notes: entry.notes || null,
           status: "Scheduled" as const,
           intake_source: "calendar_sync" as const,
           intake_status: "ready" as const,
