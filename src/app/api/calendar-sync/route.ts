@@ -193,8 +193,11 @@ export async function POST(req: NextRequest) {
           .eq("workspace_id", workspaceId);
 
         // Track schedule changes for push notifications
+        // Normalize time to HH:MM for comparison — Postgres returns "10:00:00"
+        // but the scraper sends "10:00", causing false positives.
+        const normalizeTime = (t: string | null) => t?.slice(0, 5) ?? null;
         const dateChanged = existingLead.scheduled_day !== entry.scheduledDate;
-        const timeChanged = entry.scheduledTime && existingLead.scheduled_time !== entry.scheduledTime;
+        const timeChanged = entry.scheduledTime && normalizeTime(existingLead.scheduled_time) !== normalizeTime(entry.scheduledTime);
         if (dateChanged || timeChanged) {
           rescheduledLeadNames.push(client);
         }
