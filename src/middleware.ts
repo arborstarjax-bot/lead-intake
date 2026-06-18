@@ -23,6 +23,7 @@ const PUBLIC_PATHS = [
   "/api/voice/webhook",
   "/api/voice/status",
   "/api/voice/trigger",
+  "/api/calendar-sync",
   "/manifest.webmanifest",
   "/sw.js",
   "/icons",
