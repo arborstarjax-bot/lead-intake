@@ -36,6 +36,7 @@ export const LEAD_INTAKE_SOURCES = [
   "quick_link",
   "email_ingest",
   "manual",
+  "calendar_sync",
 ] as const;
 export type LeadIntakeSource = (typeof LEAD_INTAKE_SOURCES)[number];
 
@@ -183,6 +184,8 @@ export type Lead = {
   arborbridge_status: "not_pushed" | "pushed_to_arborbridge" | "push_failed" | null;
   arborbridge_record_id: string | null;
   arborbridge_last_pushed_at: string | null;
+  calendar_sync_status: "not_synced" | "synced" | "sync_failed" | null;
+  calendar_sync_at: string | null;
 };
 
 /* ── Outcome reason tracking (Lost / Not Sold) ───────────────── */

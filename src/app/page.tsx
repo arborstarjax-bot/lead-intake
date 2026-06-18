@@ -67,6 +67,8 @@ function buildPendingLead(): Lead {
     arborbridge_status: null,
     arborbridge_record_id: null,
     arborbridge_last_pushed_at: null,
+    calendar_sync_status: null,
+    calendar_sync_at: null,
   };
 }
 
