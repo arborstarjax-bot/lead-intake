@@ -30,6 +30,7 @@ interface CalendarSyncEntry {
   state?: string | null;
   zip?: string | null;
   notes?: string | null;
+  singleopsTaskId?: string | null;
 }
 
 /**
@@ -172,6 +173,7 @@ export async function POST(req: NextRequest) {
         if (entry.state) updates.state = normalizeState(entry.state) ?? entry.state;
         if (entry.zip) updates.zip = normalizeZip(entry.zip) ?? entry.zip;
         if (entry.notes) updates.notes = entry.notes;
+        if (entry.singleopsTaskId) updates.singleops_task_id = entry.singleopsTaskId;
 
         // If the lead isn't already scheduled or completed, mark as Scheduled
         if (existingLead.status !== "Completed" && existingLead.status !== "Scheduled") {
@@ -227,6 +229,7 @@ export async function POST(req: NextRequest) {
           lead_type: "Residential",
           calendar_sync_status: "synced" as const,
           calendar_sync_at: new Date().toISOString(),
+          singleops_task_id: entry.singleopsTaskId || null,
         };
 
         const { data: created, error: insertErr } = await supabase

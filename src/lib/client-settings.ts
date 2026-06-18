@@ -37,6 +37,7 @@ export type ClientAppSettings = {
   email_subject_template: string | null;
   email_body_template: string | null;
   lead_sources: string[];
+  auto_sync_to_singleops: boolean;
 
   created_at: string;
   updated_at: string;
@@ -70,6 +71,7 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
   sms_enroute_template: null,
   email_subject_template: null,
   email_body_template: null,
+  auto_sync_to_singleops: false,
   lead_sources: [
     "Facebook",
     "Instagram",

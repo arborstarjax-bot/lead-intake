@@ -201,7 +201,11 @@ export default function SettingsPage() {
       ) : null}
 
       {/* Integrations (calendar sync + notifications) */}
-      <IntegrationsPanel />
+      <IntegrationsPanel
+        autoSyncToSingleOps={s.auto_sync_to_singleops}
+        onAutoSyncChange={(v) => update("auto_sync_to_singleops", v)}
+        canEdit={isAdmin}
+      />
 
       {/* AI Voice Agent */}
       <VoiceAgentPanel ref={voiceRef} canEdit={isAdmin} onDirtyChange={checkVoiceDirty} />

@@ -10,6 +10,7 @@ import {
 } from "@/modules/calendar/server";
 import { requireMembership } from "@/modules/auth/server";
 import { sendWorkspacePush } from "@/lib/push";
+import { syncScheduleToSingleOps } from "@/lib/singleops-sync";
 
 export const runtime = "nodejs";
 
@@ -416,6 +417,44 @@ export async function PATCH(
     }
   } catch {
     // Non-blocking — activity log failures never block the lead update.
+  }
+
+  // Auto-sync schedule changes to SingleOps via ArborBridge.
+  // Only fires for user-initiated changes (not calendar-sync origin)
+  // on leads that have a singleops_task_id (i.e., came from SingleOps).
+  const scheduleChanged =
+    ("scheduled_day" in patch && patch.scheduled_day !== existing.scheduled_day) ||
+    ("scheduled_time" in patch && patch.scheduled_time !== existing.scheduled_time);
+  const isCalendarSyncOrigin = req.headers.get("x-origin") === "calendar-sync";
+  if (scheduleChanged && !isCalendarSyncOrigin && data.singleops_task_id) {
+    void (async () => {
+      try {
+        const syncSettings = await getSettings(auth.workspaceId);
+        if (!syncSettings.auto_sync_to_singleops) return;
+        const supabaseSync = createAdminClient();
+        await supabaseSync
+          .from("leads")
+          .update({ singleops_sync_status: "pending" })
+          .eq("id", id);
+        const result = await syncScheduleToSingleOps(
+          {
+            leadId: id,
+            clientName: data.client || displayName(data.first_name, data.last_name) || "Unknown",
+            singleopsTaskId: data.singleops_task_id,
+            scheduledDate: data.scheduled_day,
+            scheduledTime: data.scheduled_time,
+            timezone: syncSettings.timezone,
+          },
+          auth.workspaceId,
+        );
+        await supabaseSync
+          .from("leads")
+          .update({ singleops_sync_status: result.ok ? "synced" : "failed" })
+          .eq("id", id);
+      } catch {
+        // Non-blocking
+      }
+    })();
   }
 
   if ((completing || unbookingCalendar) && hasRealCalendarEvent) {
