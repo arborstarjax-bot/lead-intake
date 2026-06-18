@@ -156,7 +156,27 @@ export async function POST(req: NextRequest) {
       }
 
       if (existingLead) {
-        // Update existing lead
+        // Leads in terminal states (Completed, Pending, Lost) should not
+        // have their schedule, rep, or address overwritten by a re-sync.
+        // Only update the task-id mapping and sync timestamp so we can
+        // still track the link back to SingleOps.
+        const TERMINAL_STATUSES = new Set(["Completed", "Pending", "Lost"]);
+        if (TERMINAL_STATUSES.has(existingLead.status ?? "")) {
+          const touchUpdates: Record<string, unknown> = {
+            calendar_sync_status: "synced",
+            calendar_sync_at: new Date().toISOString(),
+          };
+          if (entry.singleopsTaskId) touchUpdates.singleops_task_id = entry.singleopsTaskId;
+          await supabase
+            .from("leads")
+            .update(touchUpdates)
+            .eq("id", existingLead.id)
+            .eq("workspace_id", workspaceId);
+          synced++;
+          continue;
+        }
+
+        // Update existing lead (still in active funnel)
         const updates: Record<string, unknown> = {
           scheduled_day: entry.scheduledDate,
           calendar_sync_status: "synced",
@@ -179,11 +199,8 @@ export async function POST(req: NextRequest) {
         if (entry.notes) updates.notes = entry.notes;
         if (entry.singleopsTaskId) updates.singleops_task_id = entry.singleopsTaskId;
 
-        // Only promote to Scheduled if the lead is still in an early-funnel
-        // status. Preserve user-set terminal states so a calendar re-sync
-        // doesn't undo "Pending", "Completed", "Lost", etc.
-        const PROTECTED_STATUSES = new Set(["Scheduled", "Completed", "Pending", "Lost"]);
-        if (!PROTECTED_STATUSES.has(existingLead.status ?? "")) {
+        // Promote to Scheduled if the lead is still in an early-funnel status.
+        if (existingLead.status !== "Scheduled") {
           updates.status = "Scheduled";
         }
 
