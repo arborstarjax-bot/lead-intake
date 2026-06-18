@@ -50,11 +50,15 @@ const tabs: Tab[] = [
 const HIDDEN_PREFIXES = ["/login", "/signup", "/forgot-password", "/reset-password", "/u/"];
 
 /**
- * Mobile-only bottom tab bar. Renders a fixed 5-tab strip anchored to the
- * bottom of the viewport, respecting the iOS home indicator via
- * `env(safe-area-inset-bottom)`. Hidden on auth / legal pages and on
- * `md` breakpoints and above (where desktop nav in each page header
- * provides the equivalent entry points).
+ * Mobile-only bottom tab bar. Uses `fixed` positioning so it is always
+ * anchored to the bottom of the viewport regardless of scroll position,
+ * keyboard open/close, or iOS Safari dynamic toolbar resizing. The
+ * layout's `<main>` wrapper adds matching bottom padding so page content
+ * is never hidden behind this bar.
+ *
+ * Respects the iOS home indicator via `env(safe-area-inset-bottom)`.
+ * Hidden on auth pages and on `md` breakpoints and above (where desktop
+ * nav in each page header provides the equivalent entry points).
  */
 export function BottomNav() {
   const pathname = usePathname() ?? "/";
@@ -63,7 +67,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary"
-      className="md:hidden sticky bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-white shrink-0"
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-white"
       style={{
         paddingBottom: "env(safe-area-inset-bottom)",
       }}

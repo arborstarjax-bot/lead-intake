@@ -54,7 +54,7 @@ export default function RootLayout({
           <ConfirmProvider>
             <SettingsProvider>
               <SetupGuard />
-              <main className="flex-1 overflow-y-auto min-h-0">
+              <main className="flex-1 overflow-y-auto min-h-0 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
                 {children}
               </main>
               <BottomNav />
