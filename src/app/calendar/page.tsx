@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { LEAD_FLEX_WINDOW_DISPLAY, type Lead } from "@/modules/leads/model";
+import type { Task } from "@/modules/tasks/model";
+import { NewTaskModal } from "@/app/tasks/NewTaskModal";
 import {
   salespersonColor,
   normalizeSalespersonKey,
@@ -45,8 +47,12 @@ function salespersonLabel(key: string, source?: string | null): string {
  */
 export default function CalendarPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<CalendarView>("month");
+  const [showNewTask, setShowNewTask] = useState(false);
+  const [newTaskStart, setNewTaskStart] = useState<string | undefined>();
+  const [newTaskEnd, setNewTaskEnd] = useState<string | undefined>();
   // Salesperson filter. Default is "View all" so a new workspace sees the
   // same calendar as before this feature shipped.
   const [selectedSalesperson, setSelectedSalesperson] =
@@ -62,16 +68,26 @@ export default function CalendarPage() {
     toIso(startOfWeekLocal(new Date()))
   );
 
-  useEffect(() => {
+  const fetchAll = useCallback(() => {
     setLoading(true);
-    fetch("/api/leads?view=all")
-      .then((r) => r.json())
-      .then((j) => {
-        setLeads(Array.isArray(j.leads) ? j.leads : []);
+    Promise.all([
+      fetch("/api/leads?view=all").then((r) => r.json()),
+      fetch("/api/tasks?status=all").then((r) => r.json()),
+    ])
+      .then(([leadsData, tasksData]) => {
+        setLeads(Array.isArray(leadsData.leads) ? leadsData.leads : []);
+        setTasks(Array.isArray(tasksData.tasks) ? tasksData.tasks : []);
       })
-      .catch(() => setLeads([]))
+      .catch(() => {
+        setLeads([]);
+        setTasks([]);
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
 
   const todayIso = useMemo(() => toIso(new Date()), []);
 
@@ -136,6 +152,35 @@ export default function CalendarPage() {
     }
     return byDay;
   }, [leads, selectedSalesperson]);
+
+  const tasksByDay = useMemo(() => {
+    const byDay = new Map<string, Task[]>();
+    for (const t of tasks) {
+      if (t.status === "Cancelled") continue;
+      const day = toIso(new Date(t.start_at));
+      const arr = byDay.get(day) ?? [];
+      arr.push(t);
+      byDay.set(day, arr);
+    }
+    for (const arr of byDay.values()) {
+      arr.sort((a, b) => a.start_at.localeCompare(b.start_at));
+    }
+    return byDay;
+  }, [tasks]);
+
+  function handleSlotClick(dayIso: string, hour: number) {
+    const [y, m, d] = dayIso.split("-").map(Number);
+    const start = new Date(y, m - 1, d, hour, 0, 0);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const fmt = (dt: Date) =>
+      `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(
+        dt.getDate(),
+      )}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    setNewTaskStart(fmt(start));
+    setNewTaskEnd(fmt(end));
+    setShowNewTask(true);
+  }
 
   return (
     <main className="mx-auto max-w-6xl p-4 sm:p-6 space-y-6">
@@ -252,7 +297,21 @@ export default function CalendarPage() {
           onToday={() => setWeekAnchorIso(toIso(startOfWeekLocal(new Date())))}
           todayIso={todayIso}
           leadsByDay={leadsByDay}
+          tasksByDay={tasksByDay}
+          onSlotClick={handleSlotClick}
           loading={loading}
+        />
+      )}
+
+      {showNewTask && (
+        <NewTaskModal
+          onClose={() => setShowNewTask(false)}
+          onCreated={() => {
+            setShowNewTask(false);
+            fetchAll();
+          }}
+          initialStart={newTaskStart}
+          initialEnd={newTaskEnd}
         />
       )}
     </main>
@@ -360,6 +419,8 @@ function WeekView({
   onToday,
   todayIso,
   leadsByDay,
+  tasksByDay,
+  onSlotClick,
   loading,
 }: {
   anchorIso: string;
@@ -367,6 +428,8 @@ function WeekView({
   onToday: () => void;
   todayIso: string;
   leadsByDay: Map<string, Lead[]>;
+  tasksByDay?: Map<string, Task[]>;
+  onSlotClick?: (dayIso: string, hour: number) => void;
   loading: boolean;
 }) {
   const days = useMemo(() => {
@@ -384,9 +447,12 @@ function WeekView({
   }, [anchorIso]);
   const weekCount = useMemo(() => {
     let count = 0;
-    for (const d of days) count += leadsByDay.get(d.iso)?.length ?? 0;
+    for (const d of days) {
+      count += leadsByDay.get(d.iso)?.length ?? 0;
+      count += tasksByDay?.get(d.iso)?.length ?? 0;
+    }
     return count;
-  }, [days, leadsByDay]);
+  }, [days, leadsByDay, tasksByDay]);
   const rangeLabel = useMemo(() => {
     const start = parseIsoLocal(days[0].iso);
     const end = parseIsoLocal(days[6].iso);
@@ -434,8 +500,8 @@ function WeekView({
             {loading
               ? "Loading…"
               : weekCount === 0
-                ? "No booked estimates this week"
-                : `${weekCount} booked estimate${weekCount === 1 ? "" : "s"}`}
+                ? "Nothing scheduled this week"
+                : `${weekCount} event${weekCount === 1 ? "" : "s"} this week`}
           </div>
         </div>
         <button
@@ -512,6 +578,7 @@ function WeekView({
         </div>
         {days.map((d) => {
           const dayLeads = leadsByDay.get(d.iso) ?? [];
+          const dayTasks = tasksByDay?.get(d.iso) ?? [];
           return (
             <div
               key={d.iso}
@@ -521,15 +588,13 @@ function WeekView({
               {hours.map((h) => (
                 <div
                   key={h}
-                  className="absolute left-0 right-0 border-t border-dashed border-[var(--border)]/60"
-                  style={{ top: (h - START_HOUR) * HOUR_PX }}
+                  className="absolute left-0 right-0 border-t border-dashed border-[var(--border)]/60 cursor-pointer hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/5"
+                  style={{ top: (h - START_HOUR) * HOUR_PX, height: HOUR_PX }}
+                  onClick={() => onSlotClick?.(d.iso, h)}
+                  title={`Click to create task at ${formatHour(h)}`}
                 />
               ))}
               {(() => {
-                // Separate flex-window leads so they stack vertically at the
-                // top of the column. Without an index, multiple flex chips
-                // pile onto the same coordinates and only the last one is
-                // visible / clickable.
                 const flexLeads = dayLeads.filter((l) => !l.scheduled_time);
                 const timedLeads = dayLeads.filter((l) => l.scheduled_time);
                 return (
@@ -548,6 +613,15 @@ function WeekView({
                       <WeekEventBlock
                         key={l.id}
                         lead={l}
+                        startHour={START_HOUR}
+                        endHour={END_HOUR}
+                        hourPx={HOUR_PX}
+                      />
+                    ))}
+                    {dayTasks.map((t) => (
+                      <WeekTaskBlock
+                        key={t.id}
+                        task={t}
                         startHour={START_HOUR}
                         endHour={END_HOUR}
                         hourPx={HOUR_PX}
@@ -639,6 +713,44 @@ function WeekEventBlock({
     >
       <div className="font-semibold truncate">{lead.client ?? "Untitled"}</div>
       <div className="opacity-90 truncate">{formatHMM(time)}</div>
+    </Link>
+  );
+}
+
+function WeekTaskBlock({
+  task,
+  startHour,
+  endHour,
+  hourPx,
+}: {
+  task: Task;
+  startHour: number;
+  endHour: number;
+  hourPx: number;
+}) {
+  const start = new Date(task.start_at);
+  const end = new Date(task.end_at);
+  const hh = start.getHours();
+  const mm = start.getMinutes();
+  const durationMin = Math.max(30, (end.getTime() - start.getTime()) / 60000);
+  const minutesFromStart = (hh - startHour) * 60 + mm;
+  const totalMinutes = (endHour - startHour) * 60;
+  const clampedStart = Math.max(0, Math.min(minutesFromStart, totalMinutes));
+  const top = (clampedStart / 60) * hourPx;
+  const height = Math.max(22, (durationMin / 60) * hourPx);
+  const timeLabel = start.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return (
+    <Link
+      href="/tasks"
+      className="absolute left-1 right-1 rounded-md text-white px-1.5 py-0.5 text-[10px] leading-tight overflow-hidden hover:brightness-110 z-10"
+      style={{ top, height, background: "#7c3aed" }}
+      title={`${task.name} at ${timeLabel}`}
+    >
+      <div className="font-semibold truncate">{task.name}</div>
+      <div className="opacity-90 truncate">{timeLabel}</div>
     </Link>
   );
 }
