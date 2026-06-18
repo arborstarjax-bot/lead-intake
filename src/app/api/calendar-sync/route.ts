@@ -80,6 +80,11 @@ export async function POST(req: NextRequest) {
   const cancelledLeadNames: string[] = [];
   const repChangedLeadNames: string[] = [];
   const completedLeadNames: string[] = [];
+  const pushCompletionQueue: Array<{
+    leadId: string;
+    clientName: string;
+    singleopsTaskId: string;
+  }> = [];
   const detectedSources = new Set<string>();
 
   for (const entry of entries) {
@@ -201,23 +206,18 @@ export async function POST(req: NextRequest) {
             .eq("id", existingLead.id)
             .eq("workspace_id", workspaceId);
 
-          // Push completion back to SingleOps if the task is still active there.
-          // The entry from SingleOps won't have a completed jobStatus if it's
-          // still green on the calendar — so we need to tell ArborBridge to
-          // mark it complete.
+          // Queue completion push to SingleOps if the task is still active there.
+          // Processed sequentially after the main loop to avoid overloading
+          // ArborBridge with parallel Playwright sessions.
           const singleopsStillActive =
             !entry.jobStatus?.toLowerCase().includes("complete") &&
             entry.changeType !== "completed";
           if (taskId && singleopsStillActive) {
-            void syncCompletionToSingleOps(
-              {
-                leadId: existingLead.id,
-                clientName: client,
-                singleopsTaskId: taskId,
-              },
-              workspaceId,
-            ).catch(() => {});
-            completedLeadNames.push(client);
+            pushCompletionQueue.push({
+              leadId: existingLead.id,
+              clientName: client,
+              singleopsTaskId: taskId,
+            });
           }
 
           synced++;
@@ -444,7 +444,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Send push notification for completed leads from SingleOps
+  // Send push notification for leads that SingleOps reported as completed
   if (completedLeadNames.length > 0) {
     try {
       const body = completedLeadNames.length === 1
@@ -459,6 +459,56 @@ export async function POST(req: NextRequest) {
       });
     } catch {
       // Non-blocking
+    }
+  }
+
+  // Process queued completion pushbacks to SingleOps sequentially.
+  // Each call triggers a Playwright browser session on ArborBridge,
+  // so we process one at a time to avoid overloading Docker.
+  if (pushCompletionQueue.length > 0) {
+    const pushSuccesses: string[] = [];
+    const pushFailures: string[] = [];
+    for (const item of pushCompletionQueue) {
+      try {
+        const result = await syncCompletionToSingleOps(item, workspaceId);
+        if (result.ok) {
+          pushSuccesses.push(item.clientName);
+        } else {
+          pushFailures.push(item.clientName);
+          console.warn(`[CalendarSync] Completion push failed for ${item.clientName}: ${result.error}`);
+        }
+      } catch {
+        pushFailures.push(item.clientName);
+      }
+    }
+    if (pushSuccesses.length > 0) {
+      try {
+        const body = pushSuccesses.length === 1
+          ? `${pushSuccesses[0]} — marked complete in SingleOps`
+          : `${pushSuccesses.length} estimates marked complete in SingleOps`;
+        await sendWorkspacePush({
+          workspaceId,
+          title: "Sync: Estimates Completed",
+          body,
+          url: "/leads",
+          tag: "calendar-sync-push-complete",
+        });
+      } catch {
+        // Non-blocking
+      }
+    }
+    if (pushFailures.length > 0) {
+      try {
+        await sendWorkspacePush({
+          workspaceId,
+          title: "Sync: Completion Failed",
+          body: `Failed to complete ${pushFailures.length} task(s) in SingleOps: ${pushFailures.join(", ")}`,
+          url: "/leads",
+          tag: "calendar-sync-push-fail",
+        });
+      } catch {
+        // Non-blocking
+      }
     }
   }
 
