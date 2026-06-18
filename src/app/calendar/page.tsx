@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Repeat } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { LEAD_FLEX_WINDOW_DISPLAY, type Lead } from "@/modules/leads/model";
@@ -792,7 +792,10 @@ function WeekTaskBlock({
       style={{ top, height, background: "#7c3aed" }}
       title={`${task.name} at ${timeLabel}`}
     >
-      <div className="font-semibold truncate">{task.name}</div>
+      <div className="font-semibold truncate flex items-center gap-0.5">
+        {task.recurrence_rule && <Repeat className="h-2.5 w-2.5 flex-shrink-0" />}
+        {task.name}
+      </div>
       <div className="opacity-90 truncate">{timeLabel}</div>
     </Link>
   );
