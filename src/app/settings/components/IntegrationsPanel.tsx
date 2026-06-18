@@ -8,12 +8,16 @@ import { Panel } from "./Panel";
 interface IntegrationsPanelProps {
   autoSyncToSingleOps: boolean;
   onAutoSyncChange: (value: boolean) => void;
+  syncIntervalMinutes: number;
+  onSyncIntervalChange: (value: number) => void;
   canEdit: boolean;
 }
 
 export function IntegrationsPanel({
   autoSyncToSingleOps,
   onAutoSyncChange,
+  syncIntervalMinutes,
+  onSyncIntervalChange,
   canEdit,
 }: IntegrationsPanelProps) {
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
@@ -80,6 +84,25 @@ export function IntegrationsPanel({
             />
             <RefreshCw className="sr-only" />
           </button>
+        }
+      />
+      <Row
+        title="Sync interval"
+        subtitle="How often ArborBridge checks SingleOps for changes."
+        right={
+          <select
+            disabled={!canEdit}
+            value={syncIntervalMinutes}
+            onChange={(e) => onSyncIntervalChange(parseInt(e.target.value))}
+            className={`rounded-md border border-gray-300 bg-white px-2 py-1 text-sm ${
+              !canEdit ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+          >
+            <option value={5}>5 min</option>
+            <option value={10}>10 min</option>
+            <option value={15}>15 min</option>
+            <option value={30}>30 min</option>
+          </select>
         }
       />
     </Panel>

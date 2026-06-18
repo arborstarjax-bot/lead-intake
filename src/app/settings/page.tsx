@@ -204,6 +204,8 @@ export default function SettingsPage() {
       <IntegrationsPanel
         autoSyncToSingleOps={s.auto_sync_to_singleops}
         onAutoSyncChange={(v) => update("auto_sync_to_singleops", v)}
+        syncIntervalMinutes={s.sync_interval_minutes}
+        onSyncIntervalChange={(v) => update("sync_interval_minutes", v)}
         canEdit={isAdmin}
       />
 

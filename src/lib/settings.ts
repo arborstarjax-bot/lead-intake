@@ -38,6 +38,7 @@ export type AppSettings = {
   email_body_template: string | null;
   lead_sources: string[];
   auto_sync_to_singleops: boolean;
+  sync_interval_minutes: number;
 
   created_at: string;
   updated_at: string;
@@ -74,6 +75,7 @@ export type AppSettingsPatch = Partial<
     | "email_body_template"
     | "lead_sources"
     | "auto_sync_to_singleops"
+    | "sync_interval_minutes"
   >
 >;
 
@@ -108,6 +110,7 @@ export function defaultSettings(workspaceId: string): AppSettings {
     email_subject_template: null,
     email_body_template: null,
     auto_sync_to_singleops: false,
+    sync_interval_minutes: 15,
     lead_sources: [
       "Facebook",
       "Instagram",
