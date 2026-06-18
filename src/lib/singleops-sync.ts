@@ -51,9 +51,11 @@ export async function syncScheduleToSingleOps(
       }
 
       const contentType = res.headers.get("content-type") || "";
-      const errText = contentType.includes("application/json")
-        ? (await res.json()).error || `HTTP ${res.status}`
-        : `HTTP ${res.status}`;
+      let errText = `HTTP ${res.status}`;
+      if (contentType.includes("application/json")) {
+        const data = await res.json().catch(() => null);
+        errText = data?.reason || data?.error || errText;
+      }
 
       console.warn(`[SingleOpsSync] Attempt ${attempt}/${maxRetries} failed: ${errText}`);
       if (attempt === maxRetries) {
@@ -134,9 +136,11 @@ export async function syncCompletionToSingleOps(
       }
 
       const contentType = res.headers.get("content-type") || "";
-      const errText = contentType.includes("application/json")
-        ? (await res.json()).error || `HTTP ${res.status}`
-        : `HTTP ${res.status}`;
+      let errText = `HTTP ${res.status}`;
+      if (contentType.includes("application/json")) {
+        const data = await res.json().catch(() => null);
+        errText = data?.reason || data?.error || errText;
+      }
 
       console.warn(`[SingleOpsSync] Complete attempt ${attempt}/${maxRetries} failed: ${errText}`);
       if (attempt === maxRetries) {
@@ -210,8 +214,16 @@ export async function triggerCalendarSync(): Promise<{
       };
     }
 
-    const text = await res.text().catch(() => `HTTP ${res.status}`);
-    return { ok: false, error: text.slice(0, 200) };
+    const contentType = res.headers.get("content-type") || "";
+    let errText: string;
+    if (contentType.includes("application/json")) {
+      const data = await res.json().catch(() => null);
+      errText = data?.reason || data?.error || `HTTP ${res.status}`;
+    } else {
+      errText = await res.text().catch(() => `HTTP ${res.status}`);
+      errText = errText.slice(0, 200);
+    }
+    return { ok: false, error: errText };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Network error";
     return { ok: false, error: msg };
