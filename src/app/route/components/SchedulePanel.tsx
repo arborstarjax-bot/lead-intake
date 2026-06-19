@@ -485,6 +485,17 @@ export function SchedulePanel({
               ) : (
                 dayCards.map((d, idx) => {
                   const active = d.date === selectedDay;
+                  const bestEff = dayCards[0]?.effectiveBestMinutes ?? 0;
+                  const thisEff = d.effectiveBestMinutes ?? Infinity;
+                  const isBestDay = idx === 0;
+                  const isGoodDay = !isBestDay && bestEff != null && thisEff <= bestEff + 5;
+                  const tierColor = active
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                    : isBestDay
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                      : isGoodDay
+                        ? "border-amber-300 bg-amber-50 text-amber-700"
+                        : "border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]";
                   return (
                     <button
                       key={d.date}
@@ -492,20 +503,21 @@ export function SchedulePanel({
                       onClick={() => onSelectDay(d.date)}
                       className={cn(
                         "shrink-0 flex flex-col items-center rounded-xl border px-3 py-1.5 text-center transition active:scale-[0.97]",
-                        active
-                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                          : "border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+                        tierColor
                       )}
                     >
                       <span className="text-[11px] font-medium leading-tight">
                         {formatDayShort(d.date)}
                       </span>
-                      <span className="text-[10px] text-[var(--muted)] leading-tight mt-0.5">
+                      <span className={cn("text-[10px] leading-tight mt-0.5", active ? "text-[var(--accent)]" : "text-[var(--muted)]")}>
                         {d.slotCount} slot{d.slotCount !== 1 ? "s" : ""}
                         {d.bestTotalDriveMinutes != null && ` · ${d.bestTotalDriveMinutes}m`}
                       </span>
-                      {idx === 0 && (
+                      {isBestDay && (
                         <span className="text-[9px] font-bold text-emerald-600 uppercase">Best</span>
+                      )}
+                      {isGoodDay && (
+                        <span className="text-[9px] font-bold text-amber-600 uppercase">Good</span>
                       )}
                     </button>
                   );
@@ -841,7 +853,11 @@ function SmartSlotCard({
         "w-full rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] relative overflow-hidden",
         selected
           ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200"
-          : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]"
+          : isBest
+            ? "border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50"
+            : slot.totalDriveMinutes <= 20
+              ? "border-amber-200 bg-amber-50/30 hover:bg-amber-50/50"
+              : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]"
       )}
     >
       {isBest && (
