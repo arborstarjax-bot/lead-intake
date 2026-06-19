@@ -127,8 +127,10 @@ export async function PATCH(
       const settings = await getSettings(auth.workspaceId);
       if (settings.auto_sync_to_singleops) {
         const newStart = new Date(updates.start_at as string);
-        const scheduledDate = newStart.toISOString().split("T")[0];
-        const scheduledTime = `${String(newStart.getHours()).padStart(2, "0")}:${String(newStart.getMinutes()).padStart(2, "0")}`;
+        const tz = "America/New_York";
+        const localStart = new Date(newStart.toLocaleString("en-US", { timeZone: tz }));
+        const scheduledDate = `${localStart.getFullYear()}-${String(localStart.getMonth() + 1).padStart(2, "0")}-${String(localStart.getDate()).padStart(2, "0")}`;
+        const scheduledTime = `${String(localStart.getHours()).padStart(2, "0")}:${String(localStart.getMinutes()).padStart(2, "0")}`;
         void syncScheduleToSingleOps(
           {
             leadId: id,

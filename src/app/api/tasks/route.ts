@@ -94,8 +94,10 @@ export async function POST(req: NextRequest) {
       const settings = await getSettings(auth.workspaceId);
       if (settings.auto_sync_to_singleops) {
         const startAt = new Date(data.start_at);
-        const scheduledDate = startAt.toISOString().split("T")[0];
-        const scheduledTime = `${String(startAt.getHours()).padStart(2, "0")}:${String(startAt.getMinutes()).padStart(2, "0")}`;
+        const tz = "America/New_York";
+        const localStart = new Date(startAt.toLocaleString("en-US", { timeZone: tz }));
+        const scheduledDate = `${localStart.getFullYear()}-${String(localStart.getMonth() + 1).padStart(2, "0")}-${String(localStart.getDate()).padStart(2, "0")}`;
+        const scheduledTime = `${String(localStart.getHours()).padStart(2, "0")}:${String(localStart.getMinutes()).padStart(2, "0")}`;
         const addr = [data.address, data.city, data.state, data.zip]
           .filter(Boolean)
           .join(", ") || null;
