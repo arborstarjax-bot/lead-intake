@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Calendar, Clock, MapPin, User, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Plus, Calendar, ChevronRight, Clock, MapPin, User, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import {
   TASK_STATUS_COLORS,
@@ -152,9 +153,10 @@ export default function TasksPage() {
       ) : (
         <div className="space-y-2">
           {sortedTasks.map((task) => (
-            <div
+            <Link
               key={task.id}
-              className="rounded-lg border border-[var(--border)] bg-white p-4 shadow-sm"
+              href={`/tasks/${task.id}`}
+              className="block rounded-lg border border-[var(--border)] bg-white p-4 shadow-sm hover:border-[var(--accent)]/40 transition-colors"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -200,7 +202,7 @@ export default function TasksPage() {
                 <div className="flex items-center gap-1">
                   {task.status === "Scheduled" && (
                     <button
-                      onClick={() => updateStatus(task.id, "Completed")}
+                      onClick={(e) => { e.preventDefault(); updateStatus(task.id, "Completed"); }}
                       title="Mark complete"
                       className="rounded p-1.5 text-green-600 hover:bg-green-50"
                     >
@@ -208,15 +210,16 @@ export default function TasksPage() {
                     </button>
                   )}
                   <button
-                    onClick={() => deleteTask(task.id)}
+                    onClick={(e) => { e.preventDefault(); deleteTask(task.id); }}
                     title="Delete"
                     className="rounded p-1.5 text-red-400 hover:bg-red-50"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
+                  <ChevronRight className="h-4 w-4 text-[var(--muted)]" />
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}
