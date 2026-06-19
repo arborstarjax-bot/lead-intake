@@ -51,6 +51,27 @@ function parseHHMM(t: string): number {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 }
 
+function todayIsoLocal(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function currentMinutesET(): number {
+  const now = new Date();
+  const hhmm = now.toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return parseHHMM(hhmm);
+}
+
+function isSlotPastForDay(startTime: string, dayIso: string): boolean {
+  if (dayIso > todayIsoLocal()) return false;
+  if (dayIso < todayIsoLocal()) return true;
+  return parseHHMM(startTime) <= currentMinutesET();
+}
+
 function formatTime(t: string): string {
   return formatClock(t);
 }
@@ -594,47 +615,92 @@ export function SchedulePanel({
               <div className="py-4 flex items-center justify-center text-[var(--muted)] text-sm">
                 <Loader2 className="h-4 w-4 animate-spin mr-2" /> Ranking slots…
               </div>
-            ) : slots.length === 0 ? (
-              <div className="py-4 text-center text-sm text-[var(--muted)]">
-                No feasible slots on this day.
-              </div>
-            ) : (
-              <div className="space-y-1.5 max-h-[26vh] overflow-y-auto">
-                {slots.map((s, i) => {
-                  const hour = parseHHMM(s.startTime) / 60;
-                  const prevHour = i > 0 ? parseHHMM(slots[i - 1].startTime) / 60 : 0;
-                  const showMorning = i === 0 && hour < 12;
-                  const showAfternoon = hour >= 12 && (i === 0 || prevHour < 12);
-                  return (
-                    <div key={s.startTime}>
-                      {showMorning && slots.some((sl) => parseHHMM(sl.startTime) >= 720) && (
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] pb-1">
-                          Morning
-                        </div>
-                      )}
-                      {showAfternoon && (
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] pt-2 pb-1">
-                          Afternoon
-                        </div>
-                      )}
-                      <SmartSlotCard
-                        slot={s}
-                        isBest={i === 0 && offset === 0}
-                        selected={previewSlot?.startTime === s.startTime}
-                        disabled={booking}
-                        onSelect={() =>
-                          onPreview(
-                            previewSlot?.startTime === s.startTime ? null : s
-                          )
-                        }
-                        stops={stops}
-                        insight={slotInsights[i] ?? null}
-                      />
+            ) : (() => {
+              const futureSlots = slots.filter((s) => !isSlotPastForDay(s.startTime, selectedDay));
+              const amSlots = futureSlots.filter((s) => parseHHMM(s.startTime) < 720).slice(0, 3);
+              const pmSlots = futureSlots.filter((s) => parseHHMM(s.startTime) >= 720).slice(0, 3);
+              const bestSlot = futureSlots.length > 0 && offset === 0 ? futureSlots[0] : null;
+              if (futureSlots.length === 0) {
+                return (
+                  <div className="py-4 text-center text-sm text-[var(--muted)]">
+                    No feasible slots on this day.
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-3 max-h-[32vh] overflow-y-auto">
+                  {/* Morning section */}
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
+                      <Sunrise className="h-3 w-3" />
+                      Morning
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    {amSlots.length === 0 ? (
+                      <div className="text-[11px] text-[var(--muted)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
+                        No morning slots
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {amSlots.map((s) => {
+                          const origIdx = slots.indexOf(s);
+                          return (
+                            <SmartSlotCard
+                              key={s.startTime}
+                              slot={s}
+                              isBest={bestSlot?.startTime === s.startTime}
+                              selected={previewSlot?.startTime === s.startTime}
+                              disabled={booking}
+                              onSelect={() =>
+                                onPreview(
+                                  previewSlot?.startTime === s.startTime ? null : s
+                                )
+                              }
+                              stops={stops}
+                              insight={origIdx >= 0 ? slotInsights[origIdx] ?? null : null}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Afternoon section */}
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
+                      <Sunset className="h-3 w-3" />
+                      Afternoon
+                    </div>
+                    {pmSlots.length === 0 ? (
+                      <div className="text-[11px] text-[var(--muted)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
+                        No afternoon slots
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {pmSlots.map((s) => {
+                          const origIdx = slots.indexOf(s);
+                          return (
+                            <SmartSlotCard
+                              key={s.startTime}
+                              slot={s}
+                              isBest={bestSlot?.startTime === s.startTime}
+                              selected={previewSlot?.startTime === s.startTime}
+                              disabled={booking}
+                              onSelect={() =>
+                                onPreview(
+                                  previewSlot?.startTime === s.startTime ? null : s
+                                )
+                              }
+                              stops={stops}
+                              insight={origIdx >= 0 ? slotInsights[origIdx] ?? null : null}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Power-user links */}
             <div className="flex items-center justify-center gap-3 pt-1 text-[11px]">
