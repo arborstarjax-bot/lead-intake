@@ -628,7 +628,7 @@ export function SchedulePanel({
                 );
               }
               return (
-                <div className="space-y-3 max-h-[32vh] overflow-y-auto">
+                <div className="space-y-3 max-h-[32vh] overflow-y-auto rounded-xl bg-slate-100 p-3">
                   {/* Morning section */}
                   <div>
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
@@ -921,7 +921,7 @@ function SmartSlotCard({
           ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200"
           : isBest
             ? "border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200"
-            : "border-transparent bg-slate-100 hover:bg-slate-200/70"
+            : "border-[var(--border)] bg-white hover:bg-slate-50"
       )}
     >
       {isBest && (
