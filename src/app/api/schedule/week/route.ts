@@ -38,15 +38,36 @@ type DayPreview =
        */
       clusterBonusMinutes: number;
       /**
-       * What the UI actually ranks on: max(0, best - bonus). A day with
-       * strictly more driving but a cluster match can beat a day with
-       * slightly less driving and no match.
+       * What the UI actually ranks on: max(0, best - bonus + urgencyPenalty).
+       * Combines drive efficiency, cluster affinity, and urgency so sooner
+       * days with reasonable drive times beat later days with marginally
+       * better drive times.
        */
       effectiveBestMinutes: number | null;
       slotCount: number;
       routeScore: number;
     }
   | { date: string; isWorkDay: false };
+
+/**
+ * Urgency penalty: each business day further from today adds a penalty
+ * to the effective score so that sooner days are preferred when drive
+ * times are competitive.
+ *
+ * Scale: 2 min per business day out.
+ *   - Tomorrow:   +2 min penalty
+ *   - Day after:  +4 min
+ *   - Next week:  +10 min
+ *
+ * This means a slot 5 min worse on drive time but available tomorrow
+ * still beats a slot that's 5 days out (5 < 10 penalty). But a slot
+ * 15 min worse won't flip the ranking just because it's sooner.
+ *
+ * Cap at 20 min so very distant days aren't completely buried — they
+ * still appear, just ranked lower.
+ */
+const URGENCY_PENALTY_PER_DAY = 2;
+const URGENCY_PENALTY_CAP = 20;
 
 /** Zero out any non-digits and grab the 5-digit US zip, if any. */
 function normalizeZip(zip: string | null | undefined): string | null {
@@ -83,9 +104,6 @@ function computeClusterBonus(
   }
   return Math.min(15, bonus);
 }
-
-const URGENCY_PENALTY_PER_DAY = 2;
-const URGENCY_PENALTY_CAP = 20;
 
 export async function POST(req: Request) {
   if (!process.env.GOOGLE_MAPS_API_KEY) {
@@ -258,7 +276,6 @@ export async function POST(req: Request) {
             }));
           routeScore = await calculateRouteScore(drive, homeAddr, existingStops);
         }
-
         return {
           date: iso,
           isWorkDay: true,
