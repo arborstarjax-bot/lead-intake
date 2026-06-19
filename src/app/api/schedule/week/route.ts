@@ -10,6 +10,7 @@ import {
   isoInBusinessTz,
   dayOfWeekInBusinessTz,
   upcomingBusinessTzDays,
+  todayIsoInBusinessTz,
 } from "@/modules/shared/date";
 
 export const runtime = "nodejs";
@@ -201,10 +202,24 @@ export async function POST(req: Request) {
           half: "all",
           drive,
         });
-        // suggestSlots returns slots in chronological order, so scan for the
-        // actual minimum instead of trusting slots[0].
-        const best = slots.length
-          ? Math.min(...slots.map((s) => s.totalDriveMinutes))
+
+        // For today, discard slots whose start time has already passed.
+        const todayIso = todayIsoInBusinessTz(tz);
+        let feasible = slots;
+        if (iso === todayIso) {
+          const now = new Date();
+          const nowHHMM =
+            now.toLocaleTimeString("en-US", {
+              timeZone: tz,
+              hour12: false,
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          feasible = slots.filter((s) => s.startTime > nowHHMM);
+        }
+
+        const best = feasible.length
+          ? Math.min(...feasible.map((s) => s.totalDriveMinutes))
           : null;
         const clusterBonusMinutes = computeClusterBonus(newLeadZip, others);
         const effectiveBestMinutes =
@@ -215,7 +230,7 @@ export async function POST(req: Request) {
           bestTotalDriveMinutes: best,
           clusterBonusMinutes,
           effectiveBestMinutes,
-          slotCount: slots.length,
+          slotCount: feasible.length,
         };
       })
     );
