@@ -37,6 +37,7 @@ export const LEAD_INTAKE_SOURCES = [
   "email_ingest",
   "manual",
   "calendar_sync",
+  "text_paste",
 ] as const;
 export type LeadIntakeSource = (typeof LEAD_INTAKE_SOURCES)[number];
 

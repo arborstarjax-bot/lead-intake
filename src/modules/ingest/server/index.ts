@@ -37,3 +37,7 @@ export {
   extractLeadFromImage,
   type ExtractedLead,
 } from "./ai/extract";
+
+export { extractLeadFromText } from "./ai/extract-text";
+
+export { ingestText } from "./ingest-text";
