@@ -145,7 +145,7 @@ export function SchedulePanel({
   previewSlot: Slot | null;
   routeData: RouteResponse | null;
   onPreview: (slot: Slot | null) => void;
-  onHeightChange: (h: number) => void;
+  onHeightChange?: (h: number) => void;
   onBooked: (msg: string) => void;
   onSelectDay: (day: string) => void;
   onClose?: () => void;
@@ -156,6 +156,7 @@ export function SchedulePanel({
   const bufferMinutes = settings.min_time_between_appointments ?? 60;
 
   useEffect(() => {
+    if (!onHeightChange) return;
     const el = panelRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
@@ -180,7 +181,7 @@ export function SchedulePanel({
   const [dayCardsLoading, setDayCardsLoading] = useState(false);
   const [dayCards, setDayCards] = useState<DayOption[]>([]);
   const dayStripRef = useRef<HTMLDivElement | null>(null);
-  const [slotInsights, setSlotInsights] = useState<string[]>([]);
+  const [slotInsights, setSlotInsights] = useState<Array<{ pro: string; con: string }>>([]);
 
   const [customTime, setCustomTime] = useState<string>("");
   const [flexWindow, setFlexWindow] = useState<LeadFlexWindow | null>(null);
@@ -452,7 +453,7 @@ export function SchedulePanel({
   return (
     <div
       ref={panelRef}
-      className="fixed inset-x-0 z-50 bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] md:bottom-0 border-t border-[var(--border)] bg-white shadow-2xl rounded-t-2xl"
+      className="border-t border-[var(--border)] bg-white rounded-2xl shadow-sm"
     >
       <div className="mx-auto max-w-6xl px-4 py-3 space-y-2">
         {/* Compact header — lead info + close */}
@@ -898,7 +899,7 @@ function SmartSlotCard({
   disabled: boolean;
   onSelect: () => void;
   stops: Stop[];
-  insight: string | null;
+  insight: { pro: string; con: string } | null;
 }) {
   const driveLabel = `+${slot.totalDriveMinutes} min`;
   const driveColor =
@@ -939,17 +940,28 @@ function SmartSlotCard({
               {driveLabel}
             </span>
           </div>
-          <div className="text-[11px] mt-1 truncate">
-            {insight ? (
-              <span className="text-[var(--accent)] font-medium">{insight}</span>
-            ) : (
-              <span className="text-[var(--muted)]">
-                {[slot.reasoning.priorLabel, slot.reasoning.nextLabel]
-                  .filter(Boolean)
-                  .join(" · ") || "Open slot"}
-              </span>
-            )}
-          </div>
+          {insight && (insight.pro || insight.con) ? (
+            <div className="mt-1.5 space-y-0.5 border-t border-slate-100 pt-1.5">
+              {insight.pro && (
+                <div className="flex items-start gap-1 text-[11px] text-emerald-600">
+                  <span className="font-bold shrink-0">+</span>
+                  <span className="line-clamp-2">{insight.pro}</span>
+                </div>
+              )}
+              {insight.con && (
+                <div className="flex items-start gap-1 text-[11px] text-amber-600">
+                  <span className="font-bold shrink-0">&minus;</span>
+                  <span className="line-clamp-2">{insight.con}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-[11px] mt-1 truncate text-[var(--muted)]">
+              {[slot.reasoning.priorLabel, slot.reasoning.nextLabel]
+                .filter(Boolean)
+                .join(" · ") || "Open slot"}
+            </div>
+          )}
         </div>
         <ChevronRight
           className={cn(

@@ -281,25 +281,63 @@ export default function RouteMap({
       anyPoint = true;
     });
 
-    // Ghost marker — faded amber, no number. Shown when previewing a slot.
-    // The only route color change in preview mode is the single leg that
-    // would feed into the ghost; the rest of the day stays blue.
+    // Ghost marker — pulsing orange pin with star. Clearly distinct from
+    // numbered blue stops so users instantly see the unplaced lead.
     if (ghost) {
-      const marker = new google.maps.Marker({
-        position: { lat: ghost.lat, lng: ghost.lng },
-        map,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 12,
-          fillColor: HIGHLIGHT_COLOR,
-          fillOpacity: 0.7,
-          strokeColor: "#fff",
-          strokeWeight: 2,
-        },
-        title: `${ghost.label} (preview) · ${formatClock(ghost.startTime)}`,
-      });
-      markersRef.current.push(marker);
-      bounds.extend(marker.getPosition()!);
+      const ghostEl = document.createElement("div");
+      ghostEl.title = `${ghost.label} (unplaced)${ghost.startTime ? ` · ${formatClock(ghost.startTime)}` : ""}`;
+      ghostEl.style.cssText = "position:relative;width:32px;height:32px;cursor:pointer;";
+      ghostEl.innerHTML = `
+        <style>
+          @keyframes ghost-pulse {
+            0% { transform: scale(1); opacity: .8; }
+            100% { transform: scale(2.2); opacity: 0; }
+          }
+        </style>
+        <div style="position:absolute;inset:0;border-radius:50%;border:2px solid #f97316;animation:ghost-pulse 1.5s ease-out infinite;"></div>
+        <div style="position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(249,115,22,.35);animation:ghost-pulse 1.5s ease-out infinite .3s;"></div>
+        <div style="position:absolute;inset:2px;border-radius:50%;background:#f97316;border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);">
+          <span style="color:#fff;font-size:14px;line-height:1;">&#9733;</span>
+        </div>
+      `;
+
+      const GhostOverlay = class extends google.maps.OverlayView {
+        private pos: google.maps.LatLng;
+        private div: HTMLDivElement;
+        constructor(pos: google.maps.LatLng, div: HTMLDivElement) {
+          super();
+          this.pos = pos;
+          this.div = div;
+        }
+        onAdd() {
+          this.getPanes()?.overlayMouseTarget.appendChild(this.div);
+        }
+        draw() {
+          const proj = this.getProjection();
+          if (!proj) return;
+          const pt = proj.fromLatLngToDivPixel(this.pos);
+          if (!pt) return;
+          this.div.style.left = `${pt.x - 16}px`;
+          this.div.style.top = `${pt.y - 16}px`;
+          this.div.style.position = "absolute";
+        }
+        onRemove() {
+          this.div.parentNode?.removeChild(this.div);
+        }
+      };
+
+      const overlay = new GhostOverlay(
+        new google.maps.LatLng(ghost.lat, ghost.lng),
+        ghostEl
+      );
+      overlay.setMap(map);
+      // Store a cleanup reference compatible with markersRef
+      const fakeMarker = {
+        setMap: (m: google.maps.Map | null) => overlay.setMap(m),
+        getPosition: () => new google.maps.LatLng(ghost.lat, ghost.lng),
+      } as unknown as google.maps.Marker;
+      markersRef.current.push(fakeMarker);
+      bounds.extend(new google.maps.LatLng(ghost.lat, ghost.lng));
       anyPoint = true;
     }
 
