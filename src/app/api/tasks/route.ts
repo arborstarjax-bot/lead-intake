@@ -100,15 +100,21 @@ export async function POST(req: NextRequest) {
           .filter(Boolean)
           .join(", ") || null;
 
+        // Extract client name from task name (format: "ClientName - TaskType")
+        const nameParts = data.name.split(" - ");
+        const clientName = nameParts.length > 1 ? nameParts[0].trim() : data.name;
+
         const syncResult = await syncTaskToSingleOps(
           {
             taskId: data.id,
             taskName: data.name,
+            clientName,
             notes: data.notes ?? null,
             scheduledDate,
             scheduledTime,
             address: addr,
             assignee: data.assignee ?? null,
+            leadSource: null,
           },
           auth.workspaceId,
         );
