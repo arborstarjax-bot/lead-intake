@@ -227,8 +227,11 @@ export async function GET(req: Request) {
       if (!addr) return null;
       const start = new Date(t.start_at as string);
       const end = new Date(t.end_at as string);
-      const startMin = start.getHours() * 60 + start.getMinutes();
-      const endMin = end.getHours() * 60 + end.getMinutes();
+      // Convert UTC to business timezone — getHours() returns UTC on the server
+      const startLocal = new Date(start.toLocaleString("en-US", { timeZone: tz }));
+      const endLocal = new Date(end.toLocaleString("en-US", { timeZone: tz }));
+      const startMin = startLocal.getHours() * 60 + startLocal.getMinutes();
+      const endMin = endLocal.getHours() * 60 + endLocal.getMinutes();
       return {
         id: `task-${t.id as string}`,
         label: `${(t.name as string) || "Task"}`,
