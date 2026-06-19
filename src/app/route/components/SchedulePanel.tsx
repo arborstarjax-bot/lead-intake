@@ -8,12 +8,7 @@ import {
   Car,
   Check,
   ChevronRight,
-  Clock,
-  Home,
-  List,
   Loader2,
-  Map,
-  Pin,
   RefreshCw,
   Sparkles,
   Sun,
@@ -36,10 +31,9 @@ import {
   type Slot,
   type Stop,
 } from "../route-helpers";
-import { HalfTabs } from "./HalfTabs";
+
 
 type Mode = "recommended" | "fixed" | "flex";
-type RouteView = "list" | "map";
 
 type DayOption = {
   date: string;
@@ -144,7 +138,7 @@ export function SchedulePanel({
   }, [onHeightChange]);
 
   const [mode, setMode] = useState<Mode>("recommended");
-  const [half, setHalf] = useState<Half>("all");
+  const half: Half = "all";
   const [loading, setLoading] = useState(false);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -152,7 +146,6 @@ export function SchedulePanel({
   const [booking, setBooking] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [routeView, setRouteView] = useState<RouteView>("list");
   const [bufferOverride, setBufferOverride] = useState(false);
 
   const [dayPickerOpen, setDayPickerOpen] = useState(false);
@@ -217,7 +210,7 @@ export function SchedulePanel({
 
   useEffect(() => {
     setOffset(0);
-  }, [half, selectedDay, leadId]);
+  }, [selectedDay, leadId]);
 
   useEffect(() => {
     if (mode === "recommended") loadSlots(offset);
@@ -232,10 +225,7 @@ export function SchedulePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  useEffect(() => {
-    if (mode === "recommended") onPreview(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [half]);
+
 
   async function loadDayOptions() {
     setDayOptionsLoading(true);
@@ -405,27 +395,23 @@ export function SchedulePanel({
       className="fixed inset-x-0 z-50 bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] md:bottom-0 border-t border-[var(--border)] bg-white shadow-2xl rounded-t-2xl"
     >
       <div className="mx-auto max-w-6xl px-4 py-3 space-y-2">
-        {/* Header */}
-        <div className="flex items-center gap-2">
+        {/* Compact header — lead info + day controls on one row */}
+        <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
-              <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" />
-              Schedule {leadLabel}
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+              <span className="font-semibold truncate">{leadLabel}</span>
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <input
-                type="date"
-                value={selectedDay}
-                onChange={(e) => {
-                  if (e.target.value) onSelectDay(e.target.value);
-                }}
-                className="field-input h-9 text-sm font-semibold max-w-[11rem]"
-                aria-label="Appointment date"
-              />
+            {routeData?.ghost?.address && (
+              <div className="text-[11px] text-[var(--muted)] truncate mt-0.5 pl-5">
+                {routeData.ghost.address}
+              </div>
+            )}
+            <div className="flex items-center gap-2 mt-1.5">
               <button
                 type="button"
                 onClick={toggleDayPicker}
-                title="Auto-pick best day by drive time"
+                title="Change day"
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full border px-2.5 h-8 text-[11px] font-medium transition",
                   dayPickerOpen
@@ -433,7 +419,7 @@ export function SchedulePanel({
                     : "border-[var(--border)] bg-white text-[var(--muted)] hover:bg-[var(--surface-2)]"
                 )}
               >
-                <CalendarSearch className="h-3.5 w-3.5" /> Best day
+                <CalendarSearch className="h-3.5 w-3.5" /> {formatDateLong(selectedDay)}
               </button>
             </div>
           </div>
@@ -502,87 +488,29 @@ export function SchedulePanel({
           </div>
         )}
 
-        {/* Color-coded mode toggle */}
-        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-[var(--surface-2)] p-1">
-          {(
-            [
-              { key: "recommended", label: "Recommended", icon: <Sparkles className="h-3.5 w-3.5" />, accent: "emerald" },
-              { key: "fixed", label: "Fixed Time", icon: <Pin className="h-3.5 w-3.5" />, accent: "blue" },
-              { key: "flex", label: "Flex Time", icon: <Clock className="h-3.5 w-3.5" />, accent: "purple" },
-            ] as const
-          ).map((m) => {
-            const active = mode === m.key;
-            return (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => setMode(m.key)}
-                className={cn(
-                  "inline-flex items-center justify-center gap-1.5 rounded-xl h-10 text-[12px] font-semibold transition",
-                  active
-                    ? m.accent === "emerald"
-                      ? "bg-emerald-600 text-white shadow-sm"
-                      : m.accent === "blue"
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "bg-purple-600 text-white shadow-sm"
-                    : "text-[var(--muted)] hover:text-[var(--fg)]"
-                )}
-              >
-                {m.icon}
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* Mode label when not in recommended mode */}
+        {mode !== "recommended" && (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider">
+              {mode === "fixed" ? "Pick exact time" : "Set flex window"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMode("recommended")}
+              className="text-[11px] font-medium text-[var(--accent)] hover:underline"
+            >
+              Back to best slots
+            </button>
+          </div>
+        )}
 
-        {/* Route section with List/Map toggle */}
+        {/* Route context — compact summary instead of full list */}
         {stops.length > 0 && (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2">
-              <div className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider">
-                Today&apos;s Route · {stopCount} estimate{stopCount !== 1 ? "s" : ""}
-              </div>
-              <div className="inline-flex rounded-lg bg-white border border-[var(--border)] p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setRouteView("list")}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 h-6 rounded text-[10px] font-medium transition",
-                    routeView === "list"
-                      ? "bg-[var(--accent)] text-white"
-                      : "text-[var(--muted)] hover:text-[var(--fg)]"
-                  )}
-                >
-                  <List className="h-3 w-3" /> List
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRouteView("map")}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 h-6 rounded text-[10px] font-medium transition",
-                    routeView === "map"
-                      ? "bg-[var(--accent)] text-white"
-                      : "text-[var(--muted)] hover:text-[var(--fg)]"
-                  )}
-                >
-                  <Map className="h-3 w-3" /> Map
-                </button>
-              </div>
-            </div>
-
-            {routeView === "list" ? (
-              <RouteListView
-                stops={stops}
-                home={routeData?.home ?? null}
-                totalDriveMinutes={routeData?.totalDriveMinutes ?? null}
-                compact={mode !== "recommended"}
-              />
-            ) : (
-              <div className="px-3 pb-2">
-                <div className="text-xs text-[var(--muted)] text-center py-4">
-                  Map view available on the Route page above
-                </div>
-              </div>
+          <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-[11px] text-[var(--muted)]">
+            <Car className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-semibold">{stopCount} estimate{stopCount !== 1 ? "s" : ""}</span>
+            {routeData?.totalDriveMinutes != null && (
+              <span>· {routeData.totalDriveMinutes}m total drive</span>
             )}
           </div>
         )}
@@ -590,9 +518,8 @@ export function SchedulePanel({
         {/* Recommended mode */}
         {mode === "recommended" && (
           <>
-            <div className="flex items-center justify-between gap-2">
-              <HalfTabs half={half} setHalf={setHalf} />
-              {hasMore || offset > 0 ? (
+            {(hasMore || offset > 0) && (
+              <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={() => setOffset((o) => (hasMore ? o + 1 : 0))}
@@ -600,10 +527,10 @@ export function SchedulePanel({
                   className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-white px-2.5 h-7 text-[11px] font-medium text-[var(--fg)] hover:bg-[var(--surface-2)] disabled:opacity-60"
                 >
                   <RefreshCw className="h-3 w-3" />
-                  {hasMore ? "Different times" : "First page"}
+                  {hasMore ? "More times" : "First page"}
                 </button>
-              ) : null}
-            </div>
+              </div>
+            )}
 
             {warnings.length > 0 && !loading && (
               <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
@@ -626,23 +553,59 @@ export function SchedulePanel({
               </div>
             ) : (
               <div className="space-y-1.5 max-h-[26vh] overflow-y-auto">
-                {slots.map((s, i) => (
-                  <SmartSlotCard
-                    key={s.startTime}
-                    slot={s}
-                    isBest={i === 0 && offset === 0}
-                    selected={previewSlot?.startTime === s.startTime}
-                    disabled={booking}
-                    onSelect={() =>
-                      onPreview(
-                        previewSlot?.startTime === s.startTime ? null : s
-                      )
-                    }
-                    stops={stops}
-                  />
-                ))}
+                {slots.map((s, i) => {
+                  const hour = parseHHMM(s.startTime) / 60;
+                  const prevHour = i > 0 ? parseHHMM(slots[i - 1].startTime) / 60 : 0;
+                  const showMorning = i === 0 && hour < 12;
+                  const showAfternoon = hour >= 12 && (i === 0 || prevHour < 12);
+                  return (
+                    <div key={s.startTime}>
+                      {showMorning && slots.some((sl) => parseHHMM(sl.startTime) >= 720) && (
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] pb-1">
+                          Morning
+                        </div>
+                      )}
+                      {showAfternoon && (
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] pt-2 pb-1">
+                          Afternoon
+                        </div>
+                      )}
+                      <SmartSlotCard
+                        slot={s}
+                        isBest={i === 0 && offset === 0}
+                        selected={previewSlot?.startTime === s.startTime}
+                        disabled={booking}
+                        onSelect={() =>
+                          onPreview(
+                            previewSlot?.startTime === s.startTime ? null : s
+                          )
+                        }
+                        stops={stops}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             )}
+
+            {/* Power-user links */}
+            <div className="flex items-center justify-center gap-3 pt-1 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setMode("fixed")}
+                className="text-blue-600 font-medium hover:underline"
+              >
+                Pick exact time
+              </button>
+              <span className="text-[var(--muted)]">&middot;</span>
+              <button
+                type="button"
+                onClick={() => setMode("flex")}
+                className="text-purple-600 font-medium hover:underline"
+              >
+                Set flex window
+              </button>
+            </div>
           </>
         )}
 
@@ -802,118 +765,6 @@ export function SchedulePanel({
       </div>
     </div>
   );
-}
-
-// ── Route List View ────────────────────────────────────────────────
-
-function RouteListView({
-  stops,
-  home,
-  totalDriveMinutes,
-  compact,
-}: {
-  stops: Stop[];
-  home: RouteResponse["home"];
-  totalDriveMinutes: number | null;
-  compact: boolean;
-}) {
-  if (stops.length === 0) {
-    return (
-      <div className="px-3 pb-3 text-xs text-[var(--muted)] text-center py-3">
-        No estimates scheduled for this day yet.
-      </div>
-    );
-  }
-
-  return (
-    <div className={cn("px-3 pb-3", compact ? "max-h-[18vh] overflow-y-auto" : "max-h-[22vh] overflow-y-auto")}>
-      {/* Home base start */}
-      {home && (
-        <div className="flex items-center gap-2 py-1.5">
-          <div className="flex items-center justify-center h-6 w-6 rounded-full bg-slate-200">
-            <Home className="h-3 w-3 text-slate-600" />
-          </div>
-          <span className="text-[11px] text-[var(--muted)] font-medium">
-            Home base
-          </span>
-        </div>
-      )}
-
-      {stops.map((stop, idx) => (
-        <div key={stop.id}>
-          {/* Drive connector */}
-          {(idx > 0 || home) && stop.driveMinutesFromPrev != null && (
-            <div className="flex items-center gap-2 pl-3 py-0.5">
-              <div className="w-px h-4 bg-slate-300" />
-              <div className="flex items-center gap-1 text-[10px] text-[var(--muted)]">
-                <Car className="h-2.5 w-2.5" />
-                {stop.driveMinutesFromPrev} min
-                {stop.distanceMilesFromPrev != null && stop.distanceMilesFromPrev > 0 && (
-                  <> · {stop.distanceMilesFromPrev} mi</>
-                )}
-              </div>
-            </div>
-          )}
-          {/* Stop row */}
-          <div className="flex items-center gap-2 py-1.5">
-            <div className={cn(
-              "flex items-center justify-center h-6 w-6 rounded-full text-[10px] font-bold text-white shrink-0",
-              "bg-blue-600"
-            )}>
-              {idx + 1}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className={cn("font-semibold truncate", compact ? "text-[11px]" : "text-xs")}>
-                  {stop.label}
-                </span>
-                <span className={cn("font-bold shrink-0", compact ? "text-[11px]" : "text-xs")}>
-                  {formatClock(stop.startTime)}
-                </span>
-              </div>
-              {!compact && (
-                <div className="text-[10px] text-[var(--muted)] truncate">
-                  {stop.address}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {/* Home base return */}
-      {home && (
-        <>
-          {stops.length > 0 && routeData_returnDrive(stops) && (
-            <div className="flex items-center gap-2 pl-3 py-0.5">
-              <div className="w-px h-4 bg-slate-300" />
-              <div className="flex items-center gap-1 text-[10px] text-[var(--muted)]">
-                <Car className="h-2.5 w-2.5" /> return
-              </div>
-            </div>
-          )}
-          <div className="flex items-center gap-2 py-1.5">
-            <div className="flex items-center justify-center h-6 w-6 rounded-full bg-slate-200">
-              <Home className="h-3 w-3 text-slate-600" />
-            </div>
-            <span className="text-[11px] text-[var(--muted)] font-medium">
-              Home base
-            </span>
-          </div>
-        </>
-      )}
-
-      {/* Stats */}
-      <div className="flex items-center gap-2 pt-1 text-[10px] text-[var(--muted)]">
-        {stops.length} estimate{stops.length !== 1 ? "s" : ""}
-        {totalDriveMinutes != null && <> · {totalDriveMinutes}m total drive</>}
-      </div>
-    </div>
-  );
-}
-
-function routeData_returnDrive(stops: Stop[]): boolean {
-  return stops.length > 0;
 }
 
 // ── Smart Slot Card ────────────────────────────────────────────────

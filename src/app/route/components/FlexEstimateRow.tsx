@@ -47,6 +47,7 @@ export function FlexEstimateRow({
   const [completing, setCompleting] = useState(false);
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [showSmsPicker, setShowSmsPicker] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const flexLabel = LEAD_FLEX_WINDOW_DISPLAY[stop.flexWindow];
 
@@ -164,30 +165,43 @@ export function FlexEstimateRow({
             ) : null}
           </div>
         </div>
+        {/* Expand/collapse chevron */}
+        {!isDone && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={expanded ? "Collapse actions" : "Expand actions"}
+            className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
+          >
+            <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
+          </button>
+        )}
       </div>
 
-      {!isDone && (
+      {/* Action pills — hidden by default, shown on tap */}
+      {!isDone && expanded && (
         <div className="mt-2 pl-[52px] flex items-center gap-1.5 flex-wrap">
           <button
             onClick={handleMarkComplete}
             disabled={completing}
             aria-label={`Mark ${stop.label} complete`}
-            title="Mark complete"
-            className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--accent)]/20 bg-[var(--accent)]/5 text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-60 px-3 h-8 text-xs font-medium"
           >
             {completing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <CheckCircle2 className="h-4 w-4" />
+              <CheckCircle2 className="h-3.5 w-3.5" />
             )}
+            Complete
           </button>
           {telHref && (
             <a
               href={telHref}
               aria-label={`Call ${stop.label}`}
-              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)] px-3 h-8 text-xs font-medium"
             >
-              <Phone className="h-4 w-4" />
+              <Phone className="h-3.5 w-3.5" />
+              Call
             </a>
           )}
           {stop.phoneNumber && (
@@ -195,9 +209,10 @@ export function FlexEstimateRow({
               type="button"
               onClick={() => setShowSmsPicker(true)}
               aria-label={`Text ${stop.label}`}
-              className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)] px-3 h-8 text-xs font-medium"
             >
-              <MessageSquare className="h-4 w-4" />
+              <MessageSquare className="h-3.5 w-3.5" />
+              Text
             </button>
           )}
           <a
@@ -205,17 +220,11 @@ export function FlexEstimateRow({
             target="_blank"
             rel="noreferrer"
             aria-label={`Navigate to ${stop.address}`}
-            className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)] px-3 h-8 text-xs font-medium"
           >
-            <Navigation className="h-4 w-4" />
+            <Navigation className="h-3.5 w-3.5" />
+            Nav
           </a>
-          <Link
-            href={`/leads/${stop.id}`}
-            aria-label={`Open ${stop.label}`}
-            className="ml-auto inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Link>
         </div>
       )}
     {showOutcomeModal && (
