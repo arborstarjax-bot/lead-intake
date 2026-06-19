@@ -5,11 +5,12 @@ import Link from "next/link";
 import {
   Settings as SettingsIcon,
   UploadCloud,
+  ClipboardPaste,
   Pencil,
   Plus,
   Users,
 } from "lucide-react";
-import { UploadBox } from "@/modules/ingest";
+import { UploadBox, TextPasteBox } from "@/modules/ingest";
 import { StandaloneLeadCard } from "@/modules/leads";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
@@ -72,7 +73,7 @@ function buildPendingLead(): Lead {
   };
 }
 
-type IntakeTab = "upload" | "manual";
+type IntakeTab = "upload" | "paste" | "manual";
 
 export default function HomePage() {
   const [tab, setTab] = useState<IntakeTab>("upload");
@@ -131,25 +132,33 @@ export default function HomePage() {
         <div
           role="tablist"
           aria-label="Intake method"
-          className="grid grid-cols-2 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1.5"
+          className="grid grid-cols-3 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1.5"
         >
           <TabButton
             active={tab === "upload"}
             onClick={() => setTab("upload")}
             icon={<UploadCloud className="h-4 w-4" />}
-            label="Upload Screenshot"
+            label="Upload"
+          />
+          <TabButton
+            active={tab === "paste"}
+            onClick={() => setTab("paste")}
+            icon={<ClipboardPaste className="h-4 w-4" />}
+            label="Paste Lead"
           />
           <TabButton
             active={tab === "manual"}
             onClick={() => setTab("manual")}
             icon={<Pencil className="h-4 w-4" />}
-            label="Manual Entry"
+            label="Manual"
           />
         </div>
 
         <div className="mt-4">
           {tab === "upload" ? (
             <UploadBox endpoint="/api/ingest" />
+          ) : tab === "paste" ? (
+            <TextPasteBox endpoint="/api/ingest/text" />
           ) : (
             <div className="space-y-4">
               <button
