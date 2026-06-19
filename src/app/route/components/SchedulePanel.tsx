@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarCheck,
-  CalendarSearch,
   Car,
   Check,
+  ChevronLeft,
   ChevronRight,
   Loader2,
   RefreshCw,
@@ -72,6 +72,14 @@ function getBufferViolation(
     }
   }
   return null;
+}
+
+function formatDayShort(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const weekday = dt.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
+  const month = dt.toLocaleDateString(undefined, { month: "short", timeZone: "UTC" });
+  return `${weekday} ${month} ${d}`;
 }
 
 function getFixedTimeFeedback(
@@ -148,10 +156,10 @@ export function SchedulePanel({
   const [hasMore, setHasMore] = useState(false);
   const [bufferOverride, setBufferOverride] = useState(false);
 
-  const [dayPickerOpen, setDayPickerOpen] = useState(false);
-  const [dayOptions, setDayOptions] = useState<DayOption[]>([]);
-  const [dayOptionsLoading, setDayOptionsLoading] = useState(false);
-  const [dayOptionsError, setDayOptionsError] = useState<string | null>(null);
+  const [dayCardsLoading, setDayCardsLoading] = useState(false);
+  const [dayCards, setDayCards] = useState<DayOption[]>([]);
+  const dayStripRef = useRef<HTMLDivElement | null>(null);
+  const [slotInsights, setSlotInsights] = useState<string[]>([]);
 
   const [customTime, setCustomTime] = useState<string>("");
   const [flexWindow, setFlexWindow] = useState<LeadFlexWindow | null>(null);
@@ -216,6 +224,44 @@ export function SchedulePanel({
     if (mode === "recommended") loadSlots(offset);
   }, [loadSlots, offset, mode]);
 
+  // Fetch AI insights for the current slot page (non-blocking)
+  useEffect(() => {
+    if (slots.length === 0) {
+      setSlotInsights([]);
+      return;
+    }
+    let cancelled = false;
+    const activeDay = dayCards.find((d) => d.date === selectedDay);
+    (async () => {
+      try {
+        const res = await fetch("/api/schedule/slot-insights", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slots: slots.map((s) => ({
+              startTime: s.startTime,
+              driveMinutesBefore: s.driveMinutesBefore,
+              driveMinutesAfter: s.driveMinutesAfter,
+              totalDriveMinutes: s.totalDriveMinutes,
+              priorLabel: s.reasoning.priorLabel,
+              nextLabel: s.reasoning.nextLabel,
+            })),
+            existingStopCount: stops.length,
+            totalDayDriveMinutes: routeData?.totalDriveMinutes ?? null,
+            clusterBonusMinutes: activeDay?.clusterBonusMinutes ?? 0,
+          }),
+        });
+        const json = await res.json();
+        if (!cancelled && Array.isArray(json.insights)) {
+          setSlotInsights(json.insights);
+        }
+      } catch {
+        // Non-fatal — cards just won't show AI insights
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [slots, stops.length, routeData?.totalDriveMinutes, selectedDay, dayCards]);
+
   useEffect(() => {
     onPreview(null);
     setCustomTime("");
@@ -227,67 +273,60 @@ export function SchedulePanel({
 
 
 
-  async function loadDayOptions() {
-    setDayOptionsLoading(true);
-    setDayOptionsError(null);
-    try {
-      const res = await fetch("/api/schedule/week", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId, horizonDays: 14 }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setDayOptionsError(json.error ?? `Failed (${res.status})`);
-        setDayOptions([]);
-        return;
+  // Auto-load day cards when scheduling opens
+  useEffect(() => {
+    let cancelled = false;
+    setDayCardsLoading(true);
+    (async () => {
+      try {
+        const res = await fetch("/api/schedule/week", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leadId, horizonDays: 14 }),
+        });
+        const json = await res.json();
+        if (cancelled || !res.ok) return;
+        const rawDays = (json.days ?? []) as Array<
+          | {
+              date: string;
+              isWorkDay: true;
+              bestTotalDriveMinutes: number | null;
+              clusterBonusMinutes: number;
+              effectiveBestMinutes: number | null;
+              slotCount: number;
+            }
+          | { date: string; isWorkDay: false }
+        >;
+        const cards: DayOption[] = rawDays
+          .filter(
+            (d): d is Extract<(typeof rawDays)[number], { isWorkDay: true }> =>
+              d.isWorkDay
+          )
+          .filter((d) => d.slotCount > 0)
+          .sort((a, b) => {
+            const av = a.effectiveBestMinutes ?? Number.POSITIVE_INFINITY;
+            const bv = b.effectiveBestMinutes ?? Number.POSITIVE_INFINITY;
+            return av - bv;
+          })
+          .map((d) => ({
+            date: d.date,
+            bestTotalDriveMinutes: d.bestTotalDriveMinutes,
+            effectiveBestMinutes: d.effectiveBestMinutes,
+            slotCount: d.slotCount,
+            clusterBonusMinutes: d.clusterBonusMinutes,
+          }));
+        if (!cancelled) setDayCards(cards);
+      } catch {
+        // Silent — day cards just won't load
+      } finally {
+        if (!cancelled) setDayCardsLoading(false);
       }
-      const rawDays = (json.days ?? []) as Array<
-        | {
-            date: string;
-            isWorkDay: true;
-            bestTotalDriveMinutes: number | null;
-            clusterBonusMinutes: number;
-            effectiveBestMinutes: number | null;
-            slotCount: number;
-          }
-        | { date: string; isWorkDay: false }
-      >;
-      const ranked: DayOption[] = rawDays
-        .filter(
-          (
-            d
-          ): d is Extract<(typeof rawDays)[number], { isWorkDay: true }> =>
-            d.isWorkDay
-        )
-        .filter((d) => d.slotCount > 0 && d.effectiveBestMinutes !== null)
-        .sort((a, b) => {
-          const av = a.effectiveBestMinutes ?? Number.POSITIVE_INFINITY;
-          const bv = b.effectiveBestMinutes ?? Number.POSITIVE_INFINITY;
-          return av - bv;
-        })
-        .slice(0, 5)
-        .map((d) => ({
-          date: d.date,
-          bestTotalDriveMinutes: d.bestTotalDriveMinutes,
-          effectiveBestMinutes: d.effectiveBestMinutes,
-          slotCount: d.slotCount,
-          clusterBonusMinutes: d.clusterBonusMinutes,
-        }));
-      setDayOptions(ranked);
-    } catch (e) {
-      setDayOptionsError((e as Error).message || "Network error");
-    } finally {
-      setDayOptionsLoading(false);
-    }
-  }
+    })();
+    return () => { cancelled = true; };
+  }, [leadId]);
 
-  function toggleDayPicker() {
-    const nextOpen = !dayPickerOpen;
-    setDayPickerOpen(nextOpen);
-    if (nextOpen && dayOptions.length === 0 && !dayOptionsLoading) {
-      loadDayOptions();
-    }
+  function scrollDayStrip(dir: -1 | 1) {
+    dayStripRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
   }
 
   function previewFixed() {
@@ -395,8 +434,8 @@ export function SchedulePanel({
       className="fixed inset-x-0 z-50 bottom-[calc(env(safe-area-inset-bottom)+3.5rem)] md:bottom-0 border-t border-[var(--border)] bg-white shadow-2xl rounded-t-2xl"
     >
       <div className="mx-auto max-w-6xl px-4 py-3 space-y-2">
-        {/* Compact header — lead info + day controls on one row */}
-        <div className="flex items-start gap-2">
+        {/* Compact header — lead info + close */}
+        <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
@@ -407,21 +446,6 @@ export function SchedulePanel({
                 {routeData.ghost.address}
               </div>
             )}
-            <div className="flex items-center gap-2 mt-1.5">
-              <button
-                type="button"
-                onClick={toggleDayPicker}
-                title="Change day"
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2.5 h-8 text-[11px] font-medium transition",
-                  dayPickerOpen
-                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                    : "border-[var(--border)] bg-white text-[var(--muted)] hover:bg-[var(--surface-2)]"
-                )}
-              >
-                <CalendarSearch className="h-3.5 w-3.5" /> {formatDateLong(selectedDay)}
-              </button>
-            </div>
           </div>
           {onClose && (
             <button
@@ -435,58 +459,69 @@ export function SchedulePanel({
           )}
         </div>
 
-        {/* Day picker drawer */}
-        {dayPickerOpen && (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-2 space-y-1">
-            {dayOptionsLoading ? (
-              <div className="py-3 flex items-center justify-center text-xs text-[var(--muted)]">
-                <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> Ranking days…
-              </div>
-            ) : dayOptionsError ? (
-              <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                {dayOptionsError}
-              </div>
-            ) : dayOptions.length === 0 ? (
-              <div className="py-2 text-center text-xs text-[var(--muted)]">
-                No feasible days in the next two weeks.
-              </div>
-            ) : (
-              dayOptions.map((d) => {
-                const selected = d.date === selectedDay;
-                return (
-                  <button
-                    key={d.date}
-                    type="button"
-                    onClick={() => {
-                      onSelectDay(d.date);
-                      setDayPickerOpen(false);
-                    }}
-                    className={cn(
-                      "w-full flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition",
-                      selected
-                        ? "border-[var(--accent)] bg-white"
-                        : "border-transparent bg-white hover:border-[var(--border)]"
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium">
-                        {formatDateLong(d.date)}
-                      </div>
-                      <div className="text-[11px] text-[var(--muted)]">
-                        {d.bestTotalDriveMinutes ?? "—"} min driving · {d.slotCount}{" "}
-                        slot{d.slotCount === 1 ? "" : "s"}
-                        {d.clusterBonusMinutes > 0
-                          ? ` · clusters (-${d.clusterBonusMinutes}m)`
-                          : ""}
-                      </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-                  </button>
-                );
-              })
-            )}
+        {/* Swipeable day cards */}
+        <div className="flex items-center gap-1 -mx-1">
+          <button
+            type="button"
+            onClick={() => scrollDayStrip(-1)}
+            className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
+            aria-label="Scroll days left"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div
+            ref={dayStripRef}
+            className="flex-1 overflow-x-auto no-scrollbar"
+          >
+            <div className="inline-flex gap-1.5 py-0.5">
+              {dayCardsLoading ? (
+                <div className="flex items-center gap-2 px-3 py-2 text-xs text-[var(--muted)]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Ranking days…
+                </div>
+              ) : dayCards.length === 0 ? (
+                <div className="px-3 py-2 text-[11px] text-[var(--muted)]">
+                  {formatDateLong(selectedDay)}
+                </div>
+              ) : (
+                dayCards.map((d, idx) => {
+                  const active = d.date === selectedDay;
+                  return (
+                    <button
+                      key={d.date}
+                      type="button"
+                      onClick={() => onSelectDay(d.date)}
+                      className={cn(
+                        "shrink-0 flex flex-col items-center rounded-xl border px-3 py-1.5 text-center transition active:scale-[0.97]",
+                        active
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                          : "border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
+                      )}
+                    >
+                      <span className="text-[11px] font-medium leading-tight">
+                        {formatDayShort(d.date)}
+                      </span>
+                      <span className="text-[10px] text-[var(--muted)] leading-tight mt-0.5">
+                        {d.slotCount} slot{d.slotCount !== 1 ? "s" : ""}
+                        {d.bestTotalDriveMinutes != null && ` · ${d.bestTotalDriveMinutes}m`}
+                      </span>
+                      {idx === 0 && (
+                        <span className="text-[9px] font-bold text-emerald-600 uppercase">Best</span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={() => scrollDayStrip(1)}
+            className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
+            aria-label="Scroll days right"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
 
         {/* Mode label when not in recommended mode */}
         {mode !== "recommended" && (
@@ -581,6 +616,7 @@ export function SchedulePanel({
                           )
                         }
                         stops={stops}
+                        insight={slotInsights[i] ?? null}
                       />
                     </div>
                   );
@@ -776,6 +812,7 @@ function SmartSlotCard({
   disabled,
   onSelect,
   stops,
+  insight,
 }: {
   slot: Slot;
   isBest: boolean;
@@ -783,6 +820,7 @@ function SmartSlotCard({
   disabled: boolean;
   onSelect: () => void;
   stops: Stop[];
+  insight: string | null;
 }) {
   const driveLabel = `+${slot.totalDriveMinutes} min`;
   const driveColor =
@@ -821,10 +859,16 @@ function SmartSlotCard({
               {driveLabel}
             </span>
           </div>
-          <div className="text-[11px] text-[var(--muted)] mt-1 truncate">
-            {[slot.reasoning.priorLabel, slot.reasoning.nextLabel]
-              .filter(Boolean)
-              .join(" · ") || "Open slot"}
+          <div className="text-[11px] mt-1 truncate">
+            {insight ? (
+              <span className="text-[var(--accent)] font-medium">{insight}</span>
+            ) : (
+              <span className="text-[var(--muted)]">
+                {[slot.reasoning.priorLabel, slot.reasoning.nextLabel]
+                  .filter(Boolean)
+                  .join(" · ") || "Open slot"}
+              </span>
+            )}
           </div>
         </div>
         <ChevronRight
