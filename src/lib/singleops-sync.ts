@@ -195,13 +195,11 @@ export async function syncCompletionToSingleOps(
 interface TaskCreatePayload {
   taskId: string;
   taskName: string;
-  clientName: string;
   notes: string | null;
   scheduledDate: string;
   scheduledTime: string | null;
   address: string | null;
   assignee: string | null;
-  leadSource: string | null;
 }
 
 /**

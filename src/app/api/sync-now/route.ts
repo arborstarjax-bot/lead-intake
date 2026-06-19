@@ -43,23 +43,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // No SingleOps task ID — create a new estimate
+    // No SingleOps task ID — create a new task on SingleOps calendar
     if (!taskId || !scheduledDate) {
       return NextResponse.json({ error: "taskId and scheduledDate required" }, { status: 400 });
     }
     const settings = await getSettings(auth.workspaceId);
     const addr = body.address || null;
+    const taskName = body.taskName || clientName || "Task";
     const syncResult = await syncTaskToSingleOps(
       {
         taskId,
-        taskName: clientName || "Task",
-        clientName: clientName || "Task",
+        taskName,
         notes: body.notes ?? null,
         scheduledDate,
         scheduledTime: scheduledTime ?? null,
         address: addr,
         assignee: body.assignee ?? null,
-        leadSource: null,
       },
       auth.workspaceId,
     );
