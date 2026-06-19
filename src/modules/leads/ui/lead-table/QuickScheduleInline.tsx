@@ -6,6 +6,8 @@ import {
   ChevronRight,
   Loader2,
   Sparkles,
+  Sunrise,
+  Sunset,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,38 @@ function formatDayShort(iso: string): string {
   return `${weekday} ${month} ${d}`;
 }
 
+function todayIsoLocal(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+function currentHHMM(): string {
+  const now = new Date();
+  const parts = now.toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return parts;
+}
+
+function isSlotPast(slot: SlotPick): boolean {
+  const today = todayIsoLocal();
+  if (slot.date > today) return false;
+  if (slot.date < today) return true;
+  return slot.startTime <= currentHHMM();
+}
+
+function parseHHMM(t: string): number {
+  const m = t.match(/^(\d{2}):(\d{2})/);
+  if (!m) return 0;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
+function isMorning(startTime: string): boolean {
+  return parseHHMM(startTime) < 720;
+}
+
 export function QuickScheduleInline({
   leadId,
   onBooked,
@@ -56,7 +90,9 @@ export function QuickScheduleInline({
   onClose: () => void;
 }) {
   const [loading, setLoading] = useState(true);
-  const [picks, setPicks] = useState<SlotPick[]>([]);
+  const [amPicks, setAmPicks] = useState<SlotPick[]>([]);
+  const [pmPicks, setPmPicks] = useState<SlotPick[]>([]);
+
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<string | null>(null);
   const cancelledRef = useRef(false);
@@ -98,15 +134,15 @@ export function QuickScheduleInline({
           const bv = b.effectiveBestMinutes ?? Infinity;
           return av - bv;
         })
-        .slice(0, 2);
+        .slice(0, 3);
 
       if (days.length === 0) {
         setError("No feasible days in the next two weeks.");
         return;
       }
 
-      // 2. Get top slots from the best 1-2 days
-      const allPicks: SlotPick[] = [];
+      // 2. Get all slots from the best 1-3 days, then split AM/PM
+      const allSlots: SlotPick[] = [];
       for (const day of days) {
         if (cancelledRef.current) return;
         const slotRes = await fetch("/api/schedule/suggest", {
@@ -116,9 +152,8 @@ export function QuickScheduleInline({
         });
         const slotJson = await slotRes.json();
         if (!slotRes.ok) continue;
-        const slots = (slotJson.slots ?? []).slice(0, 2);
-        for (const s of slots) {
-          allPicks.push({
+        for (const s of slotJson.slots ?? []) {
+          allSlots.push({
             date: day.date,
             startTime: s.startTime,
             driveMinutesBefore: s.driveMinutesBefore,
@@ -127,21 +162,35 @@ export function QuickScheduleInline({
             reasoning: s.reasoning,
           });
         }
-        if (allPicks.length >= 3) break;
       }
 
       if (cancelledRef.current) return;
-      const top3 = allPicks.slice(0, 3);
-      setPicks(top3);
 
-      // 3. Fetch AI insights (non-blocking)
-      if (top3.length > 0) {
+      // Filter out past slots
+      const future = allSlots.filter((s) => !isSlotPast(s));
+
+      // Split AM/PM, take top 3 each (sorted by drive time)
+      const am = future
+        .filter((s) => isMorning(s.startTime))
+        .sort((a, b) => a.totalDriveMinutes - b.totalDriveMinutes)
+        .slice(0, 3);
+      const pm = future
+        .filter((s) => !isMorning(s.startTime))
+        .sort((a, b) => a.totalDriveMinutes - b.totalDriveMinutes)
+        .slice(0, 3);
+
+      setAmPicks(am);
+      setPmPicks(pm);
+
+      // 3. Fetch AI insights for all picks (non-blocking)
+      const allPicks = [...am, ...pm];
+      if (allPicks.length > 0) {
         try {
           const insightRes = await fetch("/api/schedule/slot-insights", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              slots: top3.map((s) => ({
+              slots: allPicks.map((s) => ({
                 startTime: s.startTime,
                 driveMinutesBefore: s.driveMinutesBefore,
                 driveMinutesAfter: s.driveMinutesAfter,
@@ -156,10 +205,14 @@ export function QuickScheduleInline({
           });
           const insightJson = await insightRes.json();
           if (!cancelledRef.current && Array.isArray(insightJson.insights)) {
-            setPicks((prev) =>
+            const insights = insightJson.insights;
+            setAmPicks((prev) =>
+              prev.map((p, i) => ({ ...p, insight: insights[i] ?? undefined }))
+            );
+            setPmPicks((prev) =>
               prev.map((p, i) => ({
                 ...p,
-                insight: insightJson.insights[i] ?? undefined,
+                insight: insights[am.length + i] ?? undefined,
               }))
             );
           }
@@ -204,7 +257,6 @@ export function QuickScheduleInline({
         setError(patchJson.error ?? "Booking failed");
         return;
       }
-      // Sync to calendar
       await fetch(`/api/leads/${leadId}/calendar`, { method: "POST" });
       onBooked(
         `Booked ${formatDayShort(pick.date)} at ${formatClock(pick.startTime)}`
@@ -216,12 +268,95 @@ export function QuickScheduleInline({
     }
   }
 
+  const totalPicks = amPicks.length + pmPicks.length;
+  // Determine global best slot across AM and PM
+  const globalBest =
+    totalPicks > 0
+      ? [...amPicks, ...pmPicks].sort(
+          (a, b) => a.totalDriveMinutes - b.totalDriveMinutes
+        )[0]
+      : null;
+
+  function renderSlot(pick: SlotPick) {
+    const key = `${pick.date}-${pick.startTime}`;
+    const isBooking = booking === key;
+    const isGlobalBest =
+      globalBest &&
+      pick.date === globalBest.date &&
+      pick.startTime === globalBest.startTime;
+    const driveColor =
+      pick.totalDriveMinutes <= 10
+        ? "bg-emerald-100 text-emerald-700"
+        : pick.totalDriveMinutes <= 20
+          ? "bg-amber-100 text-amber-700"
+          : "bg-slate-100 text-slate-600";
+    const borderColor = isGlobalBest
+      ? "border-emerald-300 bg-emerald-50/60 hover:bg-emerald-50"
+      : pick.totalDriveMinutes <= 20
+        ? "border-amber-200 bg-amber-50/30 hover:bg-amber-50/50"
+        : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]";
+    return (
+      <button
+        key={key}
+        type="button"
+        onClick={() => bookSlot(pick)}
+        disabled={booking !== null}
+        className={cn(
+          "w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98]",
+          borderColor
+        )}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold">
+              {formatClock(pick.startTime)}
+            </span>
+            <span className="text-[10px] text-[var(--muted)]">
+              {formatDayShort(pick.date)}
+            </span>
+            <span
+              className={cn(
+                "text-[10px] font-semibold rounded-full px-2 py-0.5",
+                driveColor
+              )}
+            >
+              +{pick.totalDriveMinutes}m
+            </span>
+            {isGlobalBest && (
+              <span className="text-[9px] font-bold text-emerald-600 uppercase">
+                Best
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] mt-0.5 truncate">
+            {pick.insight ? (
+              <span className="text-[var(--accent)] font-medium">
+                {pick.insight}
+              </span>
+            ) : (
+              <span className="text-[var(--muted)]">
+                {[pick.reasoning.priorLabel, pick.reasoning.nextLabel]
+                  .filter(Boolean)
+                  .join(" · ") || "Open slot"}
+              </span>
+            )}
+          </div>
+        </div>
+        {isBooking ? (
+          <Loader2 className="h-4 w-4 animate-spin text-[var(--muted)] shrink-0" />
+        ) : (
+          <CalendarCheck className="h-4 w-4 text-[var(--accent)] shrink-0" />
+        )}
+      </button>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--accent)]">
           <Sparkles className="h-3.5 w-3.5" />
-          Quick Schedule
+          AI Schedule Picks
         </div>
         <button
           type="button"
@@ -234,86 +369,53 @@ export function QuickScheduleInline({
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center gap-2 py-4 text-xs text-[var(--muted)]">
+        <div className="flex items-center justify-center gap-2 py-6 text-xs text-[var(--muted)]">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Finding best slots…
+          Finding best cluster…
         </div>
       ) : error ? (
         <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           {error}
         </div>
-      ) : picks.length === 0 ? (
-        <div className="text-xs text-[var(--muted)] text-center py-3">
-          No slots available. Try the full scheduler.
+      ) : totalPicks === 0 ? (
+        <div className="text-xs text-[var(--muted)] text-center py-4">
+          No good fits available. Try the full scheduler.
         </div>
       ) : (
-        <div className="space-y-1.5">
-          {picks.map((pick, i) => {
-            const key = `${pick.date}-${pick.startTime}`;
-            const isBooking = booking === key;
-            const driveColor =
-              pick.totalDriveMinutes <= 10
-                ? "bg-emerald-100 text-emerald-700"
-                : pick.totalDriveMinutes <= 20
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-slate-100 text-slate-600";
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => bookSlot(pick)}
-                disabled={booking !== null}
-                className={cn(
-                  "w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98]",
-                  i === 0
-                    ? "border-emerald-300 bg-emerald-50/60 hover:bg-emerald-50"
-                    : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]"
-                )}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">
-                      {formatClock(pick.startTime)}
-                    </span>
-                    <span className="text-[10px] text-[var(--muted)]">
-                      {formatDayShort(pick.date)}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[10px] font-semibold rounded-full px-2 py-0.5",
-                        driveColor
-                      )}
-                    >
-                      +{pick.totalDriveMinutes}m
-                    </span>
-                    {i === 0 && (
-                      <span className="text-[9px] font-bold text-emerald-600 uppercase">
-                        Best
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[11px] mt-0.5 truncate">
-                    {pick.insight ? (
-                      <span className="text-[var(--accent)] font-medium">
-                        {pick.insight}
-                      </span>
-                    ) : (
-                      <span className="text-[var(--muted)]">
-                        {[pick.reasoning.priorLabel, pick.reasoning.nextLabel]
-                          .filter(Boolean)
-                          .join(" · ") || "Open slot"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {isBooking ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-[var(--muted)] shrink-0" />
-                ) : (
-                  <CalendarCheck className="h-4 w-4 text-[var(--accent)] shrink-0" />
-                )}
-              </button>
-            );
-          })}
+        <div className="space-y-3">
+          {/* Morning section */}
+          <div>
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
+              <Sunrise className="h-3 w-3" />
+              Morning
+            </div>
+            {amPicks.length === 0 ? (
+              <div className="text-[11px] text-[var(--muted)] bg-white/60 rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
+                No morning slots available
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {amPicks.map((pick) => renderSlot(pick))}
+              </div>
+            )}
+          </div>
+
+          {/* Afternoon section */}
+          <div>
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
+              <Sunset className="h-3 w-3" />
+              Afternoon
+            </div>
+            {pmPicks.length === 0 ? (
+              <div className="text-[11px] text-[var(--muted)] bg-white/60 rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
+                No afternoon slots available
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {pmPicks.map((pick) => renderSlot(pick))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
