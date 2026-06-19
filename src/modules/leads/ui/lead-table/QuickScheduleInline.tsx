@@ -292,7 +292,7 @@ export function QuickScheduleInline({
           : "bg-slate-100 text-slate-600";
     const cardStyle = isGlobalBest
       ? "border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200"
-      : "border-transparent bg-slate-100 hover:bg-slate-200/70";
+      : "border-[var(--border)] bg-white hover:bg-slate-50";
     return (
       <button
         key={key}
@@ -350,7 +350,7 @@ export function QuickScheduleInline({
   }
 
   return (
-    <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3 space-y-2">
+    <div className="rounded-xl border border-[var(--border)] bg-slate-100 p-3 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--accent)]">
           <Sparkles className="h-3.5 w-3.5" />
