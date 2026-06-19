@@ -181,9 +181,12 @@ export async function POST(req: NextRequest) {
         // Handle completion coming FROM SingleOps: if the task is now
         // completed in SingleOps but the lead is still active in Lead Flow,
         // mark the lead as Completed.
-        const isCompletedInSingleOps =
-          entry.changeType === "completed" ||
-          entry.jobStatus?.toLowerCase().includes("complete") === true;
+        // Require BOTH signals to avoid false positives from grey-detection
+        // heuristics: the changeType must be "completed" AND the jobStatus
+        // from the task detail page must confirm it.
+        const jobStatusComplete = entry.jobStatus?.toLowerCase().includes("complete") === true;
+        const changeTypeCompleted = entry.changeType === "completed";
+        const isCompletedInSingleOps = changeTypeCompleted && jobStatusComplete;
 
         if (isCompletedInSingleOps && existingLead.status === "Scheduled") {
           const completionUpdates: Record<string, unknown> = {
@@ -206,7 +209,7 @@ export async function POST(req: NextRequest) {
         // have their schedule, rep, or address overwritten by a re-sync.
         // Only update the task-id mapping and sync timestamp so we can
         // still track the link back to SingleOps.
-        const TERMINAL_STATUSES = new Set(["Completed", "Pending", "Lost"]);
+        const TERMINAL_STATUSES = new Set(["Completed", "Pending", "Lost", "Sold"]);
         if (TERMINAL_STATUSES.has(existingLead.status ?? "")) {
           const touchUpdates: Record<string, unknown> = {
             calendar_sync_status: "synced",
