@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowUpRight,
   Calendar,
   CheckCircle2,
   Clock,
@@ -34,6 +35,7 @@ export function TaskDetailCard({ initialTask }: { initialTask: Task }) {
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [pushing, setPushing] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<TaskPatch>({});
@@ -144,6 +146,41 @@ export function TaskDetailCard({ initialTask }: { initialTask: Task }) {
       showFlash("Failed to update status");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handlePushToSingleOps() {
+    if (!task.singleops_task_id) {
+      showFlash("No SingleOps task linked");
+      return;
+    }
+    setPushing(true);
+    try {
+      const start = new Date(task.start_at);
+      const scheduledDate = start.toISOString().split("T")[0];
+      const scheduledTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+      const res = await fetch("/api/sync-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "push-task",
+          taskId: task.id,
+          singleopsTaskId: task.singleops_task_id,
+          clientName: task.name,
+          scheduledDate,
+          scheduledTime,
+        }),
+      });
+      if (res.ok) {
+        showFlash("Pushed to SingleOps");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showFlash(data.error || "Push failed");
+      }
+    } catch {
+      showFlash("Network error");
+    } finally {
+      setPushing(false);
     }
   }
 
@@ -371,13 +408,27 @@ export function TaskDetailCard({ initialTask }: { initialTask: Task }) {
           </div>
         </div>
 
-        {/* Sync info */}
+        {/* Sync info + manual push */}
         {task.singleops_task_id && (
-          <div className="px-4 py-3 text-xs text-[var(--muted)]">
-            SingleOps Task #{task.singleops_task_id}
-            {task.singleops_last_synced_at && (
-              <> &middot; Last synced {new Date(task.singleops_last_synced_at).toLocaleString()}</>
-            )}
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-xs text-[var(--muted)]">
+              SingleOps Task #{task.singleops_task_id}
+              {task.singleops_last_synced_at && (
+                <> &middot; Last synced {new Date(task.singleops_last_synced_at).toLocaleString()}</>
+              )}
+            </span>
+            <button
+              onClick={handlePushToSingleOps}
+              disabled={pushing}
+              className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+            >
+              {pushing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              )}
+              Push to SingleOps
+            </button>
           </div>
         )}
       </div>

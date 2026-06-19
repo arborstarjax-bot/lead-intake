@@ -125,8 +125,22 @@ export async function GET(req: Request) {
   const iso = validDate(url.searchParams.get("date"), settings.timezone);
   // Fetch leads + tasks for the day + optional ghost lead in parallel.
   // Tasks are treated like timed stops alongside estimates.
-  const dayStart = `${iso}T00:00:00`;
-  const dayEnd = `${iso}T23:59:59`;
+  // Task start_at is stored as UTC timestamptz, so we must compute the
+  // UTC boundaries of the business-tz day to avoid timezone mismatches.
+  // Create Date objects at midnight and 23:59 in the business timezone,
+  // then convert to UTC ISO strings for Supabase comparison.
+  const tz = settings.timezone || "America/New_York";
+  const [y, mo, da] = iso.split("-").map(Number);
+  // Get the UTC offset for midnight of this day in the business timezone
+  const refDate = new Date(Date.UTC(y, mo - 1, da, 12, 0, 0));
+  const localStr = refDate.toLocaleString("en-US", { timeZone: tz });
+  const localDate = new Date(localStr);
+  const offsetMs = refDate.getTime() - localDate.getTime();
+  // midnight and end-of-day in UTC, aligned to business timezone
+  const dayStartUtc = new Date(Date.UTC(y, mo - 1, da, 0, 0, 0) + offsetMs);
+  const dayEndUtc = new Date(Date.UTC(y, mo - 1, da, 23, 59, 59) + offsetMs);
+  const dayStart = dayStartUtc.toISOString();
+  const dayEnd = dayEndUtc.toISOString();
   const [rowsResp, tasksResp, ghostResp] = await Promise.all([
     supabase
       .from("leads")
