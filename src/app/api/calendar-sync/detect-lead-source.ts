@@ -57,11 +57,30 @@ function keywordMatch(text: string): string | null {
 }
 
 /**
+ * Check if the last line of notes is a known lead source.
+ * ArborBridge appends the lead source on its own line when pushing to
+ * SingleOps, so we can recover it here on pull-back without AI.
+ */
+function lastLineSource(text: string): string | null {
+  const lines = text.split(/[\n\r]+|<br\s*\/?>/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return null;
+  const lastLine = lines[lines.length - 1];
+  const matched = VALID_SOURCES.find(
+    (s) => s.toLowerCase() === lastLine.toLowerCase()
+  );
+  return matched && matched !== "SingleOps" ? matched : null;
+}
+
+/**
  * Use GPT-4o-mini to detect the lead source from SingleOps task notes.
  * Falls back to keyword matching, then "SingleOps" if notes are empty or AI call fails.
  */
 export async function detectLeadSource(notes: string | null | undefined): Promise<string> {
   if (!notes || notes.trim().length === 0) return "SingleOps";
+
+  // Check last line for explicit lead source (appended by ArborBridge push)
+  const lastLine = lastLineSource(notes);
+  if (lastLine) return lastLine;
 
   // Try keyword match first for reliable detection of concatenated names
   const kw = keywordMatch(notes);
