@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { CalendarDays, CheckSquare, Home, List } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { CalendarDays, CheckSquare, Home, List, MapPin } from "lucide-react";
+import { Suspense } from "react";
 
 type Tab = {
   href: string;
   label: string;
   Icon: typeof Home;
-  match: (pathname: string) => boolean;
+  match: (pathname: string, search: URLSearchParams) => boolean;
 };
 
 const tabs: Tab[] = [
@@ -28,7 +29,15 @@ const tabs: Tab[] = [
     href: "/route",
     label: "Schedule",
     Icon: CalendarDays,
-    match: (p) => p.startsWith("/route") || p.startsWith("/calendar"),
+    match: (p, s) =>
+      (p.startsWith("/route") || p.startsWith("/calendar")) &&
+      s.get("view") !== "route",
+  },
+  {
+    href: "/route?view=route",
+    label: "Route",
+    Icon: MapPin,
+    match: (p, s) => p.startsWith("/route") && s.get("view") === "route",
   },
   {
     href: "/tasks",
@@ -59,6 +68,16 @@ export function BottomNav() {
   if (HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))) return null;
 
   return (
+    <Suspense>
+      <BottomNavInner pathname={pathname} />
+    </Suspense>
+  );
+}
+
+function BottomNavInner({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+
+  return (
     <nav
       aria-label="Primary"
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border)] bg-white"
@@ -70,7 +89,7 @@ export function BottomNav() {
     >
       <ul className="flex items-stretch justify-around">
         {tabs.map(({ href, label, Icon, match }) => {
-          const active = match(pathname);
+          const active = match(pathname, searchParams);
           return (
             <li key={href} className="flex-1">
               <Link

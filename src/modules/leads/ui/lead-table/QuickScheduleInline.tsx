@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type SlotInsight = { pro: string; con: string };
+
 type SlotPick = {
   date: string;
   startTime: string;
@@ -19,7 +21,7 @@ type SlotPick = {
   driveMinutesAfter: number;
   totalDriveMinutes: number;
   reasoning: { priorLabel: string | null; nextLabel: string | null };
-  insight?: string;
+  insight?: SlotInsight;
 };
 
 function formatClock(t: string): string {
@@ -326,19 +328,28 @@ export function QuickScheduleInline({
               </span>
             )}
           </div>
-          <div className="text-[11px] mt-0.5 truncate">
-            {pick.insight ? (
-              <span className="text-[var(--accent)] font-medium">
-                {pick.insight}
-              </span>
-            ) : (
-              <span className="text-[var(--muted)]">
-                {[pick.reasoning.priorLabel, pick.reasoning.nextLabel]
-                  .filter(Boolean)
-                  .join(" · ") || "Open slot"}
-              </span>
-            )}
-          </div>
+          {pick.insight && (pick.insight.pro || pick.insight.con) ? (
+            <div className="mt-1 space-y-0.5 border-t border-slate-100 pt-1">
+              {pick.insight.pro && (
+                <div className="flex items-start gap-1 text-[11px] text-emerald-600">
+                  <span className="font-bold shrink-0">+</span>
+                  <span className="line-clamp-2">{pick.insight.pro}</span>
+                </div>
+              )}
+              {pick.insight.con && (
+                <div className="flex items-start gap-1 text-[11px] text-amber-600">
+                  <span className="font-bold shrink-0">&minus;</span>
+                  <span className="line-clamp-2">{pick.insight.con}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-[11px] mt-0.5 truncate text-[var(--muted)]">
+              {[pick.reasoning.priorLabel, pick.reasoning.nextLabel]
+                .filter(Boolean)
+                .join(" · ") || "Open slot"}
+            </div>
+          )}
         </div>
         {isBooking ? (
           <Loader2 className="h-4 w-4 animate-spin text-[var(--muted)] shrink-0" />

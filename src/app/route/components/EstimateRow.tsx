@@ -235,9 +235,20 @@ export function EstimateRow({
                 </span>
               )}
             </div>
-            <div className="text-xs text-[var(--muted)] truncate">
-              {stop.address}
-            </div>
+            {(() => {
+              // Split "Street, City, ST, ZIP" into street + city/state/zip lines
+              const parts = stop.address.split(",").map((p) => p.trim());
+              const street = parts[0] ?? stop.address;
+              const cityStateZip = parts.length > 1 ? parts.slice(1).join(", ") : null;
+              return (
+                <>
+                  <div className="text-xs text-[var(--muted)] truncate">{street}</div>
+                  {cityStateZip && (
+                    <div className="text-xs text-[var(--muted)]">{cityStateZip}</div>
+                  )}
+                </>
+              );
+            })()}
           </Link>
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {driveLabel && (

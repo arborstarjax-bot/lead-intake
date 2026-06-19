@@ -181,26 +181,12 @@ function RoutePageInner() {
   const stopCount =
     (data?.stops.length ?? 0) + (data?.flexStops?.length ?? 0);
 
-  // The floating SchedulePanel is `position: fixed` at the bottom, so we
-  // reserve matching space under the page content (plus a 24px gap) so the
-  // Timeline isn't hidden underneath it. The panel reports its own height
-  // via ResizeObserver below — this works on phone and desktop without
-  // hard-coded breakpoints.
-  const [panelHeight, setPanelHeight] = useState(0);
-  // Reset reserved space whenever the panel unmounts. The panel renders on
-  // `scheduleLeadId && data?.ghost`, so both conditions have to be tracked —
-  // if a reload error clears `data` while scheduling is active, the panel
-  // disappears even though `scheduleLeadId` is still set, and the page would
-  // otherwise keep an empty 300–500 px gap reserved for a panel that isn't
-  // there.
-  useEffect(() => {
-    if (!scheduleLeadId || !data?.ghost) setPanelHeight(0);
-  }, [scheduleLeadId, data?.ghost]);
+
 
   return (
     <main
       className="mx-auto max-w-6xl p-4 sm:p-6 space-y-6"
-      style={{ paddingBottom: panelHeight ? panelHeight + 24 : 128 }}
+      style={{ paddingBottom: 128 }}
     >
       <div className="flex items-center justify-between">
         <PageHeader title="Schedule" />
@@ -320,43 +306,37 @@ function RoutePageInner() {
           {data && (data.stops.length > 0 || (data.flexStops?.length ?? 0) > 0) && (
             <EstimatesList data={data} onReload={reload} onFlash={showFlash} />
           )}
-        </>
-      )}
 
-      {scheduleLeadId && data?.ghost && (
-        <SchedulePanel
-          leadId={scheduleLeadId}
-          leadLabel={data.ghost.label}
-          leadUpdatedAt={data.ghost.updatedAt}
-          selectedDay={selectedDay}
-          previewSlot={previewSlot}
-          routeData={data}
-          onPreview={setPreviewSlot}
-          onHeightChange={setPanelHeight}
-          onReload={reload}
-          onSelectDay={(day) => {
-            setPreviewSlot(null);
-            setSelectedDay(day);
-            router.replace(`/route?scheduleLead=${scheduleLeadId}&day=${day}`, {
-              scroll: false,
-            });
-          }}
-          onBooked={(msg) => {
-            showFlash(msg);
-            setPreviewSlot(null);
-            // After booking we clear the ghost param — the newly booked
-            // lead becomes a regular numbered pin on reload.
-            router.replace(`/route?day=${selectedDay}`, { scroll: false });
-            reload();
-          }}
-          onClose={() => {
-            // Dismissing the panel drops ?scheduleLead so the map fills
-            // the full viewport again. The day selection is preserved
-            // so the user keeps looking at the same route.
-            setPreviewSlot(null);
-            router.replace(`/route?day=${selectedDay}`, { scroll: false });
-          }}
-        />
+          {scheduleLeadId && data?.ghost && (
+            <SchedulePanel
+              leadId={scheduleLeadId}
+              leadLabel={data.ghost.label}
+              leadUpdatedAt={data.ghost.updatedAt}
+              selectedDay={selectedDay}
+              previewSlot={previewSlot}
+              routeData={data}
+              onPreview={setPreviewSlot}
+              onReload={reload}
+              onSelectDay={(day) => {
+                setPreviewSlot(null);
+                setSelectedDay(day);
+                router.replace(`/route?scheduleLead=${scheduleLeadId}&day=${day}`, {
+                  scroll: false,
+                });
+              }}
+              onBooked={(msg) => {
+                showFlash(msg);
+                setPreviewSlot(null);
+                router.replace(`/route?day=${selectedDay}`, { scroll: false });
+                reload();
+              }}
+              onClose={() => {
+                setPreviewSlot(null);
+                router.replace(`/route?day=${selectedDay}`, { scroll: false });
+              }}
+            />
+          )}
+        </>
       )}
 
       {flash && (

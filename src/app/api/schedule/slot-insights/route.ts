@@ -24,17 +24,17 @@ const bodySchema = z
   })
   .strict();
 
-const SYSTEM_PROMPT = `You are a scheduling assistant for a field service company (arborists). Given time slots for a new estimate, write a SHORT one-liner (max 60 chars) for each slot explaining its main pro or con from a route-efficiency perspective. Be specific with numbers. Use plain language a busy field worker would appreciate.
+const SYSTEM_PROMPT = `You are a scheduling assistant for a field service company (arborists). Given time slots for a new estimate, write a SHORT pro and con (max 60 chars each) for each slot from a route-efficiency perspective. Be specific with numbers. Use plain language a busy field worker would appreciate.
 
-Examples of good one-liners:
-- "Best fit — 8 min from your 9 AM job"
-- "Clusters with 2 nearby jobs, saves driving"
-- "Only AM option — 22 min detour"
-- "First of day, short drive from home"
-- "Tight squeeze between 10 AM and 12 PM"
-- "Last slot — adds 15 min to your day"
+Examples:
+- pro: "8 min from your 9 AM, clusters with 2 jobs"
+  con: "Adds 14 min total to day's route"
+- pro: "First stop, short 7 min drive from home"
+  con: "Pushes existing 8 AM to later"
+- pro: "Open afternoon, no time conflict"
+  con: "22 min detour, no nearby jobs"
 
-Return a JSON array of strings, one per slot, in the same order.`;
+Return a JSON object: { "insights": [ { "pro": "...", "con": "..." }, ... ] } in the same order as the input slots.`;
 
 export async function POST(req: Request) {
   if (!process.env.OPENAI_API_KEY) {
@@ -109,12 +109,24 @@ export async function POST(req: Request) {
     }
 
     const result = JSON.parse(raw);
-    // Accept either { insights: [...] } or a bare array
-    const insights: string[] = Array.isArray(result)
+    // Accept { insights: [{ pro, con }] } or legacy string[] format
+    const rawInsights: unknown[] = Array.isArray(result)
       ? result
       : Array.isArray(result.insights)
         ? result.insights
         : [];
+
+    const insights = rawInsights.map((item) => {
+      if (typeof item === "object" && item !== null && "pro" in item && "con" in item) {
+        const obj = item as { pro: string; con: string };
+        return { pro: String(obj.pro), con: String(obj.con) };
+      }
+      // Legacy fallback: single string → use as pro, empty con
+      if (typeof item === "string") {
+        return { pro: item, con: "" };
+      }
+      return { pro: "", con: "" };
+    });
 
     return NextResponse.json({ insights });
   } catch (e) {
