@@ -253,7 +253,7 @@ export async function PATCH(
       .eq("scheduled_day", finalDay)
       .not("scheduled_time", "is", null)
       .neq("id", id)
-      .not("status", "in", '("Completed","Lost","Pending")')
+      .not("status", "in", '("Completed","Lost","Pending","Sold")')
       .limit(50);
     const finalMinutes = parseTimeToMinutes(finalTime);
     const conflicts = (sameDayLeads ?? []).filter((c) => {
@@ -458,9 +458,9 @@ export async function PATCH(
   }
 
   // Auto-sync completion to SingleOps when a lead enters a terminal state.
-  // "Completed" (Sold/Not Sold), "Pending", or "Lost" all mean the estimate
+  // "Completed", "Sold", "Pending", or "Lost" all mean the estimate
   // is done and the SingleOps task should be marked complete.
-  const TERMINAL_STATUSES = new Set(["Completed", "Pending", "Lost"]);
+  const TERMINAL_STATUSES = new Set(["Completed", "Sold", "Pending", "Lost"]);
   const enteringTerminalState =
     typeof patch.status === "string" &&
     TERMINAL_STATUSES.has(patch.status) &&
