@@ -290,11 +290,9 @@ export function QuickScheduleInline({
         : pick.totalDriveMinutes <= 20
           ? "bg-amber-100 text-amber-700"
           : "bg-slate-100 text-slate-600";
-    const borderColor = isGlobalBest
-      ? "border-emerald-300 bg-emerald-50/60 hover:bg-emerald-50"
-      : pick.totalDriveMinutes <= 20
-        ? "border-amber-200 bg-amber-50/30 hover:bg-amber-50/50"
-        : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]";
+    const cardStyle = isGlobalBest
+      ? "border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200"
+      : "border-transparent bg-slate-100 hover:bg-slate-200/70";
     return (
       <button
         key={key}
@@ -303,7 +301,7 @@ export function QuickScheduleInline({
         disabled={booking !== null}
         className={cn(
           "w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98]",
-          borderColor
+          cardStyle
         )}
       >
         <div className="min-w-0 flex-1">

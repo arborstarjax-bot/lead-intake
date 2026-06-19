@@ -920,10 +920,8 @@ function SmartSlotCard({
         selected
           ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200"
           : isBest
-            ? "border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50"
-            : slot.totalDriveMinutes <= 20
-              ? "border-amber-200 bg-amber-50/30 hover:bg-amber-50/50"
-              : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]"
+            ? "border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200"
+            : "border-transparent bg-slate-100 hover:bg-slate-200/70"
       )}
     >
       {isBest && (
