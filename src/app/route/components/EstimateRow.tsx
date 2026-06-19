@@ -56,7 +56,11 @@ export function EstimateRow({
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [showSmsPicker, setShowSmsPicker] = useState(false);
 
+  const isTask = stop.id.startsWith("task-");
+  const detailHref = isTask ? "/tasks" : `/leads/${stop.id}`;
+
   function openReschedule() {
+    if (isTask) return; // Tasks don't use the SchedulePanel
     // Navigating with ?scheduleLead pops the SchedulePanel for this stop on
     // the current day. The panel's "Find best day & time" button can then
     // swap the ghost day for any other day in the horizon.
@@ -109,7 +113,33 @@ export function EstimateRow({
   })();
 
   function handleMarkComplete() {
-    setShowOutcomeModal(true);
+    if (isTask) {
+      completeTask();
+    } else {
+      setShowOutcomeModal(true);
+    }
+  }
+
+  async function completeTask() {
+    const realId = stop.id.replace(/^task-/, "");
+    setCompleting(true);
+    try {
+      const res = await fetch(`/api/tasks/${realId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Completed" }),
+      });
+      if (!res.ok) {
+        onFlash?.("Failed to mark task complete");
+        throw new Error("Save failed");
+      }
+      onFlash?.(`Marked "${stop.label}" complete`);
+      onReload?.();
+    } catch (e) {
+      onFlash?.((e as Error).message || "Failed to mark complete");
+    } finally {
+      setCompleting(false);
+    }
   }
 
   async function submitOutcome(patch: LeadPatch) {
@@ -191,7 +221,7 @@ export function EstimateRow({
         </div>
         <div className="min-w-0 flex-1">
           <Link
-            href={`/leads/${stop.id}`}
+            href={detailHref}
             className="block min-w-0 group"
           >
             <div className="flex items-center justify-between gap-2">
@@ -257,6 +287,17 @@ export function EstimateRow({
             <ChevronRight className="h-4 w-4" />
           </Link>
         )}
+        {mode === "normal" && isDone && (
+          <div className="mt-2 pl-[52px]">
+            <Link
+              href={detailHref}
+              aria-label={`Open ${stop.label}`}
+              className="inline-flex items-center gap-1 text-xs text-[var(--muted)] hover:text-[var(--fg)]"
+            >
+              View details <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Action strip sits on its own row on mobile so the name/address
@@ -306,7 +347,7 @@ export function EstimateRow({
             <Navigation className="h-4 w-4" />
           </a>
           <Link
-            href={`/leads/${stop.id}`}
+            href={detailHref}
             aria-label={`Open ${stop.label}`}
             className="ml-auto inline-flex items-center justify-center h-9 w-9 rounded-full border border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface-2)]"
           >
