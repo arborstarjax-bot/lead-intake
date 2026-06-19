@@ -41,6 +41,7 @@ import { formatDateHuman, formatScheduleDisplay, buildNavigationHref, templateVa
 import { logContactActivity } from "./LifecycleTimeline";
 import { SmsPickerModal } from "./SmsPickerModal";
 import { ArborBridgeButton } from "./ArborBridgeButton";
+import { QuickScheduleInline } from "./QuickScheduleInline";
 
 export function LeadCard({
   lead,
@@ -62,6 +63,7 @@ export function LeadCard({
   const [lostModalOpen, setLostModalOpen] = useState(false);
   const [notSoldModalOpen, setNotSoldModalOpen] = useState(false);
   const [showSmsPicker, setShowSmsPicker] = useState(false);
+  const [quickScheduleOpen, setQuickScheduleOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { settings } = useAppSettings();
   const [activityRefreshKey, setActivityRefreshKey] = useState(0);
@@ -416,9 +418,22 @@ export function LeadCard({
               </button>
             </div>
           </div>
+        ) : quickScheduleOpen ? (
+          <QuickScheduleInline
+            leadId={lead.id}
+            onBooked={() => {
+              setQuickScheduleOpen(false);
+              onPatch({ status: "Scheduled" });
+            }}
+            onOpenFull={() => {
+              setQuickScheduleOpen(false);
+              onAISchedule();
+            }}
+            onClose={() => setQuickScheduleOpen(false)}
+          />
         ) : (
           <button
-            onClick={onAISchedule}
+            onClick={() => setQuickScheduleOpen(true)}
             className="flex items-center justify-center gap-2 w-full h-12 rounded-xl bg-[var(--accent)] text-white text-[15px] font-semibold hover:bg-[var(--accent-hover)] transition active:scale-[0.98]"
           >
             <CalendarDays className="h-[18px] w-[18px]" />
