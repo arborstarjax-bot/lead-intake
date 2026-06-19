@@ -170,7 +170,7 @@ export async function GET(req: Request) {
     `${l.first_name ?? ""} ${l.last_name ?? ""}`.trim() ||
     fallback;
 
-  const DONE_STATUSES = new Set(["Completed", "Pending", "Lost"]);
+  const DONE_STATUSES = new Set(["Completed", "Pending", "Lost", "Sold"]);
   function isLeadDone(l: Lead): boolean {
     return DONE_STATUSES.has(l.status ?? "");
   }
