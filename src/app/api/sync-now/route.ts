@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMembership } from "@/modules/auth/server";
-import { triggerCalendarSync, syncScheduleToSingleOps, syncCompletionToSingleOps } from "@/lib/singleops-sync";
+import { triggerCalendarSync, syncScheduleToSingleOps, syncCompletionToSingleOps, syncTaskToSingleOps } from "@/lib/singleops-sync";
 import { getSettings } from "@/lib/settings";
+import { createAdminClient } from "@/modules/shared/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -21,25 +22,63 @@ export async function POST(req: NextRequest) {
 
   if (action === "push-task") {
     const { taskId, singleopsTaskId, clientName, scheduledDate, scheduledTime } = body;
-    if (!singleopsTaskId) {
-      return NextResponse.json({ error: "singleopsTaskId required" }, { status: 400 });
+
+    if (singleopsTaskId) {
+      // Existing SingleOps task — reschedule it
+      const settings = await getSettings(auth.workspaceId);
+      const result = await syncScheduleToSingleOps(
+        {
+          leadId: taskId || "",
+          clientName: clientName || "Task",
+          singleopsTaskId,
+          scheduledDate,
+          scheduledTime,
+          timezone: settings.timezone,
+        },
+        auth.workspaceId,
+      );
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error || "Push failed" }, { status: 502 });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // No SingleOps task ID — create a new estimate
+    if (!taskId || !scheduledDate) {
+      return NextResponse.json({ error: "taskId and scheduledDate required" }, { status: 400 });
     }
     const settings = await getSettings(auth.workspaceId);
-    const result = await syncScheduleToSingleOps(
+    const addr = body.address || null;
+    const syncResult = await syncTaskToSingleOps(
       {
-        leadId: taskId || "",
+        taskId,
+        taskName: clientName || "Task",
         clientName: clientName || "Task",
-        singleopsTaskId,
+        notes: body.notes ?? null,
         scheduledDate,
-        scheduledTime,
-        timezone: settings.timezone,
+        scheduledTime: scheduledTime ?? null,
+        address: addr,
+        assignee: body.assignee ?? null,
+        leadSource: null,
       },
       auth.workspaceId,
     );
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error || "Push failed" }, { status: 502 });
+    if (syncResult.ok && syncResult.singleopsTaskId) {
+      // Save the new SingleOps ID back to the task record
+      const supabase = createAdminClient();
+      await supabase
+        .from("tasks")
+        .update({
+          singleops_task_id: syncResult.singleopsTaskId,
+          singleops_sync_status: "synced",
+          singleops_last_synced_at: new Date().toISOString(),
+        })
+        .eq("id", taskId);
     }
-    return NextResponse.json({ ok: true });
+    if (!syncResult.ok) {
+      return NextResponse.json({ error: syncResult.error || "Push failed" }, { status: 502 });
+    }
+    return NextResponse.json({ ok: true, singleopsTaskId: syncResult.singleopsTaskId });
   }
 
   if (action === "push-complete") {

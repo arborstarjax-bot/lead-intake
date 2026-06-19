@@ -159,6 +159,10 @@ export function TaskDetailCard({ initialTask }: { initialTask: Task }) {
       const start = new Date(task.start_at);
       const scheduledDate = start.toISOString().split("T")[0];
       const scheduledTime = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+      // Extract client name from task name (format: "ClientName - TaskType")
+      const nameParts = task.name.split(" - ");
+      const clientName = nameParts.length > 1 ? nameParts[0].trim() : task.name;
+
       const res = await fetch("/api/sync-now", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,7 +170,7 @@ export function TaskDetailCard({ initialTask }: { initialTask: Task }) {
           action: "push-task",
           taskId: task.id,
           singleopsTaskId: task.singleops_task_id,
-          clientName: task.name,
+          clientName,
           scheduledDate,
           scheduledTime,
         }),
