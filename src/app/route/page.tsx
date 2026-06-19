@@ -21,7 +21,7 @@ import { DayPicker } from "./components/DayPicker";
 import { EstimatesList } from "./components/EstimatesList";
 import { ModeToggle } from "./components/ModeToggle";
 import { SchedulePanel } from "./components/SchedulePanel";
-import { SchedulingBanner } from "./components/SchedulingBanner";
+
 
 export default function RoutePage() {
   return (
@@ -136,10 +136,6 @@ function RoutePageInner() {
     };
   }, [selectedDay, scheduleLeadId, dayParam, load, todayIso]);
 
-  const closeScheduler = useCallback(() => {
-    router.replace("/route", { scroll: false });
-  }, [router]);
-
   const ghostForMap: RouteMapStop | null = useMemo(() => {
     if (!data?.ghost) return null;
     return {
@@ -197,14 +193,6 @@ function RoutePageInner() {
       style={{ paddingBottom: panelHeight ? panelHeight + 24 : 128 }}
     >
       <PageHeader title="Route Map" />
-
-      {scheduleLeadId && (
-        <SchedulingBanner
-          ghost={data?.ghost ?? null}
-          ghostError={data?.ghostError ?? null}
-          onClose={closeScheduler}
-        />
-      )}
 
       <DayPicker
         days={days}
