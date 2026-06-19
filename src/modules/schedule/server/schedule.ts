@@ -120,7 +120,6 @@ export type SuggestResult = {
  */
 export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
   const { lead, settings, others, half } = inp;
-  const offset = Math.max(0, inp.offset ?? 0);
   const drive = inp.drive ?? createDriveMemo();
   const warnings: string[] = [];
 
@@ -199,17 +198,27 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
     const driveAfterSec =
       nextIdx === -1 ? 0 : fromExisting[nextIdx];
 
-    // If drive time from the prior stop (or home) is > 30 min, this slot
-    // is too tight — skip it so the next hour boundary is suggested instead.
     const driveBeforeMin = Math.ceil(driveBeforeSec / 60);
-    if (driveBeforeMin > 30) continue;
+    const driveFromHomeSec = fromHome;
+    const driveFromHomeMin = Math.ceil(driveFromHomeSec / 60);
 
-    // Similarly, if drive to the next stop is > 30 min and the gap between
-    // this slot's end and the next stop isn't large enough, skip.
+    // Home-base clustering: if this is the first slot of the day (no prior
+    // stop) or the last slot (no next stop), allow it as long as drive from
+    // home is reasonable — even if other stops are further out.
+    const isFirstSlot = priorIdx === -1;
+    const isLastSlot = nextIdx === -1;
+    const homeCluster = (isFirstSlot || isLastSlot) && driveFromHomeMin <= 30;
+
+    // If drive time from the prior stop (or home) is > 30 min, skip unless
+    // it qualifies for home-base clustering.
+    if (driveBeforeMin > 30 && !homeCluster) continue;
+
+    // If drive to the next stop is > 30 min and the gap isn't large enough,
+    // skip (unless home-cluster eligible).
     if (nextIdx !== -1) {
       const driveAfterMin = Math.ceil(driveAfterSec / 60);
       const gapToNext = existing[nextIdx].startMin - (start + duration);
-      if (driveAfterMin > 30 && gapToNext < driveAfterMin) continue;
+      if (driveAfterMin > 30 && gapToNext < driveAfterMin && !homeCluster) continue;
     }
 
     const before = Math.round(driveBeforeSec / 60);
@@ -233,26 +242,19 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
     });
   }
 
-  // Slots are already in chronological order (earliest first).
-  const PAGE_SIZE = 5;
+  // Return all feasible slots in chronological order (no pagination).
   const totalPicked = candidates.length;
-  const pageStart = offset * PAGE_SIZE;
-  const pageEnd = pageStart + PAGE_SIZE;
-  const page = candidates.slice(pageStart, pageEnd);
-  const hasMore = totalPicked > pageEnd;
 
-  if (page.length === 0) {
+  if (totalPicked === 0) {
     warnings.push(
-      totalPicked > 0
-        ? "No more distinct slots — go back to the first page."
-        : "No feasible slots on this day inside working hours — try a different day."
+      "No feasible slots on this day inside working hours — try a different day."
     );
   }
 
   return {
-    slots: page,
+    slots: candidates,
     warnings,
-    hasMore,
+    hasMore: false,
     totalCount: totalPicked,
   };
 }

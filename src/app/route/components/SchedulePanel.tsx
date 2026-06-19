@@ -9,7 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  RefreshCw,
+
   Sparkles,
   Sun,
   Sunrise,
@@ -174,8 +174,7 @@ export function SchedulePanel({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
+
   const [bufferOverride, setBufferOverride] = useState(false);
 
   const [dayCardsLoading, setDayCardsLoading] = useState(false);
@@ -222,12 +221,11 @@ export function SchedulePanel({
           setError(json.error ?? `Failed (${res.status})`);
           setSlots([]);
           setWarnings([]);
-          setHasMore(false);
           return;
         }
         setSlots(json.slots ?? []);
         setWarnings(json.warnings ?? []);
-        setHasMore(Boolean(json.hasMore));
+
       } catch (e) {
         if (requestId !== requestIdRef.current) return;
         setError((e as Error).message || "Network error");
@@ -239,12 +237,8 @@ export function SchedulePanel({
   );
 
   useEffect(() => {
-    setOffset(0);
-  }, [selectedDay, leadId]);
-
-  useEffect(() => {
-    if (mode === "recommended") loadSlots(offset);
-  }, [loadSlots, offset, mode]);
+    if (mode === "recommended") loadSlots(0);
+  }, [loadSlots, mode]);
 
   // Fetch AI insights for the current slot page (non-blocking)
   useEffect(() => {
@@ -453,7 +447,7 @@ export function SchedulePanel({
   return (
     <div
       ref={panelRef}
-      className="border-t border-[var(--border)] bg-white rounded-2xl shadow-sm"
+      className="border-t border-[var(--border)] bg-white"
     >
       <div className="mx-auto max-w-6xl px-4 py-3 space-y-2">
         {/* Compact header — lead info + close */}
@@ -587,20 +581,6 @@ export function SchedulePanel({
         {/* Recommended mode */}
         {mode === "recommended" && (
           <>
-            {(hasMore || offset > 0) && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setOffset((o) => (hasMore ? o + 1 : 0))}
-                  disabled={loading}
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-white px-2.5 h-7 text-[11px] font-medium text-[var(--fg)] hover:bg-[var(--surface-2)] disabled:opacity-60"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  {hasMore ? "More times" : "First page"}
-                </button>
-              </div>
-            )}
-
             {warnings.length > 0 && !loading && (
               <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                 {warnings.join(" · ")}
@@ -618,9 +598,9 @@ export function SchedulePanel({
               </div>
             ) : (() => {
               const futureSlots = slots.filter((s) => !isSlotPastForDay(s.startTime, selectedDay));
-              const amSlots = futureSlots.filter((s) => parseHHMM(s.startTime) < 720).slice(0, 3);
-              const pmSlots = futureSlots.filter((s) => parseHHMM(s.startTime) >= 720).slice(0, 3);
-              const bestSlot = futureSlots.length > 0 && offset === 0 ? futureSlots[0] : null;
+              const amSlots = futureSlots.filter((s) => parseHHMM(s.startTime) < 720);
+              const pmSlots = futureSlots.filter((s) => parseHHMM(s.startTime) >= 720);
+              const bestSlot = futureSlots.length > 0 ? futureSlots[0] : null;
               if (futureSlots.length === 0) {
                 return (
                   <div className="py-4 text-center text-sm text-[var(--muted)]">
@@ -629,7 +609,7 @@ export function SchedulePanel({
                 );
               }
               return (
-                <div className="space-y-3 max-h-[32vh] overflow-y-auto rounded-xl bg-slate-100 p-3">
+                <div className="space-y-3">
                   {/* Morning section */}
                   <div>
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
