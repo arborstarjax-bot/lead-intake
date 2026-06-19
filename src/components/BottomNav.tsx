@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, CheckSquare, Home, List, MapPin } from "lucide-react";
+import { CalendarDays, CheckSquare, Home, List } from "lucide-react";
 
 type Tab = {
   href: string;
@@ -25,16 +25,10 @@ const tabs: Tab[] = [
     match: (p) => p.startsWith("/leads"),
   },
   {
-    href: "/calendar",
-    label: "Calendar",
-    Icon: CalendarDays,
-    match: (p) => p.startsWith("/calendar"),
-  },
-  {
     href: "/route",
-    label: "Route",
-    Icon: MapPin,
-    match: (p) => p.startsWith("/route"),
+    label: "Schedule",
+    Icon: CalendarDays,
+    match: (p) => p.startsWith("/route") || p.startsWith("/calendar"),
   },
   {
     href: "/tasks",
