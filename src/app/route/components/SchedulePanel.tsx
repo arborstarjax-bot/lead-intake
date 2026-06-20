@@ -149,7 +149,7 @@ export function SchedulePanel({
   }, [onHeightChange]);
 
   const [mode, setMode] = useState<Mode>("smart");
-  const [smartMode, setSmartMode] = useState<SmartBookingMode>("balanced");
+  const smartMode: SmartBookingMode = "balanced";
   const [loading, setLoading] = useState(false);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [smartResult, setSmartResult] = useState<SmartBookingResult | null>(null);
@@ -554,31 +554,6 @@ export function SchedulePanel({
         {/* Smart Booking mode */}
         {mode === "smart" && (
           <>
-            {/* Sub-mode selector: Balanced | Best Route | Soonest */}
-            <div className="flex gap-1">
-              {(
-                [
-                  { key: "balanced", label: "Balanced" },
-                  { key: "best_route", label: "Best Route" },
-                  { key: "soonest", label: "Soonest" },
-                ] as const
-              ).map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  onClick={() => setSmartMode(m.key)}
-                  className={cn(
-                    "flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition border",
-                    smartMode === m.key
-                      ? "border-emerald-400 bg-emerald-50 text-emerald-700"
-                      : "border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
-                  )}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
             {warnings.length > 0 && !loading && (
               <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                 {warnings.join(" · ")}
@@ -594,102 +569,17 @@ export function SchedulePanel({
               <div className="py-4 flex items-center justify-center text-[var(--muted)] text-sm">
                 <Loader2 className="h-4 w-4 animate-spin mr-2" /> Scoring slots…
               </div>
-            ) : (() => {
-              if (!smartResult || smartResult.allSlots.length === 0) {
-                return (
-                  <div className="py-4 text-center text-sm text-[var(--muted)]">
-                    No feasible slots on this day.
-                  </div>
-                );
-              }
-
-              const { bestOverall, morningTop3, afternoonTop3 } = smartResult;
-
-              return (
-                <div className="space-y-3">
-                  {/* Best Overall */}
-                  {bestOverall && (
-                    <div>
-                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600 mb-1.5">
-                        <Sparkles className="h-3 w-3" />
-                        Best Overall
-                      </div>
-                      <ScoredSlotCard
-                        slot={bestOverall}
-                        isBest
-                        selected={previewSlot?.startTime === bestOverall.startTime}
-                        disabled={booking}
-                        onSelect={() => {
-                          const s = slots.find((sl) => sl.startTime === bestOverall.startTime);
-                          if (s) onPreview(previewSlot?.startTime === s.startTime ? null : s);
-                        }}
-                        stops={stops}
-                      />
-                    </div>
-                  )}
-
-                  {/* Morning Top 3 */}
-                  <div>
-                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
-                      <Sunrise className="h-3 w-3" />
-                      Best Morning Options
-                    </div>
-                    {morningTop3.length === 0 ? (
-                      <div className="text-[11px] text-[var(--muted)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
-                        No morning slots
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {morningTop3.map((s) => (
-                          <ScoredSlotCard
-                            key={s.startTime}
-                            slot={s}
-                            isBest={bestOverall?.startTime === s.startTime}
-                            selected={previewSlot?.startTime === s.startTime}
-                            disabled={booking}
-                            onSelect={() => {
-                              const sl = slots.find((x) => x.startTime === s.startTime);
-                              if (sl) onPreview(previewSlot?.startTime === sl.startTime ? null : sl);
-                            }}
-                            stops={stops}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Afternoon Top 3 */}
-                  <div>
-                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
-                      <Sunset className="h-3 w-3" />
-                      Best Afternoon Options
-                    </div>
-                    {afternoonTop3.length === 0 ? (
-                      <div className="text-[11px] text-[var(--muted)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
-                        No afternoon slots
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {afternoonTop3.map((s) => (
-                          <ScoredSlotCard
-                            key={s.startTime}
-                            slot={s}
-                            isBest={bestOverall?.startTime === s.startTime}
-                            selected={previewSlot?.startTime === s.startTime}
-                            disabled={booking}
-                            onSelect={() => {
-                              const sl = slots.find((x) => x.startTime === s.startTime);
-                              if (sl) onPreview(previewSlot?.startTime === sl.startTime ? null : sl);
-                            }}
-                            stops={stops}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
+            ) : (
+              <SmartSlotList
+                smartResult={smartResult}
+                bestOverallTime={smartResult?.bestOverall?.startTime ?? null}
+                previewSlot={previewSlot}
+                booking={booking}
+                slots={slots}
+                stops={stops}
+                onPreview={onPreview}
+              />
+            )}
           </>
         )}
 
@@ -870,18 +760,132 @@ export function SchedulePanel({
   );
 }
 
+// ── Smart Slot List (flat list with Top Pick badge + Show More) ────
+
+function SmartSlotList({
+  smartResult,
+  bestOverallTime,
+  previewSlot,
+  booking,
+  slots,
+  stops,
+  onPreview,
+}: {
+  smartResult: SmartBookingResult | null;
+  bestOverallTime: string | null;
+  previewSlot: Slot | null;
+  booking: boolean;
+  slots: Slot[];
+  stops: Stop[];
+  onPreview: (slot: Slot | null) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!smartResult || smartResult.allSlots.length === 0) {
+    return (
+      <div className="py-4 text-center text-sm text-[var(--muted)]">
+        No feasible slots on this day.
+      </div>
+    );
+  }
+
+  const { morningTop3, afternoonTop3, allSlots } = smartResult;
+
+  const morningVisible = expanded ? morningTop3 : morningTop3.slice(0, 3);
+  const afternoonVisible = expanded ? afternoonTop3 : afternoonTop3.slice(0, 3);
+  const visibleCount = morningVisible.length + afternoonVisible.length;
+  const totalCount = morningTop3.length + afternoonTop3.length;
+  const hiddenCount = totalCount - visibleCount;
+  const allHidden = allSlots.length - totalCount;
+
+  return (
+    <div className="space-y-3">
+      {/* Morning */}
+      <div>
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
+          <Sunrise className="h-3 w-3" />
+          Morning
+        </div>
+        {morningVisible.length === 0 ? (
+          <div className="text-[11px] text-[var(--muted)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
+            No morning slots
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {morningVisible.map((s) => (
+              <ScoredSlotCard
+                key={s.startTime}
+                slot={s}
+                isTopPick={s.startTime === bestOverallTime}
+                selected={previewSlot?.startTime === s.startTime}
+                disabled={booking}
+                onSelect={() => {
+                  const sl = slots.find((x) => x.startTime === s.startTime);
+                  if (sl) onPreview(previewSlot?.startTime === sl.startTime ? null : sl);
+                }}
+                stops={stops}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Afternoon */}
+      <div>
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
+          <Sunset className="h-3 w-3" />
+          Afternoon
+        </div>
+        {afternoonVisible.length === 0 ? (
+          <div className="text-[11px] text-[var(--muted)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
+            No afternoon slots
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {afternoonVisible.map((s) => (
+              <ScoredSlotCard
+                key={s.startTime}
+                slot={s}
+                isTopPick={s.startTime === bestOverallTime}
+                selected={previewSlot?.startTime === s.startTime}
+                disabled={booking}
+                onSelect={() => {
+                  const sl = slots.find((x) => x.startTime === s.startTime);
+                  if (sl) onPreview(previewSlot?.startTime === sl.startTime ? null : sl);
+                }}
+                stops={stops}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Show more button */}
+      {!expanded && (hiddenCount > 0 || allHidden > 0) && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 text-xs font-medium text-[var(--muted)] hover:text-[var(--fg)] hover:border-[var(--accent)] transition"
+        >
+          Show {hiddenCount + allHidden} more time{(hiddenCount + allHidden) !== 1 ? "s" : ""}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Scored Slot Card (Smart Booking) ───────────────────────────────
 
 function ScoredSlotCard({
   slot,
-  isBest,
+  isTopPick,
   selected,
   disabled,
   onSelect,
   stops,
 }: {
   slot: ScoredSlot;
-  isBest: boolean;
+  isTopPick: boolean;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
@@ -895,8 +899,8 @@ function ScoredSlotCard({
         : "bg-slate-100 text-slate-600";
 
   const driveLabel = slot.extraDriveMinutes > 0
-    ? `+${slot.extraDriveMinutes}m drive`
-    : "No extra drive";
+    ? `+${slot.extraDriveMinutes}m`
+    : "0m";
 
   const miniSlot: Slot = {
     startTime: slot.startTime,
@@ -914,39 +918,31 @@ function ScoredSlotCard({
       onClick={onSelect}
       disabled={disabled}
       className={cn(
-        "w-full rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] relative overflow-hidden",
+        "w-full rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99]",
         selected
           ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200"
-          : isBest
-            ? "border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200"
+          : isTopPick
+            ? "border-emerald-400 bg-emerald-50/60"
             : "border-[var(--border)] bg-white hover:bg-slate-50"
       )}
     >
-      {isBest && (
-        <div className="absolute top-0 left-0 right-0 bg-emerald-600 text-white text-[9px] font-bold uppercase tracking-wider text-center py-0.5">
-          Best Overall
-        </div>
-      )}
-      <div className={cn("flex items-center justify-between gap-2", isBest && "pt-3")}>
+      <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-lg font-bold leading-none">
               {formatClock(slot.startTime)}
             </span>
+            {isTopPick && (
+              <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-600 bg-emerald-100 rounded px-1.5 py-0.5">
+                Top Pick
+              </span>
+            )}
             <span className={cn("text-[10px] font-semibold rounded-full px-2 py-0.5", scoreColor)}>
-              Score {slot.scores.finalScore}
+              {slot.scores.finalScore}
             </span>
-            <span className="text-[10px] font-medium text-[var(--muted)] bg-slate-100 rounded-full px-2 py-0.5">
+            <span className="text-[10px] text-[var(--muted)]">
               {driveLabel}
             </span>
-          </div>
-          <div className="mt-1">
-            <span className="text-[11px] font-semibold text-[var(--fg)]">
-              {slot.label}
-            </span>
-          </div>
-          <div className="mt-1 text-[11px] text-[var(--muted)] line-clamp-2">
-            {slot.explanation}
           </div>
         </div>
         <ChevronRight
