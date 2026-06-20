@@ -47,6 +47,11 @@ type DayOption = {
 
 // ── helpers ────────────────────────────────────────────────────────
 
+function getDayOfWeek(iso: string): number {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay();
+}
+
 function parseHHMM(t: string): number {
   const m = t.match(/^(\d{2}):(\d{2})/);
   if (!m) return 0;
@@ -158,6 +163,7 @@ export function SchedulePanel({
   const [booking, setBooking] = useState(false);
 
   const [bufferOverride, setBufferOverride] = useState(false);
+  const [offHoursOverride, setOffHoursOverride] = useState(false);
 
   const [dayCardsLoading, setDayCardsLoading] = useState(false);
   const [dayCards, setDayCards] = useState<DayOption[]>([]);
@@ -179,6 +185,29 @@ export function SchedulePanel({
     if (mode !== "manual" || !customTime) return null;
     return getBufferViolation(customTime, stops, bufferMinutes);
   }, [mode, customTime, stops, bufferMinutes]);
+
+  const offHoursWarning = useMemo(() => {
+    if (mode !== "manual") return null;
+    const workDays = settings.work_days ?? [1, 2, 3, 4, 5, 6];
+    const workStart = settings.work_start_time ?? "08:00";
+    const workEnd = settings.work_end_time ?? "17:00";
+    const dayOfWeek = getDayOfWeek(selectedDay);
+    const isNonWorkDay = !workDays.includes(dayOfWeek);
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    if (isNonWorkDay) {
+      return `${dayNames[dayOfWeek]} is outside your configured work days.`;
+    }
+    if (customTime) {
+      const timeMin = parseHHMM(customTime);
+      const startMin = parseHHMM(workStart);
+      const endMin = parseHHMM(workEnd);
+      if (timeMin < startMin || timeMin >= endMin) {
+        return `${formatClock(customTime)} is outside your work hours (${formatClock(workStart)} – ${formatClock(workEnd)}).`;
+      }
+    }
+    return null;
+  }, [mode, selectedDay, customTime, settings.work_days, settings.work_start_time, settings.work_end_time]);
 
   const loadSmartSlots = useCallback(
     async () => {
@@ -238,6 +267,7 @@ export function SchedulePanel({
     setFlexWindow(null);
     setError(null);
     setBufferOverride(false);
+    setOffHoursOverride(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
@@ -593,6 +623,7 @@ export function SchedulePanel({
                 onChange={(e) => {
                   setCustomTime(e.target.value);
                   setBufferOverride(false);
+                  setOffHoursOverride(false);
                   if (previewSlot) onPreview(null);
                 }}
                 step={300}
@@ -637,6 +668,27 @@ export function SchedulePanel({
                   />
                   <span className="text-xs font-medium text-amber-800">
                     Book anyway — override buffer requirement
+                  </span>
+                </label>
+              </div>
+            )}
+
+            {/* Off-hours / non-work-day warning */}
+            {offHoursWarning && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-xs text-amber-800">{offHoursWarning}</p>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={offHoursOverride}
+                    onChange={(e) => setOffHoursOverride(e.target.checked)}
+                    className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="text-xs font-medium text-amber-800">
+                    I understand — schedule anyway
                   </span>
                 </label>
               </div>
@@ -732,7 +784,7 @@ export function SchedulePanel({
             </button>
             <button
               onClick={onConfirm}
-              disabled={booking || (mode === "manual" && !!fixedTimeViolation && !bufferOverride)}
+              disabled={booking || (mode === "manual" && ((!!fixedTimeViolation && !bufferOverride) || (!!offHoursWarning && !offHoursOverride)))}
               className={cn(
                 "flex-1 rounded-full h-12 text-sm font-semibold inline-flex items-center justify-center gap-1.5 disabled:opacity-60",
                 modeAccent === "emerald"
@@ -944,6 +996,11 @@ function ScoredSlotCard({
               {driveLabel}
             </span>
           </div>
+          {slot.explanation && (
+            <div className="mt-1 text-[11px] text-[var(--muted)] line-clamp-1">
+              {slot.explanation}
+            </div>
+          )}
         </div>
         <ChevronRight
           className={cn(
