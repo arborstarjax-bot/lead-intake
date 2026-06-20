@@ -26,14 +26,15 @@ import {
 import {
   formatClock,
   formatDateLong,
-  type Half,
   type RouteResponse,
   type Slot,
   type Stop,
+  type SmartBookingMode,
+  type ScoredSlot,
+  type SmartBookingResult,
 } from "../route-helpers";
 
-
-type Mode = "recommended" | "fixed" | "flex";
+type Mode = "smart" | "manual" | "flex";
 
 type DayOption = {
   date: string;
@@ -41,6 +42,7 @@ type DayOption = {
   effectiveBestMinutes: number | null;
   slotCount: number;
   clusterBonusMinutes: number;
+  routeScore: number;
 };
 
 // ── helpers ────────────────────────────────────────────────────────
@@ -49,27 +51,6 @@ function parseHHMM(t: string): number {
   const m = t.match(/^(\d{2}):(\d{2})/);
   if (!m) return 0;
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-}
-
-function todayIsoLocal(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
-
-function currentMinutesET(): number {
-  const now = new Date();
-  const hhmm = now.toLocaleTimeString("en-US", {
-    timeZone: "America/New_York",
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  return parseHHMM(hhmm);
-}
-
-function isSlotPastForDay(startTime: string, dayIso: string): boolean {
-  if (dayIso > todayIsoLocal()) return false;
-  if (dayIso < todayIsoLocal()) return true;
-  return parseHHMM(startTime) <= currentMinutesET();
 }
 
 function formatTime(t: string): string {
@@ -167,10 +148,11 @@ export function SchedulePanel({
     return () => ro.disconnect();
   }, [onHeightChange]);
 
-  const [mode, setMode] = useState<Mode>("recommended");
-  const half: Half = "all";
+  const [mode, setMode] = useState<Mode>("smart");
+  const [smartMode, setSmartMode] = useState<SmartBookingMode>("balanced");
   const [loading, setLoading] = useState(false);
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [smartResult, setSmartResult] = useState<SmartBookingResult | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
@@ -180,7 +162,6 @@ export function SchedulePanel({
   const [dayCardsLoading, setDayCardsLoading] = useState(false);
   const [dayCards, setDayCards] = useState<DayOption[]>([]);
   const dayStripRef = useRef<HTMLDivElement | null>(null);
-  const [slotInsights, setSlotInsights] = useState<Array<{ pro: string; con: string }>>([]);
 
   const [customTime, setCustomTime] = useState<string>("");
   const [flexWindow, setFlexWindow] = useState<LeadFlexWindow | null>(null);
@@ -190,42 +171,53 @@ export function SchedulePanel({
   const stops = useMemo(() => routeData?.stops ?? [], [routeData]);
 
   const fixedTimeFeedback = useMemo(() => {
-    if (mode !== "fixed" || !customTime) return null;
+    if (mode !== "manual" || !customTime) return null;
     return getFixedTimeFeedback(customTime, stops);
   }, [mode, customTime, stops]);
 
   const fixedTimeViolation = useMemo(() => {
-    if (mode !== "fixed" || !customTime) return null;
+    if (mode !== "manual" || !customTime) return null;
     return getBufferViolation(customTime, stops, bufferMinutes);
   }, [mode, customTime, stops, bufferMinutes]);
 
-  const loadSlots = useCallback(
-    async (nextOffset: number) => {
+  const loadSmartSlots = useCallback(
+    async () => {
       const requestId = ++requestIdRef.current;
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/schedule/suggest", {
+        const res = await fetch("/api/schedule/smart-book", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             leadId,
-            half,
+            mode: smartMode,
             day: selectedDay,
-            offset: nextOffset,
           }),
         });
         const json = await res.json();
         if (requestId !== requestIdRef.current) return;
         if (!res.ok) {
           setError(json.error ?? `Failed (${res.status})`);
+          setSmartResult(null);
           setSlots([]);
           setWarnings([]);
           return;
         }
-        setSlots(json.slots ?? []);
-        setWarnings(json.warnings ?? []);
-
+        const result = json as SmartBookingResult;
+        setSmartResult(result);
+        // Convert scored slots to Slot type for booking compatibility
+        setSlots(
+          result.allSlots.map((s) => ({
+            startTime: s.startTime,
+            endTime: s.endTime,
+            driveMinutesBefore: s.driveMinutesBefore,
+            driveMinutesAfter: s.driveMinutesAfter,
+            totalDriveMinutes: s.driveMinutesBefore + s.driveMinutesAfter,
+            reasoning: s.reasoning,
+          }))
+        );
+        setWarnings(result.warnings ?? []);
       } catch (e) {
         if (requestId !== requestIdRef.current) return;
         setError((e as Error).message || "Network error");
@@ -233,50 +225,12 @@ export function SchedulePanel({
         if (requestId === requestIdRef.current) setLoading(false);
       }
     },
-    [leadId, half, selectedDay]
+    [leadId, smartMode, selectedDay]
   );
 
   useEffect(() => {
-    if (mode === "recommended") loadSlots(0);
-  }, [loadSlots, mode]);
-
-  // Fetch AI insights for the current slot page (non-blocking)
-  useEffect(() => {
-    if (slots.length === 0) {
-      setSlotInsights([]);
-      return;
-    }
-    let cancelled = false;
-    const activeDay = dayCards.find((d) => d.date === selectedDay);
-    (async () => {
-      try {
-        const res = await fetch("/api/schedule/slot-insights", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            slots: slots.map((s) => ({
-              startTime: s.startTime,
-              driveMinutesBefore: s.driveMinutesBefore,
-              driveMinutesAfter: s.driveMinutesAfter,
-              totalDriveMinutes: s.totalDriveMinutes,
-              priorLabel: s.reasoning.priorLabel,
-              nextLabel: s.reasoning.nextLabel,
-            })),
-            existingStopCount: stops.length,
-            totalDayDriveMinutes: routeData?.totalDriveMinutes ?? null,
-            clusterBonusMinutes: activeDay?.clusterBonusMinutes ?? 0,
-          }),
-        });
-        const json = await res.json();
-        if (!cancelled && Array.isArray(json.insights)) {
-          setSlotInsights(json.insights);
-        }
-      } catch {
-        // Non-fatal — cards just won't show AI insights
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [slots, stops.length, routeData?.totalDriveMinutes, selectedDay, dayCards]);
+    if (mode === "smart") loadSmartSlots();
+  }, [loadSmartSlots, mode]);
 
   useEffect(() => {
     onPreview(null);
@@ -310,6 +264,7 @@ export function SchedulePanel({
               clusterBonusMinutes: number;
               effectiveBestMinutes: number | null;
               slotCount: number;
+              routeScore: number;
             }
           | { date: string; isWorkDay: false }
         >;
@@ -330,6 +285,7 @@ export function SchedulePanel({
             effectiveBestMinutes: d.effectiveBestMinutes,
             slotCount: d.slotCount,
             clusterBonusMinutes: d.clusterBonusMinutes,
+            routeScore: d.routeScore ?? 50,
           }));
         if (!cancelled) setDayCards(cards);
       } catch {
@@ -440,7 +396,7 @@ export function SchedulePanel({
   const onConfirm = mode === "flex" ? bookFlex : bookTime;
 
   const modeAccent =
-    mode === "flex" ? "purple" : mode === "fixed" ? "blue" : "emerald";
+    mode === "flex" ? "purple" : mode === "manual" ? "blue" : "emerald";
 
   const stopCount = stops.length + (routeData?.flexStops?.length ?? 0);
 
@@ -551,36 +507,78 @@ export function SchedulePanel({
           </button>
         </div>
 
-        {/* Mode label when not in recommended mode */}
-        {mode !== "recommended" && (
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-[var(--muted)] uppercase tracking-wider">
-              {mode === "fixed" ? "Pick exact time" : "Set flex window"}
-            </span>
+        {/* Booking mode tabs: Smart | Manual | Flex */}
+        <div className="flex gap-1 rounded-xl bg-[var(--surface-2)] p-1">
+          {(
+            [
+              { key: "smart", label: "Smart Booking", icon: <Sparkles className="h-3.5 w-3.5" /> },
+              { key: "manual", label: "Manual", icon: <CalendarCheck className="h-3.5 w-3.5" /> },
+              { key: "flex", label: "Flex", icon: <Sun className="h-3.5 w-3.5" /> },
+            ] as const
+          ).map((tab) => (
             <button
+              key={tab.key}
               type="button"
-              onClick={() => setMode("recommended")}
-              className="text-[11px] font-medium text-[var(--accent)] hover:underline"
+              onClick={() => setMode(tab.key)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition",
+                mode === tab.key
+                  ? "bg-white text-[var(--fg)] shadow-sm"
+                  : "text-[var(--muted)] hover:text-[var(--fg)]"
+              )}
             >
-              Back to best slots
+              {tab.icon}
+              {tab.label}
             </button>
-          </div>
-        )}
+          ))}
+        </div>
 
-        {/* Route context — compact summary instead of full list */}
+        {/* Route context — compact summary with route score */}
         {stops.length > 0 && (
           <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-[11px] text-[var(--muted)]">
             <Car className="h-3.5 w-3.5 shrink-0" />
             <span className="font-semibold">{stopCount} estimate{stopCount !== 1 ? "s" : ""}</span>
             {routeData?.totalDriveMinutes != null && (
-              <span>· {routeData.totalDriveMinutes}m total drive</span>
+              <span>· {routeData.totalDriveMinutes}m drive</span>
             )}
+            {(() => {
+              const activeDay = dayCards.find((d) => d.date === selectedDay);
+              if (!activeDay) return null;
+              const rs = activeDay.routeScore;
+              const rsColor = rs >= 80 ? "text-emerald-600" : rs >= 60 ? "text-amber-600" : "text-red-500";
+              return <span className={cn("font-semibold", rsColor)}>· Route {rs}</span>;
+            })()}
           </div>
         )}
 
-        {/* Recommended mode */}
-        {mode === "recommended" && (
+        {/* Smart Booking mode */}
+        {mode === "smart" && (
           <>
+            {/* Sub-mode selector: Balanced | Best Route | Soonest */}
+            <div className="flex gap-1">
+              {(
+                [
+                  { key: "balanced", label: "Balanced" },
+                  { key: "best_route", label: "Best Route" },
+                  { key: "soonest", label: "Soonest" },
+                ] as const
+              ).map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setSmartMode(m.key)}
+                  className={cn(
+                    "flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition border",
+                    smartMode === m.key
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                      : "border-[var(--border)] bg-white text-[var(--muted)] hover:text-[var(--fg)]"
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
             {warnings.length > 0 && !loading && (
               <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                 {warnings.join(" · ")}
@@ -594,118 +592,109 @@ export function SchedulePanel({
 
             {loading ? (
               <div className="py-4 flex items-center justify-center text-[var(--muted)] text-sm">
-                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Ranking slots…
+                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Scoring slots…
               </div>
             ) : (() => {
-              const futureSlots = slots.filter((s) => !isSlotPastForDay(s.startTime, selectedDay));
-              const amSlots = futureSlots.filter((s) => parseHHMM(s.startTime) < 720);
-              const pmSlots = futureSlots.filter((s) => parseHHMM(s.startTime) >= 720);
-              const bestSlot = futureSlots.length > 0 ? futureSlots[0] : null;
-              if (futureSlots.length === 0) {
+              if (!smartResult || smartResult.allSlots.length === 0) {
                 return (
                   <div className="py-4 text-center text-sm text-[var(--muted)]">
                     No feasible slots on this day.
                   </div>
                 );
               }
+
+              const { bestOverall, morningTop3, afternoonTop3 } = smartResult;
+
               return (
                 <div className="space-y-3">
-                  {/* Morning section */}
+                  {/* Best Overall */}
+                  {bestOverall && (
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-600 mb-1.5">
+                        <Sparkles className="h-3 w-3" />
+                        Best Overall
+                      </div>
+                      <ScoredSlotCard
+                        slot={bestOverall}
+                        isBest
+                        selected={previewSlot?.startTime === bestOverall.startTime}
+                        disabled={booking}
+                        onSelect={() => {
+                          const s = slots.find((sl) => sl.startTime === bestOverall.startTime);
+                          if (s) onPreview(previewSlot?.startTime === s.startTime ? null : s);
+                        }}
+                        stops={stops}
+                      />
+                    </div>
+                  )}
+
+                  {/* Morning Top 3 */}
                   <div>
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
                       <Sunrise className="h-3 w-3" />
-                      Morning
+                      Best Morning Options
                     </div>
-                    {amSlots.length === 0 ? (
+                    {morningTop3.length === 0 ? (
                       <div className="text-[11px] text-[var(--muted)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
                         No morning slots
                       </div>
                     ) : (
                       <div className="space-y-1.5">
-                        {amSlots.map((s) => {
-                          const origIdx = slots.indexOf(s);
-                          return (
-                            <SmartSlotCard
-                              key={s.startTime}
-                              slot={s}
-                              isBest={bestSlot?.startTime === s.startTime}
-                              selected={previewSlot?.startTime === s.startTime}
-                              disabled={booking}
-                              onSelect={() =>
-                                onPreview(
-                                  previewSlot?.startTime === s.startTime ? null : s
-                                )
-                              }
-                              stops={stops}
-                              insight={origIdx >= 0 ? slotInsights[origIdx] ?? null : null}
-                            />
-                          );
-                        })}
+                        {morningTop3.map((s) => (
+                          <ScoredSlotCard
+                            key={s.startTime}
+                            slot={s}
+                            isBest={bestOverall?.startTime === s.startTime}
+                            selected={previewSlot?.startTime === s.startTime}
+                            disabled={booking}
+                            onSelect={() => {
+                              const sl = slots.find((x) => x.startTime === s.startTime);
+                              if (sl) onPreview(previewSlot?.startTime === sl.startTime ? null : sl);
+                            }}
+                            stops={stops}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
 
-                  {/* Afternoon section */}
+                  {/* Afternoon Top 3 */}
                   <div>
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-1.5">
                       <Sunset className="h-3 w-3" />
-                      Afternoon
+                      Best Afternoon Options
                     </div>
-                    {pmSlots.length === 0 ? (
+                    {afternoonTop3.length === 0 ? (
                       <div className="text-[11px] text-[var(--muted)] bg-[var(--surface-2)] rounded-lg px-3 py-2 text-center border border-dashed border-[var(--border)]">
                         No afternoon slots
                       </div>
                     ) : (
                       <div className="space-y-1.5">
-                        {pmSlots.map((s) => {
-                          const origIdx = slots.indexOf(s);
-                          return (
-                            <SmartSlotCard
-                              key={s.startTime}
-                              slot={s}
-                              isBest={bestSlot?.startTime === s.startTime}
-                              selected={previewSlot?.startTime === s.startTime}
-                              disabled={booking}
-                              onSelect={() =>
-                                onPreview(
-                                  previewSlot?.startTime === s.startTime ? null : s
-                                )
-                              }
-                              stops={stops}
-                              insight={origIdx >= 0 ? slotInsights[origIdx] ?? null : null}
-                            />
-                          );
-                        })}
+                        {afternoonTop3.map((s) => (
+                          <ScoredSlotCard
+                            key={s.startTime}
+                            slot={s}
+                            isBest={bestOverall?.startTime === s.startTime}
+                            selected={previewSlot?.startTime === s.startTime}
+                            disabled={booking}
+                            onSelect={() => {
+                              const sl = slots.find((x) => x.startTime === s.startTime);
+                              if (sl) onPreview(previewSlot?.startTime === sl.startTime ? null : sl);
+                            }}
+                            stops={stops}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
                 </div>
               );
             })()}
-
-            {/* Power-user links */}
-            <div className="flex items-center justify-center gap-3 pt-1 text-[11px]">
-              <button
-                type="button"
-                onClick={() => setMode("fixed")}
-                className="text-blue-600 font-medium hover:underline"
-              >
-                Pick exact time
-              </button>
-              <span className="text-[var(--muted)]">&middot;</span>
-              <button
-                type="button"
-                onClick={() => setMode("flex")}
-                className="text-purple-600 font-medium hover:underline"
-              >
-                Set flex window
-              </button>
-            </div>
           </>
         )}
 
-        {/* Fixed time mode */}
-        {mode === "fixed" && (
+        {/* Manual Booking mode */}
+        {mode === "manual" && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <input
@@ -763,9 +752,19 @@ export function SchedulePanel({
               </div>
             )}
 
+            {/* Route warning with Smart Booking recommendation */}
+            {customTime && fixedTimeFeedback && fixedTimeFeedback.color.includes("amber") && smartResult?.bestOverall && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+                <p className="text-xs text-blue-800">
+                  <AlertTriangle className="h-3.5 w-3.5 inline mr-1 -mt-0.5" />
+                  This time is available, but may create a long drive or isolated estimate.{" "}
+                  <strong>Smart Booking recommends {formatDayShort(smartResult.bestOverall.date)} at {formatClock(smartResult.bestOverall.startTime)}</strong> instead.
+                </p>
+              </div>
+            )}
+
             <p className="text-[11px] text-[var(--muted)]">
-              Bypasses drive-time optimization — use when the time has
-              already been agreed with the customer.
+              Pick any time — conflicts are blocked, but poor route choices are allowed with a warning.
             </p>
             {error && (
               <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
@@ -811,6 +810,15 @@ export function SchedulePanel({
             <p className="text-[11px] text-[var(--muted)]">
               The route optimizer assigns the best time when you build the day.
             </p>
+            {/* Optional Smart Booking recommendation */}
+            {smartResult?.bestOverall && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+                <p className="text-xs text-blue-800">
+                  <Sparkles className="h-3.5 w-3.5 inline mr-1 -mt-0.5" />
+                  Smart Booking suggests <strong>{formatDayShort(smartResult.bestOverall.date)} at {formatClock(smartResult.bestOverall.startTime)}</strong> (score {smartResult.bestOverall.scores.finalScore}).
+                </p>
+              </div>
+            )}
             {error && (
               <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
                 {error}
@@ -834,7 +842,7 @@ export function SchedulePanel({
             </button>
             <button
               onClick={onConfirm}
-              disabled={booking || (mode === "fixed" && !!fixedTimeViolation && !bufferOverride)}
+              disabled={booking || (mode === "manual" && !!fixedTimeViolation && !bufferOverride)}
               className={cn(
                 "flex-1 rounded-full h-12 text-sm font-semibold inline-flex items-center justify-center gap-1.5 disabled:opacity-60",
                 modeAccent === "emerald"
@@ -862,34 +870,43 @@ export function SchedulePanel({
   );
 }
 
-// ── Smart Slot Card ────────────────────────────────────────────────
+// ── Scored Slot Card (Smart Booking) ───────────────────────────────
 
-function SmartSlotCard({
+function ScoredSlotCard({
   slot,
   isBest,
   selected,
   disabled,
   onSelect,
   stops,
-  insight,
 }: {
-  slot: Slot;
+  slot: ScoredSlot;
   isBest: boolean;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
   stops: Stop[];
-  insight: { pro: string; con: string } | null;
 }) {
-  const driveLabel = `+${slot.totalDriveMinutes} min`;
-  const driveColor =
-    slot.totalDriveMinutes <= 10
+  const scoreColor =
+    slot.scores.finalScore >= 75
       ? "bg-emerald-100 text-emerald-700"
-      : slot.totalDriveMinutes <= 20
+      : slot.scores.finalScore >= 50
         ? "bg-amber-100 text-amber-700"
         : "bg-slate-100 text-slate-600";
 
-  const miniRoute = buildMiniRoute(slot, stops);
+  const driveLabel = slot.extraDriveMinutes > 0
+    ? `+${slot.extraDriveMinutes}m drive`
+    : "No extra drive";
+
+  const miniSlot: Slot = {
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    driveMinutesBefore: slot.driveMinutesBefore,
+    driveMinutesAfter: slot.driveMinutesAfter,
+    totalDriveMinutes: slot.driveMinutesBefore + slot.driveMinutesAfter,
+    reasoning: slot.reasoning,
+  };
+  const miniRoute = buildMiniRoute(miniSlot, stops);
 
   return (
     <button
@@ -907,41 +924,30 @@ function SmartSlotCard({
     >
       {isBest && (
         <div className="absolute top-0 left-0 right-0 bg-emerald-600 text-white text-[9px] font-bold uppercase tracking-wider text-center py-0.5">
-          Best Match
+          Best Overall
         </div>
       )}
       <div className={cn("flex items-center justify-between gap-2", isBest && "pt-3")}>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-lg font-bold leading-none">
               {formatClock(slot.startTime)}
             </span>
-            <span className={cn("text-[10px] font-semibold rounded-full px-2 py-0.5", driveColor)}>
+            <span className={cn("text-[10px] font-semibold rounded-full px-2 py-0.5", scoreColor)}>
+              Score {slot.scores.finalScore}
+            </span>
+            <span className="text-[10px] font-medium text-[var(--muted)] bg-slate-100 rounded-full px-2 py-0.5">
               {driveLabel}
             </span>
           </div>
-          {insight && (insight.pro || insight.con) ? (
-            <div className="mt-1.5 space-y-0.5 border-t border-slate-100 pt-1.5">
-              {insight.pro && (
-                <div className="flex items-start gap-1 text-[11px] text-emerald-600">
-                  <span className="font-bold shrink-0">+</span>
-                  <span className="line-clamp-2">{insight.pro}</span>
-                </div>
-              )}
-              {insight.con && (
-                <div className="flex items-start gap-1 text-[11px] text-amber-600">
-                  <span className="font-bold shrink-0">&minus;</span>
-                  <span className="line-clamp-2">{insight.con}</span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-[11px] mt-1 truncate text-[var(--muted)]">
-              {[slot.reasoning.priorLabel, slot.reasoning.nextLabel]
-                .filter(Boolean)
-                .join(" · ") || "Open slot"}
-            </div>
-          )}
+          <div className="mt-1">
+            <span className="text-[11px] font-semibold text-[var(--fg)]">
+              {slot.label}
+            </span>
+          </div>
+          <div className="mt-1 text-[11px] text-[var(--muted)] line-clamp-2">
+            {slot.explanation}
+          </div>
         </div>
         <ChevronRight
           className={cn(
@@ -951,7 +957,6 @@ function SmartSlotCard({
         />
       </div>
 
-      {/* Mini route diagram */}
       {miniRoute.length > 0 && (
         <div className="flex items-center gap-1 mt-1.5 text-[10px] text-[var(--muted)] overflow-x-auto">
           {miniRoute.map((seg, i) => (

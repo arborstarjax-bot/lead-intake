@@ -93,8 +93,46 @@ export type DayPreview =
       /** What the UI actually sorts by: best - clusterBonus (min 0). */
       effectiveBestMinutes: number | null;
       slotCount: number;
+      routeScore: number;
     }
   | { date: string; isWorkDay: false };
+
+export type SmartBookingMode = "balanced" | "best_route" | "soonest";
+
+export type ScoreBreakdown = {
+  routeRelationshipScore: number;
+  driveTimeImpactScore: number;
+  soonestAvailableScore: number;
+  scheduleFitScore: number;
+  finalScore: number;
+};
+
+export type ScoredSlot = {
+  date: string;
+  startTime: string;
+  endTime: string;
+  driveMinutesBefore: number;
+  driveMinutesAfter: number;
+  extraDriveMinutes: number;
+  scores: ScoreBreakdown;
+  label: string;
+  explanation: string;
+  reasoning: {
+    priorLabel: string | null;
+    nextLabel: string | null;
+  };
+  nearbyCount: number;
+  skippedBlocks: number;
+};
+
+export type SmartBookingResult = {
+  bestOverall: ScoredSlot | null;
+  morningTop3: ScoredSlot[];
+  afternoonTop3: ScoredSlot[];
+  allSlots: ScoredSlot[];
+  routeScore: number;
+  warnings: string[];
+};
 
 /** Pure ET-safe YYYY-MM-DD math. Adds n days to the given iso date. */
 export function addDaysIso(iso: string, n: number): string {
