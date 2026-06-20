@@ -5,8 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   CalendarCheck,
-  CalendarDays,
-  MapPin,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { RouteMap, type RouteMapMode, type RouteMapStop, type RouteMapFlexStop } from "@/modules/routing";
@@ -21,12 +19,8 @@ import {
 import { DayActions } from "./components/DayActions";
 import { DayPicker } from "./components/DayPicker";
 import { EstimatesList } from "./components/EstimatesList";
-import { MiniCalendar } from "./components/MiniCalendar";
 import { ModeToggle } from "./components/ModeToggle";
 import { SchedulePanel } from "./components/SchedulePanel";
-import { cn } from "@/lib/utils";
-
-type ScheduleView = "route" | "calendar";
 
 
 export default function RoutePage() {
@@ -66,10 +60,6 @@ function RoutePageInner() {
   const desiredDayApplied = useRef(false);
 
   const [mode, setMode] = useState<RouteMapMode>("route");
-  const viewParam = params.get("view");
-  const [scheduleView, setScheduleView] = useState<ScheduleView>(
-    viewParam === "calendar" ? "calendar" : "route"
-  );
   const [data, setData] = useState<RouteResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,49 +178,8 @@ function RoutePageInner() {
       className="mx-auto max-w-6xl p-4 sm:p-6 space-y-6"
       style={{ paddingBottom: 128 }}
     >
-      <div className="flex items-center justify-between">
-        <PageHeader title="Schedule" />
-        <div className="inline-flex rounded-xl border border-[var(--border)] p-0.5 bg-[var(--surface)]">
-          <button
-            type="button"
-            onClick={() => setScheduleView("route")}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition",
-              scheduleView === "route"
-                ? "bg-white text-[var(--fg)] shadow-sm"
-                : "text-[var(--muted)] hover:text-[var(--fg)]"
-            )}
-          >
-            <MapPin className="h-3.5 w-3.5" />
-            Route
-          </button>
-          <button
-            type="button"
-            onClick={() => setScheduleView("calendar")}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition",
-              scheduleView === "calendar"
-                ? "bg-white text-[var(--fg)] shadow-sm"
-                : "text-[var(--muted)] hover:text-[var(--fg)]"
-            )}
-          >
-            <CalendarDays className="h-3.5 w-3.5" />
-            Calendar
-          </button>
-        </div>
-      </div>
+      <PageHeader title="Schedule" />
 
-      {scheduleView === "calendar" ? (
-        <MiniCalendar
-          selected={selectedDay}
-          onSelect={(iso) => {
-            setSelectedDay(iso);
-            setScheduleView("route");
-          }}
-          todayIso={todayIso}
-        />
-      ) : (
-        <>
           <DayPicker
             days={days}
             todayIso={todayIso}
@@ -336,8 +285,6 @@ function RoutePageInner() {
               }}
             />
           )}
-        </>
-      )}
 
       {flash && (
         <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] md:bottom-6 z-50 flex justify-center pointer-events-none px-4">

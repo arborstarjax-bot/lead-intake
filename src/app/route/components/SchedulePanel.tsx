@@ -317,7 +317,13 @@ export function SchedulePanel({
             clusterBonusMinutes: d.clusterBonusMinutes,
             routeScore: d.routeScore ?? 50,
           }));
-        if (!cancelled) setDayCards(cards);
+        if (!cancelled) {
+          setDayCards(cards);
+          // Auto-select best day if current day has no slots (e.g. today is a non-work day)
+          if (cards.length > 0 && !cards.some((c) => c.date === selectedDay)) {
+            onSelectDay(cards[0].date);
+          }
+        }
       } catch {
         // Silent — day cards just won't load
       } finally {
@@ -325,6 +331,7 @@ export function SchedulePanel({
       }
     })();
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);
 
   function scrollDayStrip(dir: -1 | 1) {
@@ -997,7 +1004,7 @@ function ScoredSlotCard({
             </span>
           </div>
           {slot.explanation && (
-            <div className="mt-1 text-[11px] text-[var(--muted)] line-clamp-1">
+            <div className="mt-1 text-[11px] text-[var(--muted)]">
               {slot.explanation}
             </div>
           )}
