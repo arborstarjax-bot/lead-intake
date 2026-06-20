@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { getSettings, homeAddressString } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth/server";
-import { suggestSlots, leadAddressString } from "@/modules/schedule/server";
+import { suggestSlots, leadAddressString, calculateRouteScore, parseHHMM, type ExistingStop } from "@/modules/schedule/server";
 import { MapsUnavailableError, createDriveMemo } from "@/modules/routing/server";
 import type { Lead } from "@/modules/leads/model";
 import {
@@ -44,6 +44,7 @@ type DayPreview =
        */
       effectiveBestMinutes: number | null;
       slotCount: number;
+      routeScore: number;
     }
   | { date: string; isWorkDay: false };
 
@@ -82,6 +83,9 @@ function computeClusterBonus(
   }
   return Math.min(15, bonus);
 }
+
+const URGENCY_PENALTY_PER_DAY = 2;
+const URGENCY_PENALTY_CAP = 20;
 
 export async function POST(req: Request) {
   if (!process.env.GOOGLE_MAPS_API_KEY) {
@@ -222,8 +226,39 @@ export async function POST(req: Request) {
           ? Math.min(...feasible.map((s) => s.totalDriveMinutes))
           : null;
         const clusterBonusMinutes = computeClusterBonus(newLeadZip, others);
+
+        // Urgency: penalize days further out so sooner days rank higher
+        // when drive times are competitive.
+        const daysOut = Math.round(
+          (d.getTime() - days[0].getTime()) / (1000 * 60 * 60 * 24)
+        );
+        const urgencyPenalty = Math.min(
+          daysOut * URGENCY_PENALTY_PER_DAY,
+          URGENCY_PENALTY_CAP
+        );
+
         const effectiveBestMinutes =
-          best == null ? null : Math.max(0, best - clusterBonusMinutes);
+          best == null
+            ? null
+            : Math.max(0, best - clusterBonusMinutes + urgencyPenalty);
+
+        // Calculate route score for the day
+        const homeAddr = homeAddressString(settings);
+        let routeScore = 50;
+        if (homeAddr) {
+          const blockSize = settings.min_time_between_appointments || 60;
+          const existingStops: ExistingStop[] = others
+            .filter((o) => leadAddressString(o) && o.scheduled_time)
+            .map((o) => ({
+              id: o.id,
+              label: o.client?.trim() || "job",
+              address: leadAddressString(o)!,
+              startMin: parseHHMM(o.scheduled_time!),
+              endMin: parseHHMM(o.scheduled_time!) + blockSize,
+            }));
+          routeScore = await calculateRouteScore(drive, homeAddr, existingStops);
+        }
+
         return {
           date: iso,
           isWorkDay: true,
@@ -231,6 +266,7 @@ export async function POST(req: Request) {
           clusterBonusMinutes,
           effectiveBestMinutes,
           slotCount: feasible.length,
+          routeScore,
         };
       })
     );

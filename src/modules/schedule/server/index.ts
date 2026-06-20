@@ -22,3 +22,28 @@ export {
   type SuggestResult,
   type DriveFn,
 } from "./schedule";
+
+export {
+  smartBookSlots,
+  generateAppointmentBlocks,
+  calculateDriveTime,
+  calculateRouteDriveTime,
+  calculateExtraDriveTime,
+  calculateRouteRelationshipScore,
+  applyDeadheadPenalty,
+  calculateDriveTimeImpactScore,
+  calculateSoonestAvailableScore,
+  calculateScheduleFitScore,
+  calculateRouteScore,
+  calculateFinalRecommendationScore,
+  getMorningRecommendations,
+  getAfternoonRecommendations,
+  MODE_WEIGHTS,
+  type SmartBookingMode,
+  type ModeWeights,
+  type ScoreBreakdown,
+  type ScoredSlot,
+  type SmartBookingResult,
+  type SmartBookingInputs,
+  type RecommendationLabel,
+} from "./scoring";
