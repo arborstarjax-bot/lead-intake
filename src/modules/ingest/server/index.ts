@@ -40,4 +40,10 @@ export {
 
 export { extractLeadFromText } from "./ai/extract-text";
 
+export {
+  matchLeadSourceKeyword,
+  resolveLeadSource,
+  buildSourcePromptSection,
+} from "./ai/lead-source";
+
 export { ingestText } from "./ingest-text";

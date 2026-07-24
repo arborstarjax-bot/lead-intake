@@ -43,9 +43,13 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   const mime = args.file.type || "image/jpeg";
   const dataUrl = `data:${mime};base64,${base64}`;
 
+  // Load settings first so the extractor knows this workspace's configured
+  // lead sources and can match a custom source instead of falling back.
+  const wsSettings = await getSettings(args.workspaceId);
+
   let extracted: ExtractedLead;
   try {
-    extracted = await extractLeadFromImage(dataUrl);
+    extracted = await extractLeadFromImage(dataUrl, wsSettings.lead_sources);
   } catch (e) {
     // Persist a failed placeholder so the upload is not silently lost.
     const { data: failed, error: insertErr } = await admin
@@ -86,9 +90,14 @@ export async function ingestScreenshot(args: IngestArgs): Promise<IngestResult> 
   //     still has the existing "Autofill" button as a manual fallback.
   await backfillMissingAddressParts(extracted);
 
-  const wsSettings = await getSettings(args.workspaceId);
+  // The extractor already resolved lead_source against the configured list;
+  // re-validate defensively (case-insensitive) so a stale/off-case value
+  // never lands in the row.
   const validatedSource: string | null =
-    extracted.lead_source && wsSettings.lead_sources.includes(extracted.lead_source)
+    extracted.lead_source &&
+    wsSettings.lead_sources.some(
+      (s) => s.toLowerCase() === extracted.lead_source!.toLowerCase(),
+    )
       ? extracted.lead_source
       : null;
 

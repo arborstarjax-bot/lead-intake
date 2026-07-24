@@ -73,6 +73,15 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient();
   const entries = body.entries as CalendarSyncEntry[];
 
+  // Load the workspace's configured lead sources once so source detection
+  // can match custom sources, not just the built-in defaults.
+  let configuredSources: string[] = [];
+  try {
+    configuredSources = (await getSettings(workspaceId)).lead_sources;
+  } catch {
+    // Fall back to defaults inside detectLeadSource.
+  }
+
   let synced = 0;
   let skipped = 0;
   let failed = 0;
@@ -271,7 +280,7 @@ export async function POST(req: NextRequest) {
 
         // Default lead_source and lead_type if not already set
         if (!existingLead.lead_source) {
-          updates.lead_source = await detectAndTrack(entry.notes, detectedSources);
+          updates.lead_source = await detectAndTrack(entry.notes, detectedSources, configuredSources);
         }
         if (!existingLead.lead_type) {
           updates.lead_type = "Residential";
@@ -317,7 +326,7 @@ export async function POST(req: NextRequest) {
           status: "Scheduled" as const,
           intake_source: "calendar_sync" as const,
           intake_status: "ready" as const,
-          lead_source: await detectAndTrack(entry.notes, detectedSources),
+          lead_source: await detectAndTrack(entry.notes, detectedSources, configuredSources),
           lead_type: "Residential",
           calendar_sync_status: "synced" as const,
           calendar_sync_at: new Date().toISOString(),
@@ -634,9 +643,10 @@ export async function POST(req: NextRequest) {
 
 async function detectAndTrack(
   notes: string | null | undefined,
-  tracked: Set<string>
+  tracked: Set<string>,
+  configuredSources: string[] = []
 ): Promise<string> {
-  const source = await detectLeadSource(notes);
+  const source = await detectLeadSource(notes, configuredSources);
   tracked.add(source);
   return source;
 }

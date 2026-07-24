@@ -29,9 +29,13 @@ type IngestTextArgs = {
 export async function ingestText(args: IngestTextArgs): Promise<IngestResult> {
   const admin = createAdminClient();
 
+  // Load settings first so the extractor knows this workspace's configured
+  // lead sources and can match a custom source instead of falling back.
+  const wsSettings = await getSettings(args.workspaceId);
+
   let extracted: ExtractedLead;
   try {
-    extracted = await extractLeadFromText(args.text);
+    extracted = await extractLeadFromText(args.text, wsSettings.lead_sources);
   } catch (e) {
     const { data: failed, error: insertErr } = await admin
       .from("leads")
@@ -54,9 +58,13 @@ export async function ingestText(args: IngestTextArgs): Promise<IngestResult> {
 
   await backfillMissingAddressParts(extracted);
 
-  const wsSettings = await getSettings(args.workspaceId);
+  // The extractor already resolved lead_source against the configured list;
+  // re-validate defensively (case-insensitive).
   const validatedSource: string | null =
-    extracted.lead_source && wsSettings.lead_sources.includes(extracted.lead_source)
+    extracted.lead_source &&
+    wsSettings.lead_sources.some(
+      (s) => s.toLowerCase() === extracted.lead_source!.toLowerCase(),
+    )
       ? extracted.lead_source
       : null;
 
