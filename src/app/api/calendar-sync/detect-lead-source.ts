@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { matchLeadSourceKeyword } from "@/modules/ingest/server";
 
 const VALID_SOURCES = [
   "Hubspot",
@@ -75,12 +76,21 @@ function lastLineSource(text: string): string | null {
  * Use GPT-4o-mini to detect the lead source from SingleOps task notes.
  * Falls back to keyword matching, then "SingleOps" if notes are empty or AI call fails.
  */
-export async function detectLeadSource(notes: string | null | undefined): Promise<string> {
+export async function detectLeadSource(
+  notes: string | null | undefined,
+  configuredSources: string[] = [],
+): Promise<string> {
   if (!notes || notes.trim().length === 0) return "SingleOps";
 
   // Check last line for explicit lead source (appended by ArborBridge push)
   const lastLine = lastLineSource(notes);
   if (lastLine) return lastLine;
+
+  // Prefer an exact hit against the workspace's *configured* sources so
+  // custom sources (e.g. "10for300", "Pipeline Partners", "Go Get Leads")
+  // are recognized, not just the built-in defaults below.
+  const configuredHit = matchLeadSourceKeyword(notes, configuredSources);
+  if (configuredHit) return configuredHit;
 
   // Try keyword match first for reliable detection of concatenated names
   const kw = keywordMatch(notes);

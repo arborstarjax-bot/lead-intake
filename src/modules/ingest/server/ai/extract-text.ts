@@ -6,8 +6,10 @@ import {
   normalizeZip,
 } from "@/modules/shared/format";
 import type { ExtractedLead } from "./extract";
+import { buildSourcePromptSection, resolveLeadSource } from "./lead-source";
 
-const SYSTEM_PROMPT = `You extract lead/estimate-request contact info from plain text messages.
+function buildSystemPrompt(leadSources: string[]): string {
+  return `You extract lead/estimate-request contact info from plain text messages.
 
 Sources vary: copy-pasted texts from iMessage, SMS, Facebook, Instagram DMs, Nextdoor, Thumbtack,
 Angi, Google Lead Forms, voicemail transcriptions, emails, CRM notifications, etc.
@@ -31,21 +33,12 @@ Rules:
   before calling: job description/requested service, urgency, best time to
   call, scheduling preferences, gate codes, referral source, apartment #,
   pets, access notes. Do NOT restate fields already captured above.
-- Lead source: determine WHERE this lead originated by analyzing the text.
-  Look for platform mentions, sender labels, notification headers like
-  "New Lead From Close-ai", "via Facebook", "Thumbtack request", etc.
-  Return one of these exact values (case-sensitive):
-    "Facebook", "Craigslist", "Instagram",
-    "Text Message", "Google Ads",
-    "Website Form", "Nextdoor", "Thumbtack", "Angi",
-    "Close AI", "Certified Lead Kings",
-    "Email", "Referral", "Direct Mail", "Other"
-  If the source is uncertain, return your best guess with a lower confidence.
-  Only return null if you truly cannot determine the source at all.
+${buildSourcePromptSection(leadSources)}
 - Confidence: 0.0–1.0 for each field, reflecting how certain you are from the
   text. A field that is absent from the text should be null with confidence 0.
 
 Return JSON matching the provided schema exactly. Do not add commentary.`;
+}
 
 const SCHEMA = {
   type: "object",
@@ -128,7 +121,10 @@ const TIMEOUT_MS = 30_000;
  * extract a structured lead record. Uses the same schema as image
  * extraction but with a text-optimized system prompt.
  */
-export async function extractLeadFromText(text: string): Promise<ExtractedLead> {
+export async function extractLeadFromText(
+  text: string,
+  leadSources: string[] = [],
+): Promise<ExtractedLead> {
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     timeout: TIMEOUT_MS,
@@ -149,7 +145,7 @@ export async function extractLeadFromText(text: string): Promise<ExtractedLead> 
         },
       },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: buildSystemPrompt(leadSources) },
         {
           role: "user",
           content: `Extract the lead from this text message:\n\n${text}`,
@@ -163,6 +159,10 @@ export async function extractLeadFromText(text: string): Promise<ExtractedLead> 
   if (!raw) throw new Error("OpenAI returned empty extraction");
 
   const parsed = JSON.parse(raw) as ExtractedLead;
+
+  // Resolve against the workspace's configured sources using the full
+  // pasted text — a literal brand mention wins over a generic guess.
+  parsed.lead_source = resolveLeadSource(parsed.lead_source, text, leadSources);
 
   return {
     ...parsed,

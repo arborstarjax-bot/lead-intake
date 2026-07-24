@@ -5,6 +5,7 @@ import {
   normalizeState,
   normalizeZip,
 } from "@/modules/shared/format";
+import { buildSourcePromptSection, resolveLeadSource } from "./lead-source";
 
 /**
  * Structured extraction result. Confidence is 0..1 per field; a field is
@@ -29,7 +30,8 @@ export type ExtractedLead = {
   confidence: Record<string, number>;
 };
 
-const SYSTEM_PROMPT = `You extract lead/estimate-request contact info from phone screenshots.
+function buildSystemPrompt(leadSources: string[]): string {
+  return `You extract lead/estimate-request contact info from phone screenshots.
 
 Sources vary: iMessage threads, SMS, Facebook, Instagram DMs, Nextdoor, Thumbtack,
 Angi, Google Lead Forms, voicemail transcriptions, handwritten notes, emails, etc.
@@ -71,30 +73,12 @@ Rules:
   before calling: job description/requested service, urgency, best time to
   call, scheduling preferences, gate codes, referral source, apartment #,
   pets, access notes. Do NOT restate fields already captured above.
-- Lead source: determine WHERE this lead originated by deeply analyzing the
-  screenshot. Examine:
-    • Platform/UI chrome: status bars, navigation menus, app headers.
-    • Message bubbles and layout (iMessage blue/green, FB Messenger purple,
-      Instagram gradient, WhatsApp green).
-    • Logos, branding, watermarks, favicons.
-    • Text patterns: "via Facebook", "Sent from Craigslist", Google Ads
-      click-to-call cards, Thumbtack/Angi quote request formats.
-    • SMS formatting (short codes, "Reply STOP", carrier labels).
-    • Contact card styling (vCard, embedded metadata).
-    • Email headers ("From:", mail client UI, newsletter footers).
-    • Web form submission confirmations, "Thank you" landing pages.
-  Return one of these exact values (case-sensitive):
-    "Facebook", "Craigslist", "Instagram",
-    "Text Message", "Google Ads",
-    "Website Form", "Nextdoor", "Thumbtack", "Angi",
-    "Close AI", "Certified Lead Kings",
-    "Email", "Referral", "Direct Mail", "Other"
-  If the source is uncertain, return your best guess with a lower confidence.
-  Only return null if you truly cannot determine the source at all.
+${buildSourcePromptSection(leadSources)}
 - Confidence: 0.0–1.0 for each field, reflecting how certain you are from the
   image. A field that is absent from the image should be null with confidence 0.
 
 Return JSON matching the provided schema exactly. Do not add commentary.`;
+}
 
 const SCHEMA = {
   type: "object",
@@ -273,7 +257,10 @@ const PRIMARY_TIMEOUT_MS = 45_000;
 const FALLBACK_BUDGET_MS = 12_000;
 const SOFT_BUDGET_MS = 50_000;
 
-export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedLead> {
+export async function extractLeadFromImage(
+  imageUrl: string,
+  leadSources: string[] = [],
+): Promise<ExtractedLead> {
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     timeout: PRIMARY_TIMEOUT_MS,
@@ -295,7 +282,7 @@ export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedL
         },
       },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: buildSystemPrompt(leadSources) },
         {
           role: "user",
           content: [
@@ -345,6 +332,11 @@ export async function extractLeadFromImage(imageUrl: string): Promise<ExtractedL
       parsed.confidence = nextConfidence;
     }
   }
+
+  // Resolve the source against the workspace's configured list: a literal
+  // brand mention (in the notes the model surfaced) wins, otherwise trust
+  // the model only when it named a configured source.
+  parsed.lead_source = resolveLeadSource(parsed.lead_source, parsed.notes, leadSources);
 
   // Post-normalize: format normalization increases downstream value without
   // distorting the model's original confidence numbers.
