@@ -27,6 +27,13 @@ export type ExtractedLead = {
   scheduled_time: string | null;
   notes: string | null;
   lead_source: string | null;
+  /**
+   * Verbatim brand / service / sender identifiers visible ANYWHERE in the
+   * image (headers, footers, signatures, "sent via X", email domains). Not
+   * shown in the UI — used only to deterministically resolve lead_source, so
+   * a provider named in a footer ("Go Get Leads") beats the messaging app.
+   */
+  source_text: string | null;
   confidence: Record<string, number>;
 };
 
@@ -73,6 +80,13 @@ Rules:
   before calling: job description/requested service, urgency, best time to
   call, scheduling preferences, gate codes, referral source, apartment #,
   pets, access notes. Do NOT restate fields already captured above.
+- source_text: copy VERBATIM any brand, company, service, lead-provider, or
+  sender identifiers visible ANYWHERE in the image — the thread/app header,
+  a message footer or signature line, a "sent from / sent via / powered by"
+  line, an email address domain, or a URL. Include the whole line even if it
+  looks like a signature (e.g. "Go Get Leads", "Andy Your assistant",
+  "notifications@pipelinepartners.com"). This is how we detect where the lead
+  came from, so never omit it. Use null only if truly no such text exists.
 ${buildSourcePromptSection(leadSources)}
 - Confidence: 0.0–1.0 for each field, reflecting how certain you are from the
   image. A field that is absent from the image should be null with confidence 0.
@@ -98,6 +112,7 @@ const SCHEMA = {
     scheduled_time: { type: ["string", "null"] },
     notes: { type: ["string", "null"] },
     lead_source: { type: ["string", "null"] },
+    source_text: { type: ["string", "null"] },
     confidence: {
       type: "object",
       additionalProperties: { type: "number" },
@@ -150,6 +165,7 @@ const SCHEMA = {
     "scheduled_time",
     "notes",
     "lead_source",
+    "source_text",
     "confidence",
   ],
 } as const;
@@ -334,9 +350,13 @@ export async function extractLeadFromImage(
   }
 
   // Resolve the source against the workspace's configured list: a literal
-  // brand mention (in the notes the model surfaced) wins, otherwise trust
-  // the model only when it named a configured source.
-  parsed.lead_source = resolveLeadSource(parsed.lead_source, parsed.notes, leadSources);
+  // brand mention anywhere in the image (headers, footers, signatures the
+  // model surfaced in source_text) wins, otherwise trust the model only
+  // when it named a configured source.
+  const sourceHaystack = [parsed.notes, parsed.source_text]
+    .filter((s): s is string => !!s)
+    .join("\n");
+  parsed.lead_source = resolveLeadSource(parsed.lead_source, sourceHaystack, leadSources);
 
   // Post-normalize: format normalization increases downstream value without
   // distorting the model's original confidence numbers.
