@@ -103,7 +103,7 @@ export default function SetupWizard() {
   }
 
   async function finish() {
-    if (saving) return;
+    if (saving || !canAdvance()) return;
     setSaving(true);
     setError(null);
     try {
@@ -486,10 +486,10 @@ export default function SetupWizard() {
             <button
               type="button"
               onClick={finish}
-              disabled={saving}
+              disabled={saving || !canAdvance()}
               className={cn(
                 "ml-auto inline-flex items-center gap-2 rounded-xl h-12 px-6 text-sm font-semibold text-white transition-colors",
-                !saving
+                !saving && canAdvance()
                   ? "bg-[var(--accent)] hover:opacity-95 active:scale-[0.98]"
                   : "bg-gray-300 cursor-not-allowed"
               )}
