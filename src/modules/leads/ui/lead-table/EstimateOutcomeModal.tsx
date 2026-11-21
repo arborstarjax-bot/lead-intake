@@ -103,8 +103,8 @@ export function EstimateOutcomeModal({
 
   const title =
     step === "primary" ? "Estimate Results" :
-    step === "proposal_result" ? "Proposal Sent" :
-    "No Proposal Sent";
+    step === "proposal_result" ? "Estimate Sent" :
+    "No Estimate Sent";
 
   return (
     <div
@@ -147,7 +147,7 @@ export function EstimateOutcomeModal({
                   <CheckCircle2 className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="font-semibold">Proposal Sent</div>
+                  <div className="font-semibold">Estimate Sent</div>
                   <div className="text-xs text-[var(--muted)]">An estimate was presented to the customer</div>
                 </div>
               </button>
@@ -159,7 +159,7 @@ export function EstimateOutcomeModal({
                   <FileX2 className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="font-semibold">No Proposal Sent</div>
+                  <div className="font-semibold">No Estimate Sent</div>
                   <div className="text-xs text-[var(--muted)]">No estimate was presented — select a reason</div>
                 </div>
               </button>
@@ -169,7 +169,7 @@ export function EstimateOutcomeModal({
           {step === "proposal_result" && (
             <>
               <p className="text-sm text-[var(--muted)]">
-                What happened after the proposal?
+                What happened after the estimate?
               </p>
               <button
                 onClick={() => selectProposalResult("Sold")}
@@ -180,7 +180,7 @@ export function EstimateOutcomeModal({
                 </div>
                 <div>
                   <div className="font-semibold text-green-700">Sold</div>
-                  <div className="text-xs text-[var(--muted)]">Customer accepted the proposal</div>
+                  <div className="text-xs text-[var(--muted)]">Customer accepted the estimate</div>
                 </div>
               </button>
               <button
@@ -192,7 +192,7 @@ export function EstimateOutcomeModal({
                 </div>
                 <div>
                   <div className="font-semibold text-rose-700">Not Sold</div>
-                  <div className="text-xs text-[var(--muted)]">Customer declined the proposal</div>
+                  <div className="text-xs text-[var(--muted)]">Customer declined the estimate</div>
                 </div>
               </button>
               <button

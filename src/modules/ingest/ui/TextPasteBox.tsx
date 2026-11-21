@@ -112,7 +112,7 @@ export default function TextPasteBox({
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={"New Lead From Close-ai for Jane Doe\n\nName: Jane Doe\nNumber: (555) 123-4567\nAddress: 123 Main St, Springfield FL 32003\n\nClose-ai"}
+          placeholder={"New lead notification for Jane Doe\n\nName: Jane Doe\nNumber: (555) 123-4567\nAddress: 123 Main St, Springfield FL 32003\n\nWebsite Form"}
           rows={6}
           disabled={busy}
           className={cn(

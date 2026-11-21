@@ -181,10 +181,10 @@ export default function TermsPage() {
           <p>
             Questions:{" "}
             <a
-              href="mailto:support@leadflow.app"
+              href="mailto:arborstarjax@gmail.com"
               className="text-[var(--accent)] underline"
             >
-              support@leadflow.app
+              arborstarjax@gmail.com
             </a>
             .
           </p>
