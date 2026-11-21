@@ -59,6 +59,30 @@ export const API_DOCS: ApiDocGroup[] = [
         summary: "Lead activity timeline (intake, status changes, outcomes)",
         responseExample: `{ "data": [ { "id": "…", "type": "lead_scheduled", "label": "Lead scheduled", "details": {…}, "createdAt": "…" } ] }`,
       },
+      {
+        method: "POST", path: "/api/v1/leads/{id}/activities", scope: "leads:write",
+        summary: "Append an activity (note, call logged, status change) — for CRMs writing events back",
+        params: [{ name: "id", in: "path", type: "uuid", required: true, description: "Lead id" }],
+        requestExample: `{ "type": "customer_called", "note": "Spoke with homeowner, wants Tuesday AM" }`,
+        responseExample: `{ "data": { "id": "…", "type": "customer_called", "label": "Customer called", "details": { "note": "…" }, "createdAt": "…" } }`,
+      },
+    ],
+  },
+  {
+    name: "Ingest",
+    description: "Run the extraction pipeline on lead text or screenshots — the same pipeline behind the app's Paste/Upload buttons.",
+    endpoints: [
+      {
+        method: "POST", path: "/api/v1/ingest", scope: "leads:write",
+        summary: "Create lead(s) from pasted text or screenshot(s)",
+        requestExample: `{ "text": "New lead from Yelp: Maria Torres needs roof repair at 11 Oak St, Springfield FL 32003, (555) 123-4567" }` + " or " + `{ "images": ["data:image/png;base64,iVBOR…"] }`,
+        responseExample: `{ "data": { "created": 1, "results": [ { "kind": "text", "leadId": "…", "intakeStatus": "ready" } ], "errors": [] } }`,
+      },
+      {
+        method: "GET", path: "/api/v1/openapi.json", scope: "—",
+        summary: "OpenAPI 3.1 spec generated from this doc registry — import into Postman/Zapier",
+        responseExample: `{ "openapi": "3.1.0", "paths": {…} }`,
+      },
     ],
   },
   {
@@ -210,6 +234,12 @@ export const API_DOCS: ApiDocGroup[] = [
         method: "DELETE", path: "/api/v1/webhooks/{id}", scope: "webhooks:manage",
         summary: "Delete a subscription",
         responseExample: `{ "data": { "deleted": true } }`,
+      },
+      {
+        method: "GET", path: "/api/v1/webhooks/{id}/deliveries", scope: "webhooks:manage",
+        summary: "Recent deliveries — status, attempts, last response code/error",
+        params: [{ name: "id", in: "path", type: "uuid", required: true, description: "Subscription id" }],
+        responseExample: `{ "data": [ { "id": "…", "event": "lead.created", "status": "delivered", "attempts": 1, "lastStatusCode": 200, "createdAt": "…" } ] }`,
       },
     ],
   },

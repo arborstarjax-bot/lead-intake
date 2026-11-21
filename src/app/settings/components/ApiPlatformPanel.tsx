@@ -11,6 +11,10 @@ type ApiKeyRow = {
   createdAt: string; lastUsedAt: string | null; revoked: boolean;
 };
 type WebhookRow = { id: string; url: string; events: string[]; isActive: boolean };
+type DeliveryRow = {
+  id: string; event: string; status: string; attempts: number;
+  lastStatusCode: number | null; lastError: string | null; createdAt: string;
+};
 
 const ALL_EVENTS = [
   "lead.created", "lead.updated", "lead.sold", "lead.lost",
@@ -26,6 +30,8 @@ export function ApiPlatformPanel() {
   const [keyName, setKeyName] = useState("");
   const [hookUrl, setHookUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deliveriesFor, setDeliveriesFor] = useState<string | null>(null);
+  const [deliveries, setDeliveries] = useState<DeliveryRow[]>([]);
 
   async function load() {
     const [k, w] = await Promise.all([
@@ -152,14 +158,51 @@ export function ApiPlatformPanel() {
             </div>
           )}
           {(hooks ?? []).map((h) => (
-            <div key={h.id} className="flex items-center gap-3 rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-xs truncate">{h.url}</div>
-                <div className="text-[11px] text-[var(--muted)]">{h.events.join(", ")}</div>
+            <div key={h.id} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm space-y-1">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-mono text-xs truncate">{h.url}</div>
+                  <div className="text-[11px] text-[var(--muted)]">{h.events.join(", ")}</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (deliveriesFor === h.id) { setDeliveriesFor(null); return; }
+                    const r = await fetch(`/api/v1/webhooks/${h.id}/deliveries`);
+                    const j = await r.json();
+                    setDeliveries(j?.data ?? []);
+                    setDeliveriesFor(h.id);
+                  }}
+                  className="text-[11px] text-[var(--accent)] hover:underline shrink-0"
+                >
+                  {deliveriesFor === h.id ? "Hide deliveries" : "Deliveries"}
+                </button>
+                <button onClick={() => deleteHook(h.id)} className="text-rose-600 hover:text-rose-700" aria-label="Delete webhook">
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-              <button onClick={() => deleteHook(h.id)} className="text-rose-600 hover:text-rose-700" aria-label="Delete webhook">
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {deliveriesFor === h.id && (
+                <div className="border-t border-[var(--border)] pt-1.5 space-y-1">
+                  {deliveries.length === 0 && (
+                    <div className="text-[11px] text-[var(--muted)]">No deliveries yet.</div>
+                  )}
+                  {deliveries.map((d) => (
+                    <div key={d.id} className="flex items-center gap-2 text-[11px]">
+                      <span
+                        className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                          d.status === "delivered" ? "bg-emerald-500" : d.status === "pending" ? "bg-amber-500" : "bg-rose-500"
+                        }`}
+                      />
+                      <span className="font-mono">{d.event}</span>
+                      <span className="text-[var(--muted)]">
+                        {d.status}{d.lastStatusCode != null ? ` · HTTP ${d.lastStatusCode}` : ""}
+                        {d.attempts > 1 ? ` · ${d.attempts} attempts` : ""}
+                        {d.lastError ? ` · ${d.lastError}` : ""}
+                      </span>
+                      <span className="ml-auto text-[var(--muted)]">{new Date(d.createdAt).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           {hooks && hooks.length === 0 && <div className="text-xs text-[var(--muted)]">No subscriptions yet.</div>}
