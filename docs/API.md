@@ -20,12 +20,14 @@ Two ways — both resolve to a workspace:
 
 | Group | Endpoints |
 |-------|-----------|
-| Leads | `GET/POST /leads`, `GET/PATCH/DELETE /leads/{id}`, `GET /leads/{id}/activities` |
+| Leads | `GET/POST /leads`, `GET/PATCH/DELETE /leads/{id}`, `GET/POST /leads/{id}/activities` |
 | Tasks | `GET/POST /tasks`, `GET/PATCH/DELETE /tasks/{id}` |
 | Schedule | `GET /schedule/day?date=`, `POST /schedule/preview`, `POST /schedule/suggest`, `POST /schedule/book`, `POST /schedule/reorder`, `POST /schedule/sync` |
 | Workspace | `GET /workspace`, `GET /members`, `PATCH/DELETE /members/{userId}` |
 | Config | `GET/PATCH /settings`, `GET /reports/summary?days=30` |
-| Webhooks | `GET/POST /webhooks`, `PATCH/DELETE /webhooks/{id}` |
+| Webhooks | `GET/POST /webhooks`, `PATCH/DELETE /webhooks/{id}`, `GET /webhooks/{id}/deliveries` |
+| Ingest | `POST /ingest` (lead text or base64 screenshots → extraction pipeline) |
+| Spec | `GET /openapi.json` (OpenAPI 3.1, generated from the docs registry) |
 | Key management | `GET/POST /keys`, `DELETE /keys/{id}` (admin session only) |
 
 Lead shape:

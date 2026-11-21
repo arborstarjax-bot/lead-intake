@@ -47,3 +47,5 @@ export {
 } from "./ai/lead-source";
 
 export { ingestText } from "./ingest-text";
+
+export { checkIngestQuota, type QuotaResult } from "./quota";
