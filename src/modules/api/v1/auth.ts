@@ -29,15 +29,19 @@ export type ApiAuth = {
 export type ApiScope =
   | "leads:read" | "leads:write"
   | "tasks:read" | "tasks:write"
+  | "schedule:read" | "schedule:write"
   | "workspace:read"
-  | "settings:read"
+  | "settings:read" | "settings:write"
+  | "members:write"
   | "reports:read"
   | "webhooks:manage";
 
 export const ALL_SCOPES: ApiScope[] = [
   "leads:read", "leads:write",
   "tasks:read", "tasks:write",
-  "workspace:read", "settings:read", "reports:read",
+  "schedule:read", "schedule:write",
+  "workspace:read", "settings:read", "settings:write",
+  "members:write", "reports:read",
   "webhooks:manage",
 ];
 

@@ -15,6 +15,22 @@ export function apiError(status: number, code: string, message: string) {
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
+/**
+ * Adapt a shared-module handler result ({ status, body } with flat
+ * `{ error: "…" }` failures) into the v1 envelope. Success bodies pass
+ * through under `data`; failures become `{ error: { code, message } }`
+ * with any extra fields (connectUrl, code) preserved at top level.
+ */
+export function handlerResult(res: { status: number; body: Record<string, unknown> }) {
+  if (res.status < 400) return ok(res.body, undefined, res.status);
+  const { error, ...rest } = res.body;
+  const code = typeof rest.code === "string" ? rest.code : "error";
+  return NextResponse.json(
+    { error: { code, message: String(error ?? "Request failed") }, ...rest },
+    { status: res.status }
+  );
+}
+
 export const badRequest = (message: string) => apiError(400, "bad_request", message);
 export const notFound = (what = "resource") => apiError(404, "not_found", `${what} not found`);
 export const serverError = (message = "Internal error") => apiError(500, "internal", message);
