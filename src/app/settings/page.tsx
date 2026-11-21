@@ -47,6 +47,7 @@ import { SalespeopleEditor } from "./components/SalespeopleEditor";
 import { TemplateField } from "./components/TemplateField";
 import { NumberField } from "./components/NumberField";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
+import { ApiPlatformPanel } from "./components/ApiPlatformPanel";
 import { LeadSourcesEditor } from "./components/LeadSourcesEditor";
 import { AddressInput } from "@/components/AddressInput";
 
@@ -190,6 +191,7 @@ export default function SettingsPage() {
 
       {/* Integrations (calendar sync + notifications) */}
       <IntegrationsPanel />
+      <ApiPlatformPanel />
 
       {/* Company info */}
       <Panel

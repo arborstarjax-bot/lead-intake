@@ -9,6 +9,7 @@ import {
 } from "@/modules/shared/format";
 import { getSettings } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth/server";
+import { emitWebhookEvent, leadToContract } from "@/modules/api/v1";
 
 export const runtime = "nodejs";
 
@@ -155,5 +156,6 @@ export async function POST(req: NextRequest) {
   } catch {
     // Non-blocking.
   }
+  void emitWebhookEvent(auth.workspaceId, "lead.created", leadToContract(data));
   return NextResponse.json({ lead: data });
 }

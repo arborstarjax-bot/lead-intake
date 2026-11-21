@@ -10,6 +10,7 @@ import {
 } from "@/modules/calendar/server";
 import { requireMembership } from "@/modules/auth/server";
 import { sendWorkspacePush } from "@/lib/push";
+import { emitWebhookEvent, leadToContract } from "@/modules/api/v1";
 
 export const runtime = "nodejs";
 
@@ -428,6 +429,15 @@ export async function PATCH(
         // event is recoverable but blocking the status flip isn't.
       }
     }
+  }
+
+  // Webhook events for integrations — fire-and-forget, never blocks.
+  void emitWebhookEvent(auth.workspaceId, "lead.updated", leadToContract(data));
+  if (data.estimate_outcome === "Sold" && existing.estimate_outcome !== "Sold") {
+    void emitWebhookEvent(auth.workspaceId, "lead.sold", leadToContract(data));
+  }
+  if (data.status === "Lost" && existing.status !== "Lost") {
+    void emitWebhookEvent(auth.workspaceId, "lead.lost", leadToContract(data));
   }
 
   return NextResponse.json({ lead: data });

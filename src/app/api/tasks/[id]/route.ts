@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
 import { TASK_EDITABLE_COLUMNS, nextOccurrenceDate } from "@/modules/tasks/model";
+import { emitWebhookEvent, taskToContract } from "@/modules/api/v1";
 
 export const runtime = "nodejs";
 
@@ -113,6 +114,10 @@ export async function PATCH(
         }
       }
     }
+  }
+
+  if (updates.status === "Completed" && existing.status !== "Completed") {
+    void emitWebhookEvent(auth.workspaceId, "task.completed", taskToContract(data));
   }
 
   return NextResponse.json({ task: data });

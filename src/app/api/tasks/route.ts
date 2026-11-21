@@ -3,6 +3,7 @@ import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
 import { getSettings } from "@/lib/settings";
 import { nextOccurrenceDate } from "@/modules/tasks/model";
+import { emitWebhookEvent, taskToContract } from "@/modules/api/v1";
 
 export const runtime = "nodejs";
 
@@ -86,6 +87,8 @@ export async function POST(req: NextRequest) {
       auth.userId,
     ).catch(() => {});
   }
+
+  void emitWebhookEvent(auth.workspaceId, "task.created", taskToContract(data));
 
   return NextResponse.json({ task: data });
 }
