@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Loader2 } from "lucide-react";
 import {
   FOLLOW_UP_RESULTS,
+  outcomeLabel,
   type FollowUpResult,
   type LeadPatch,
   type OutcomeBadge,
@@ -80,7 +81,7 @@ export function FollowUpModal({
                   : "border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--surface)]"
               )}
             >
-              {r}
+              {outcomeLabel(r)}
             </button>
           ))}
           {result === "Other" && (

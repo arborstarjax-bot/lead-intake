@@ -1,6 +1,6 @@
 "use client";
 
-import type { OutcomeBadge as OutcomeBadgeType } from "@/modules/leads/model";
+import { outcomeLabel, type OutcomeBadge as OutcomeBadgeType } from "@/modules/leads/model";
 import { cn } from "@/lib/utils";
 
 const BADGE_STYLES: Record<OutcomeBadgeType, { bg: string; fg: string; border: string }> = {
@@ -25,7 +25,7 @@ export function OutcomeBadge({ badge }: { badge: OutcomeBadgeType }) {
         style.bg, style.fg, style.border
       )}
     >
-      {badge}
+      {outcomeLabel(badge)}
     </span>
   );
 }

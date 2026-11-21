@@ -164,10 +164,10 @@ export default function PrivacyPage() {
           <p>
             Questions, deletion requests, or data subject requests:{" "}
             <a
-              href="mailto:privacy@leadflow.app"
+              href="mailto:arborstarjax@gmail.com"
               className="text-[var(--accent)] underline"
             >
-              privacy@leadflow.app
+              arborstarjax@gmail.com
             </a>
             .
           </p>

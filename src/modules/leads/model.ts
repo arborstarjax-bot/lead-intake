@@ -119,6 +119,21 @@ export const OUTCOME_BADGES = [
 ] as const;
 export type OutcomeBadge = (typeof OUTCOME_BADGES)[number];
 
+/**
+ * Display-layer rename: the product presents outcome values as
+ * "Estimate …" to the user, while stored DB values keep their original
+ * "Proposal …" wording so no data migration is needed. Anywhere an
+ * outcome/badge/reason string is rendered, run it through this.
+ */
+const OUTCOME_DISPLAY: Record<string, string> = {
+  "No Proposal Sent": "No Estimate Sent",
+  "Proposal Revision Requested": "Estimate Revision Requested",
+};
+export function outcomeLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  return OUTCOME_DISPLAY[value] ?? value;
+}
+
 export const LEAD_FLEX_WINDOWS = ["all_day", "am", "pm"] as const;
 export type LeadFlexWindow = (typeof LEAD_FLEX_WINDOWS)[number];
 
@@ -223,7 +238,7 @@ export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
   ai_called: "AI called",
   status_changed: "Status changed",
   follow_up_set: "Follow-up updated",
-  proposal_sent: "Proposal sent",
+  proposal_sent: "Estimate sent",
   marked_sold: "Marked Sold",
   marked_not_sold: "Marked Not Sold",
   marked_lost: "Marked Lost",

@@ -33,7 +33,7 @@ function isPublic(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const { response, user } = await updateSession(request);
+  const { response, user, supabase } = await updateSession(request);
 
   // Public paths always pass through. Note: signed-in users are NOT
   // bounced away from /login or /signup — those pages handle it
@@ -51,6 +51,27 @@ export async function middleware(request: NextRequest) {
     // Preserve where they were headed so we can redirect back after login.
     url.searchParams.set("next", pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
+  }
+
+  // Signed in but possibly orphaned (no workspace_members row — e.g. an
+  // admin removed them or signup never finished wiring a workspace).
+  // Page renders below assume a workspace and crash without one; send
+  // them to /workspace which shows the create/join-or-sign-out state.
+  // Skipped for API routes (they 401 via requireMembership already) and
+  // for /workspace itself.
+  if (!pathname.startsWith("/api") && pathname !== "/workspace") {
+    const { data: membership } = await supabase
+      .from("workspace_members")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (!membership) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/workspace";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

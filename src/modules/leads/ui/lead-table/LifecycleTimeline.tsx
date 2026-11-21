@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Clock, Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   LEAD_ACTIVITY_LABELS,
+  outcomeLabel,
   type LeadActivity,
   type LeadActivityType,
 } from "@/modules/leads/model";
@@ -215,13 +216,13 @@ function detailSuffix(activity: LeadActivity): string {
     (activity.type === "marked_not_sold" || activity.type === "marked_lost" || activity.type === "follow_up_set") &&
     typeof d.reason === "string" && d.reason
   ) {
-    return ` · ${d.reason}`;
+    return ` · ${outcomeLabel(d.reason)}`;
   }
   if (activity.type === "status_changed" && typeof d.to === "string") {
-    return ` → ${d.to}`;
+    return ` → ${outcomeLabel(d.to)}`;
   }
   if (activity.type === "proposal_sent" && typeof d.outcome === "string") {
-    return ` · ${d.outcome}`;
+    return ` · ${outcomeLabel(d.outcome)}`;
   }
   return "";
 }

@@ -108,7 +108,7 @@ function SourceTable({ rows }: { rows: SourceRow[] }) {
           <tr className="border-b border-[var(--border)] text-left text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
             <th className="py-2 px-4">Source</th>
             <th className="py-2 px-4 text-right">Leads</th>
-            <th className="py-2 px-4 text-right">Proposals</th>
+            <th className="py-2 px-4 text-right">Estimates</th>
             <th className="py-2 px-4 text-right">Accepted</th>
             <th className="py-2 px-4 text-right">Accept %</th>
           </tr>
@@ -198,7 +198,7 @@ function SalespersonTable({ rows }: { rows: SalespersonRow[] }) {
           <tr className="border-b border-[var(--border)] text-left text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
             <th className="py-2 px-4">Salesperson</th>
             <th className="py-2 px-4 text-right">Leads</th>
-            <th className="py-2 px-4 text-right">Proposals</th>
+            <th className="py-2 px-4 text-right">Estimates</th>
             <th className="py-2 px-4 text-right">Sold</th>
             <th className="py-2 px-4 text-right">Close %</th>
           </tr>
@@ -291,9 +291,9 @@ export default function ReportingPage() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <SummaryCard label="Total Leads" value={data.totalLeads} />
-          <SummaryCard label="Proposals Sent" value={data.proposalsSent} />
+          <SummaryCard label="Estimates Sent" value={data.proposalsSent} />
           <SummaryCard
-            label="Proposals Accepted"
+            label="Estimates Accepted"
             value={data.proposalsAccepted}
           />
           <SummaryCard
