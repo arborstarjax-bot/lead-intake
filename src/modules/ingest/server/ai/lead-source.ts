@@ -1,6 +1,5 @@
 /**
- * Lead-source resolution shared by the image and text extractors (and the
- * calendar-sync SingleOps path).
+ * Lead-source resolution shared by the image and text extractors.
  *
  * The core idea: the workspace's *configured* lead sources
  * (`app_settings.lead_sources`, editable in Settings) are the source of
@@ -124,8 +123,8 @@ export function buildSourcePromptSection(sources: string[]): string {
        signature, and footer — for the name of any configured source above
        or an obvious variant of it. Examples: "The Pipeline Partner" ->
        "Pipeline Partners"; "Lead Kings" -> "Certified Lead Kings";
-       "10for300", "Go Get Leads", "SingleOps", "Hubspot", "Target Tree",
-       "Branch Up Digital", "Home Service Leads" map to their exact
+       "10for300", "Go Get Leads", "Hubspot",
+       "Home Service Leads" map to their exact
        configured names. A brand / service name mentioned ANYWHERE always
        wins over the messaging app the screenshot was taken in.
     2. Otherwise classify by the visible app / UI chrome (Facebook,

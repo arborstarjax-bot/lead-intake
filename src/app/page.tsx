@@ -60,16 +60,6 @@ function buildPendingLead(): Lead {
     follow_up_result: null,
     follow_up_notes: null,
     outcome_badge: null,
-    ai_call_count: null,
-    ai_last_call_at: null,
-    ai_last_call_status: null,
-    ai_notes: null,
-    ai_do_not_call: null,
-    arborbridge_status: null,
-    arborbridge_record_id: null,
-    arborbridge_last_pushed_at: null,
-    calendar_sync_status: null,
-    calendar_sync_at: null,
   };
 }
 

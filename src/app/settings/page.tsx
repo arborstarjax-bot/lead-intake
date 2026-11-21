@@ -21,7 +21,7 @@
  * without a reload.
  */
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
@@ -47,7 +47,6 @@ import { SalespeopleEditor } from "./components/SalespeopleEditor";
 import { TemplateField } from "./components/TemplateField";
 import { NumberField } from "./components/NumberField";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
-import { VoiceAgentPanel, type VoiceAgentHandle } from "./components/VoiceAgentPanel";
 import { LeadSourcesEditor } from "./components/LeadSourcesEditor";
 import { AddressInput } from "@/components/AddressInput";
 
@@ -60,7 +59,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [s, setS] = useState<ClientAppSettings>(DEFAULT_CLIENT_SETTINGS);
   const [saving, setSaving] = useState(false);
-  const voiceRef = useRef<VoiceAgentHandle>(null);
   // The last-saved snapshot. Used to compute dirty state and the diff
   // we send on Save. Updated on mount from ctxSettings and after each
   // successful PUT.
@@ -90,12 +88,8 @@ export default function SettingsPage() {
   // we disable the warning here.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const patch = useMemo(() => diffSettings(s, savedRef.current), [s, savedTick]);
-  const [voiceDirty, setVoiceDirty] = useState(false);
-  const checkVoiceDirty = useCallback(() => {
-    setVoiceDirty(voiceRef.current?.isDirty() ?? false);
-  }, []);
   const settingsDirty = Object.keys(patch).length > 0;
-  const dirty = settingsDirty || voiceDirty;
+  const dirty = settingsDirty;
 
   async function save() {
     if (!dirty || saving) return;
@@ -122,12 +116,6 @@ export default function SettingsPage() {
           apply(serverSettings);
         }
         setSavedTick((t) => t + 1);
-      }
-      // Save voice config if changed
-      if (voiceRef.current?.isDirty()) {
-        const ok = await voiceRef.current.save();
-        if (!ok) return;
-        setVoiceDirty(false);
       }
       toast({ kind: "success", message: "Saved" });
     } catch (e) {
@@ -201,16 +189,7 @@ export default function SettingsPage() {
       ) : null}
 
       {/* Integrations (calendar sync + notifications) */}
-      <IntegrationsPanel
-        autoSyncToSingleOps={s.auto_sync_to_singleops}
-        onAutoSyncChange={(v) => update("auto_sync_to_singleops", v)}
-        syncIntervalMinutes={s.sync_interval_minutes}
-        onSyncIntervalChange={(v) => update("sync_interval_minutes", v)}
-        canEdit={isAdmin}
-      />
-
-      {/* AI Voice Agent */}
-      <VoiceAgentPanel ref={voiceRef} canEdit={isAdmin} onDirtyChange={checkVoiceDirty} />
+      <IntegrationsPanel />
 
       {/* Company info */}
       <Panel

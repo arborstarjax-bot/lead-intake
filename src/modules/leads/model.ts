@@ -177,16 +177,6 @@ export type Lead = {
   follow_up_result: FollowUpResult | OutcomeReason | "Expired" | null;
   follow_up_notes: string | null;
   outcome_badge: OutcomeBadge | null;
-  ai_call_count: number | null;
-  ai_last_call_at: string | null;
-  ai_last_call_status: string | null;
-  ai_notes: string | null;
-  ai_do_not_call: boolean | null;
-  arborbridge_status: "not_pushed" | "pushed_to_arborbridge" | "push_failed" | null;
-  arborbridge_record_id: string | null;
-  arborbridge_last_pushed_at: string | null;
-  calendar_sync_status: "not_synced" | "synced" | "sync_failed" | null;
-  calendar_sync_at: string | null;
 };
 
 /* ── Outcome reason tracking (Lost / Not Sold) ───────────────── */

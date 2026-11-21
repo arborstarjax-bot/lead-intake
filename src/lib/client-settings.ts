@@ -37,8 +37,6 @@ export type ClientAppSettings = {
   email_subject_template: string | null;
   email_body_template: string | null;
   lead_sources: string[];
-  auto_sync_to_singleops: boolean;
-  sync_interval_minutes: number;
 
   created_at: string;
   updated_at: string;
@@ -72,8 +70,6 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
   sms_enroute_template: null,
   email_subject_template: null,
   email_body_template: null,
-  auto_sync_to_singleops: false,
-  sync_interval_minutes: 15,
   lead_sources: [
     "Facebook",
     "Instagram",
@@ -82,9 +78,8 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
     "Nextdoor",
     "Thumbtack",
     "Angi",
-    "SingleOps",
-    "Hubspot",
-    "Target Tree",
+    "Yelp",
+    "Google Business",
     "Craigslist",
     "Email",
     "Referral",

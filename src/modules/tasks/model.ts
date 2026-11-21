@@ -48,10 +48,6 @@ export type Task = {
   extraction_confidence: Record<string, number> | null;
   screenshot_url: string | null;
   screenshot_path: string | null;
-  singleops_task_id: string | null;
-  singleops_sync_status: "idle" | "pending" | "synced" | "failed";
-  singleops_sync_error: string | null;
-  singleops_last_synced_at: string | null;
   recurrence_rule: string | null;
   recurrence_end_date: string | null;
   recurrence_end_count: number | null;
