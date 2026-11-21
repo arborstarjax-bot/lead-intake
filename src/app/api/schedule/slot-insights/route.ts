@@ -24,7 +24,7 @@ const bodySchema = z
   })
   .strict();
 
-const SYSTEM_PROMPT = `You are a scheduling assistant for a field service company (arborists). Given time slots for a new estimate, write a SHORT pro and con (max 60 chars each) for each slot from a route-efficiency perspective. Be specific with numbers. Use plain language a busy field worker would appreciate.
+const SYSTEM_PROMPT = `You are a scheduling assistant for a home services company. Given time slots for a new estimate, write a SHORT pro and con (max 60 chars each) for each slot from a route-efficiency perspective. Be specific with numbers. Use plain language a busy field worker would appreciate.
 
 Examples:
 - pro: "8 min from your 9 AM, clusters with 2 jobs"

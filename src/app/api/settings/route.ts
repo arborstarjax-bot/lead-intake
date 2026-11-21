@@ -68,11 +68,6 @@ const bodySchema = z
       .array(z.string().trim().min(1).max(80))
       .max(50)
       .optional(),
-    auto_sync_to_singleops: z.boolean().optional(),
-    sync_interval_minutes: z.number().int().refine(
-      (v) => [5, 10, 15, 30].includes(v),
-      "sync_interval_minutes must be 5, 10, 15, or 30"
-    ).optional(),
   })
   .strict();
 

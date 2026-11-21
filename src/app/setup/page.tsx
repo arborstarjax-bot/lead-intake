@@ -1,12 +1,11 @@
 "use client";
 
 /**
- * Setup wizard shown to new workspaces on first sign-in. Five steps:
+ * Setup wizard shown to new workspaces on first sign-in. Four steps:
  *   1. Company info — name, phone, email, business type
  *   2. Starting location — home address (required for route planner)
  *   3. Working hours — start/end time, work days, timezone
  *   4. Salesperson — at least one name for SMS/email templates
- *   5. AI Calling — optional activation of the AI voice agent
  *
  * On completion, sets `setup_completed = true` and redirects to `/`.
  */
@@ -18,7 +17,6 @@ import {
   MapPin,
   Clock,
   UserPlus,
-  Phone,
   ArrowRight,
   ArrowLeft,
   Check,
@@ -26,13 +24,12 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useAppSettings } from "@/components/SettingsProvider";
-import { useToast } from "@/components/Toast";
 import { AddressInput } from "@/components/AddressInput";
 import { cn } from "@/lib/utils";
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4;
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 
 const inputCls =
   "w-full h-11 rounded-lg border border-[var(--border)] bg-white px-3 text-sm outline-none focus:border-[var(--accent)]";
@@ -60,7 +57,6 @@ const TIMEZONES = [
 export default function SetupWizard() {
   const router = useRouter();
   const { refresh } = useAppSettings();
-  const { toast } = useToast();
   const [step, setStep] = useState<Step>(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,12 +83,6 @@ export default function SetupWizard() {
   const [salesperson, setSalesperson] = useState("");
   const [salespersonTitle, setSalespersonTitle] = useState("");
 
-  // Step 5: AI Calling
-  const [enableAI, setEnableAI] = useState(false);
-  const [agentName, setAgentName] = useState("Dave");
-  const [provisioning, setProvisioning] = useState(false);
-  const [provisioned, setProvisioned] = useState(false);
-
   function toggleDay(d: number) {
     setWorkDays((prev) =>
       prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b)
@@ -109,42 +99,11 @@ export default function SetupWizard() {
       );
     if (step === 3) return workDays.length > 0;
     if (step === 4) return salesperson.trim().length > 0;
-    if (step === 5) return true; // AI calling is optional
     return false;
   }
 
-  async function provisionAI() {
-    if (provisioning || provisioned) return;
-    setProvisioning(true);
-    try {
-      // First enable voice config with agent name
-      await fetch("/api/voice/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: true, agent_name: agentName.trim() || "Dave" }),
-      });
-      // Then provision
-      const res = await fetch("/api/voice/provision", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        toast({ kind: "error", message: json.error ?? "Provisioning failed" });
-        return;
-      }
-      setProvisioned(true);
-      toast({ kind: "success", message: "AI assistant activated!" });
-    } catch (e) {
-      toast({ kind: "error", message: (e as Error).message });
-    } finally {
-      setProvisioning(false);
-    }
-  }
-
   async function finish() {
-    if (saving) return;
+    if (saving || !canAdvance()) return;
     setSaving(true);
     setError(null);
     try {
@@ -193,7 +152,6 @@ export default function SetupWizard() {
     { icon: MapPin, label: "Location" },
     { icon: Clock, label: "Hours" },
     { icon: UserPlus, label: "You" },
-    { icon: Phone, label: "AI Calling" },
   ];
 
   return (
@@ -384,8 +342,8 @@ export default function SetupWizard() {
               <div>
                 <h2 className="font-semibold">Working hours</h2>
                 <p className="text-xs text-[var(--muted)] mt-0.5">
-                  When your team is available. The scheduler, AI calls,
-                  and route planner all respect these hours.
+                  When your team is available. The scheduler and route
+                  planner both respect these hours.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -489,93 +447,6 @@ export default function SetupWizard() {
             </>
           )}
 
-          {step === 5 && (
-            <>
-              <div>
-                <h2 className="font-semibold">AI Calling</h2>
-                <p className="text-xs text-[var(--muted)] mt-0.5">
-                  Let our AI assistant call your leads to book
-                  appointments automatically. You can always enable this
-                  later in Settings.
-                </p>
-              </div>
-              <div className="rounded-xl border border-[var(--border)] p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">Enable AI calling</div>
-                    <div className="text-xs text-[var(--muted)]">
-                      AI calls leads to schedule estimates
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEnableAI((v) => !v);
-                      setProvisioned(false);
-                    }}
-                    className={cn(
-                      "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                      enableAI ? "bg-[var(--accent)]" : "bg-gray-200"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
-                        enableAI ? "translate-x-6" : "translate-x-1"
-                      )}
-                    />
-                  </button>
-                </div>
-                {enableAI && (
-                  <label className="block">
-                    <div className="text-xs font-medium text-[var(--muted)] mb-1">
-                      Agent name
-                    </div>
-                    <input
-                      className={inputCls}
-                      value={agentName}
-                      onChange={(e) => setAgentName(e.target.value)}
-                      placeholder="Dave"
-                    />
-                    <p className="text-xs text-[var(--muted)] mt-1">
-                      The name your AI will use when calling leads.
-                    </p>
-                  </label>
-                )}
-                {enableAI && !provisioned && (
-                  <button
-                    type="button"
-                    onClick={provisionAI}
-                    disabled={provisioning}
-                    className={cn(
-                      "w-full inline-flex items-center justify-center gap-2 rounded-xl h-11 text-sm font-semibold text-white transition-colors",
-                      provisioning
-                        ? "bg-gray-300 cursor-not-allowed"
-                        : "bg-[var(--accent)] hover:opacity-95 active:scale-[0.98]"
-                    )}
-                  >
-                    {provisioning ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Activating…
-                      </>
-                    ) : (
-                      <>
-                        <Phone className="h-4 w-4" />
-                        Activate AI Assistant
-                      </>
-                    )}
-                  </button>
-                )}
-                {provisioned && (
-                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
-                    <Check className="h-4 w-4" />
-                    AI assistant activated! You can configure it in Settings later.
-                  </div>
-                )}
-              </div>
-            </>
-          )}
         </div>
 
         {error && (
@@ -615,10 +486,10 @@ export default function SetupWizard() {
             <button
               type="button"
               onClick={finish}
-              disabled={saving}
+              disabled={saving || !canAdvance()}
               className={cn(
                 "ml-auto inline-flex items-center gap-2 rounded-xl h-12 px-6 text-sm font-semibold text-white transition-colors",
-                !saving
+                !saving && canAdvance()
                   ? "bg-[var(--accent)] hover:opacity-95 active:scale-[0.98]"
                   : "bg-gray-300 cursor-not-allowed"
               )}

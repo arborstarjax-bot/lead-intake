@@ -3,7 +3,6 @@ import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
 import { getSettings } from "@/lib/settings";
 import { nextOccurrenceDate } from "@/modules/tasks/model";
-import { syncTaskToSingleOps } from "@/lib/singleops-sync";
 
 export const runtime = "nodejs";
 
@@ -86,58 +85,6 @@ export async function POST(req: NextRequest) {
       auth.workspaceId,
       auth.userId,
     ).catch(() => {});
-  }
-
-  // Auto-sync task to SingleOps if workspace has auto-sync enabled
-  if (data) {
-    try {
-      const settings = await getSettings(auth.workspaceId);
-      if (settings.auto_sync_to_singleops) {
-        const startAt = new Date(data.start_at);
-        const tz = "America/New_York";
-        const localStart = new Date(startAt.toLocaleString("en-US", { timeZone: tz }));
-        const scheduledDate = `${localStart.getFullYear()}-${String(localStart.getMonth() + 1).padStart(2, "0")}-${String(localStart.getDate()).padStart(2, "0")}`;
-        const scheduledTime = `${String(localStart.getHours()).padStart(2, "0")}:${String(localStart.getMinutes()).padStart(2, "0")}`;
-        const addr = [data.address, data.city, data.state, data.zip]
-          .filter(Boolean)
-          .join(", ") || null;
-
-        const syncResult = await syncTaskToSingleOps(
-          {
-            taskId: data.id,
-            taskName: data.name,
-            notes: data.notes ?? null,
-            scheduledDate,
-            scheduledTime,
-            address: addr,
-            assignee: data.assignee ?? null,
-          },
-          auth.workspaceId,
-        );
-
-        // Save the SingleOps task ID back to our record
-        if (syncResult.ok && syncResult.singleopsTaskId) {
-          await supabase
-            .from("tasks")
-            .update({
-              singleops_task_id: syncResult.singleopsTaskId,
-              singleops_sync_status: "synced",
-              singleops_last_synced_at: new Date().toISOString(),
-            })
-            .eq("id", data.id);
-        } else if (!syncResult.ok) {
-          await supabase
-            .from("tasks")
-            .update({
-              singleops_sync_status: "failed",
-              singleops_sync_error: syncResult.error ?? null,
-            })
-            .eq("id", data.id);
-        }
-      }
-    } catch {
-      // Non-blocking — sync failure shouldn't break task creation
-    }
   }
 
   return NextResponse.json({ task: data });

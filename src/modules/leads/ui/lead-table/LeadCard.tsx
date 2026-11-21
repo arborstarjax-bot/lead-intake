@@ -15,7 +15,6 @@ import {
   User,
   AlertTriangle,
   CalendarDays,
-  Bot,
   Navigation,
 } from "lucide-react";
 import {
@@ -35,12 +34,9 @@ import { OutcomeReasonModal } from "./OutcomeReasonModal";
 import { LeadSourceBadge } from "./LeadSourceBadge";
 import { LeadTypePill } from "./LeadTypePill";
 import { OutcomeBadge } from "./OutcomeBadge";
-import { AiCallButton } from "./AiCallButton";
-import { AiCallHistory } from "./AiCallHistory";
 import { formatDateHuman, formatScheduleDisplay, buildNavigationHref, templateVars } from "./lead-table-helpers";
 import { logContactActivity } from "./LifecycleTimeline";
 import { SmsPickerModal } from "./SmsPickerModal";
-import { ArborBridgeButton } from "./ArborBridgeButton";
 
 export function LeadCard({
   lead,
@@ -170,7 +166,6 @@ export function LeadCard({
                   View original screenshot
                 </a>
               )}
-              <ArborBridgeButton lead={lead} onDone={() => setMenuOpen(false)} />
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -219,22 +214,6 @@ export function LeadCard({
               </span>
             </>
           )}
-          {lead.arborbridge_status === "pushed_to_arborbridge" && (
-            <>
-              <span className="text-[var(--subtle)]">·</span>
-              <span className="inline-flex items-center gap-1 text-blue-600 font-medium">
-                ↗ Pushed to SingleOps
-              </span>
-            </>
-          )}
-          {lead.calendar_sync_status === "synced" && (
-            <>
-              <span className="text-[var(--subtle)]">·</span>
-              <span className="inline-flex items-center gap-1 text-green-600 font-medium">
-                ↙ Synced from SingleOps
-              </span>
-            </>
-          )}
         </div>
         {lead.outcome_badge && (
           <div className="mt-1.5">
@@ -275,27 +254,6 @@ export function LeadCard({
           <MessageSquare className="h-4 w-4" />
           Text
         </button>
-        {/* AI Call */}
-        {phone ? (
-          <div className="flex-[1.3]">
-            <AiCallButton
-              leadId={lead.id}
-              callInfo={{
-                ai_call_count: lead.ai_call_count,
-                ai_last_call_at: lead.ai_last_call_at,
-                ai_last_call_status: lead.ai_last_call_status,
-                ai_notes: lead.ai_notes,
-              }}
-              onCallTriggered={() => setActivityRefreshKey((k) => k + 1)}
-              compact
-            />
-          </div>
-        ) : (
-          <span className="flex-[1.3] inline-flex items-center justify-center gap-1.5 h-11 rounded-xl text-[13px] font-semibold bg-[var(--surface-2)] text-[var(--subtle)] cursor-not-allowed">
-            <Bot className="h-4 w-4" />
-            AI Call
-          </span>
-        )}
       </div>
 
       {/* ── Contact info rows ── */}
@@ -489,12 +447,6 @@ export function LeadCard({
           type="textarea"
           className="field-input min-h-[72px] leading-5 text-sm bg-[var(--surface-2)] rounded-xl !border-transparent"
         />
-        {phone && (
-          <AiCallHistory
-            leadId={lead.id}
-            refreshKey={activityRefreshKey}
-          />
-        )}
       </div>
 
       {/* ── Footer ── */}
