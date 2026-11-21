@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/components/SettingsProvider";
 import { SmsPickerModal } from "@/modules/leads";
 import { formatLeadPatchError, patchLead } from "@/modules/offline";
+import { DateTimePicker } from "./DateTimePicker";
 
 type Half = "all" | "morning" | "afternoon";
 
@@ -26,6 +27,7 @@ type Slot = {
   driveMinutesBefore: number;
   driveMinutesAfter: number;
   totalDriveMinutes: number;
+  quality?: "good" | "fair" | "poor";
   reasoning: { priorLabel: string | null; nextLabel: string | null };
 };
 
@@ -34,9 +36,12 @@ type DayPreview =
       date: string;
       isWorkDay: true;
       bestTotalDriveMinutes: number | null;
+      effectiveBestMinutes?: number | null;
       slotCount: number;
+      quality?: "good" | "fair" | "poor";
+      override?: "closed";
     }
-  | { date: string; isWorkDay: false };
+  | { date: string; isWorkDay: false; reason?: "closed" };
 
 type TimingConflict = {
   slot: Slot;
@@ -65,7 +70,7 @@ export default function ScheduleModal({
   const [selectedDay, setSelectedDay] = useState<string | null>(
     lead.scheduled_day ?? null
   );
-  const [view, setView] = useState<"week" | "day">(
+  const [view, setView] = useState<"week" | "day" | "manual">(
     lead.scheduled_day ? "day" : "week"
   );
 
@@ -83,6 +88,22 @@ export default function ScheduleModal({
   const [weekLoading, setWeekLoading] = useState(false);
   const [weekDays, setWeekDays] = useState<DayPreview[]>([]);
   const [weekError, setWeekError] = useState<string | null>(null);
+
+  // Emergency override: admins can book closed days and outside work hours
+  // (6:00–21:00). Role comes from /api/workspace; server gates it too.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [emergency, setEmergency] = useState(false);
+
+  // Manual date+time picker state (the "Pick a specific day & time" path).
+  const [manualDay, setManualDay] = useState<string | null>(null);
+  const [manualTime, setManualTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/workspace")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setIsAdmin(j?.role === "admin"))
+      .catch(() => {});
+  }, []);
 
   // When set, the modal flips from the day ranking to a success view with
   // the option to text the customer an appointment confirmation.
@@ -103,7 +124,7 @@ export default function ScheduleModal({
       const res = await fetch("/api/schedule/week", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId: lead.id }),
+        body: JSON.stringify({ leadId: lead.id, emergency }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -117,7 +138,7 @@ export default function ScheduleModal({
     } finally {
       setWeekLoading(false);
     }
-  }, [lead.id]);
+  }, [lead.id, emergency]);
 
   // Monotonic request ID to discard stale slot responses. See the matching
   // comment in SchedulePanel for the full rationale — same race, same fix.
@@ -137,6 +158,7 @@ export default function ScheduleModal({
           half,
           day: selectedDay,
           offset,
+          emergency,
         }),
       });
       const json = await res.json();
@@ -157,7 +179,7 @@ export default function ScheduleModal({
     } finally {
       if (requestId === slotRequestIdRef.current) setLoading(false);
     }
-  }, [lead.id, half, selectedDay, offset]);
+  }, [lead.id, half, selectedDay, offset, emergency]);
 
   // Reset paging whenever context shifts, so switching day/half always
   // starts from the top 3 rather than showing "page 2 of the new day".
@@ -410,9 +432,35 @@ export default function ScheduleModal({
             days={weekDays}
             loading={weekLoading}
             error={weekError}
+            emergency={emergency}
+            onToggleEmergency={isAdmin ? () => setEmergency((v) => !v) : undefined}
+            onManual={() => setView("manual")}
             onPick={(d) => {
               setSelectedDay(d);
               setView("day");
+            }}
+          />
+        ) : view === "manual" ? (
+          <ManualView
+            emergency={emergency}
+            day={manualDay}
+            time={manualTime}
+            booking={booking !== null}
+            error={error}
+            onPickDay={(d) => { setManualDay(d); setManualTime(null); }}
+            onPickTime={setManualTime}
+            onBack={() => setView("week")}
+            onConfirm={() => {
+              if (!manualDay || !manualTime) return;
+              setSelectedDay(manualDay);
+              void book({
+                startTime: manualTime,
+                endTime: manualTime,
+                driveMinutesBefore: 0,
+                driveMinutesAfter: 0,
+                totalDriveMinutes: 0,
+                reasoning: { priorLabel: null, nextLabel: null },
+              });
             }}
           />
         ) : (
@@ -439,19 +487,30 @@ function WeekView({
   days,
   loading,
   error,
+  emergency,
+  onToggleEmergency,
+  onManual,
   onPick,
 }: {
   days: DayPreview[];
   loading: boolean;
   error: string | null;
+  emergency: boolean;
+  onToggleEmergency?: () => void;
+  onManual: () => void;
   onPick: (date: string) => void;
 }) {
-  const bestMinutes = useMemo(() => {
-    const costs = days
-      .filter((d): d is Extract<DayPreview, { isWorkDay: true }> => d.isWorkDay)
-      .map((d) => d.bestTotalDriveMinutes)
-      .filter((c): c is number => c != null);
-    return costs.length ? Math.min(...costs) : null;
+  // "Best" tags the most drive-efficient bookable day; the strip stays
+  // chronological so sooner days stay reachable.
+  const bestDate = useMemo(() => {
+    let best: { date: string; cost: number } | null = null;
+    for (const d of days) {
+      if (!d.isWorkDay) continue;
+      const c = d.effectiveBestMinutes ?? d.bestTotalDriveMinutes;
+      if (c == null || (d.slotCount ?? 0) === 0) continue;
+      if (!best || c < best.cost) best = { date: d.date, cost: c };
+    }
+    return best?.date ?? null;
   }, [days]);
 
   if (loading) {
@@ -473,31 +532,55 @@ function WeekView({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4">
-      <div className="text-xs text-[var(--muted)] mb-2">
-        Days ranked by drive time cost. Greener = less driving.
+    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs text-[var(--muted)]">
+          Days ranked by drive time. Green = good fit, amber = fair, rose = poor.
+        </div>
+        {onToggleEmergency && (
+          <button
+            type="button"
+            onClick={onToggleEmergency}
+            className={cn(
+              "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
+              emergency
+                ? "border-amber-400 bg-amber-50 text-amber-700"
+                : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--fg)]"
+            )}
+            title="Book on closed days and outside working hours"
+          >
+            ⚡ Emergency
+          </button>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-2">
         {days.map((d) => (
           <DayRow
             key={d.date}
             day={d}
-            bestOverall={bestMinutes}
+            isBest={d.date === bestDate}
             onPick={() => d.isWorkDay && onPick(d.date)}
           />
         ))}
       </div>
+      <button
+        type="button"
+        onClick={onManual}
+        className="w-full rounded-xl border border-dashed border-[var(--border)] bg-white px-3 py-2.5 text-xs font-medium text-[var(--fg)] hover:bg-[var(--surface-2)]"
+      >
+        Pick a specific day &amp; time
+      </button>
     </div>
   );
 }
 
 function DayRow({
   day,
-  bestOverall,
+  isBest,
   onPick,
 }: {
   day: DayPreview;
-  bestOverall: number | null;
+  isBest: boolean;
   onPick: () => void;
 }) {
   const label = formatDayLabel(day.date);
@@ -507,7 +590,9 @@ function DayRow({
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 flex items-center justify-between opacity-60">
         <div>
           <div className="font-medium">{label}</div>
-          <div className="text-xs text-[var(--muted)]">Day off</div>
+          <div className="text-xs text-[var(--muted)]">
+            {day.reason === "closed" ? "Closed" : "Day off"}
+          </div>
         </div>
       </div>
     );
@@ -515,29 +600,42 @@ function DayRow({
 
   const cost = day.bestTotalDriveMinutes;
   const noFit = cost == null;
-  const isBest = cost != null && cost === bestOverall;
+  const tier = day.quality ?? (noFit ? "poor" : "good");
+  const tierColor =
+    tier === "good"
+      ? "border-l-emerald-500"
+      : tier === "fair"
+        ? "border-l-amber-500"
+        : "border-l-rose-400";
 
   return (
     <button
       onClick={onPick}
       disabled={noFit}
       className={cn(
-        "w-full text-left rounded-xl border px-3 py-2.5 flex items-center justify-between transition active:scale-[0.99]",
+        "w-full text-left rounded-xl border border-l-4 px-3 py-2.5 flex items-center justify-between transition active:scale-[0.99]",
+        tierColor,
         noFit
           ? "border-[var(--border)] bg-[var(--surface-2)] opacity-60 cursor-not-allowed"
           : isBest
-          ? "border-[var(--accent)] bg-[var(--accent-soft)] hover:bg-[var(--accent-soft)]"
-          : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]"
+            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+            : "border-[var(--border)] bg-white hover:bg-[var(--surface-2)]"
       )}
     >
       <div>
-        <div className="font-medium">{label}</div>
+        <div className="font-medium flex items-center gap-1.5">
+          {label}
+          {isBest && <span className="text-[10px] font-bold text-emerald-600 uppercase">★ Best</span>}
+          {day.override === "closed" && (
+            <span className="text-[10px] font-bold text-amber-600 uppercase">⚡ Emergency</span>
+          )}
+        </div>
         <div className="text-xs text-[var(--muted)] mt-0.5">
           {noFit
             ? "No feasible slots"
             : day.slotCount === 1
-            ? "1 slot available"
-            : `${day.slotCount} slots available`}
+              ? "1 slot available"
+              : `${day.slotCount} slots available`}
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -555,6 +653,62 @@ function DayRow({
         )}
       </div>
     </button>
+  );
+}
+
+function ManualView({
+  emergency,
+  day,
+  time,
+  booking,
+  error,
+  onPickDay,
+  onPickTime,
+  onBack,
+  onConfirm,
+}: {
+  emergency: boolean;
+  day: string | null;
+  time: string | null;
+  booking: boolean;
+  error: string | null;
+  onPickDay: (iso: string) => void;
+  onPickTime: (hhmm: string) => void;
+  onBack: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-xs text-[var(--muted)] hover:text-[var(--fg)]"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" /> Back to ranked days
+      </button>
+      <DateTimePicker
+        day={day}
+        time={time}
+        emergency={emergency}
+        onPickDay={onPickDay}
+        onPickTime={onPickTime}
+      />
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2.5 text-sm">
+          <AlertTriangle className="h-4 w-4 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={!day || !time || booking}
+        onClick={onConfirm}
+        className="w-full h-10 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-2"
+      >
+        {booking ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
+        {day && time ? `Book ${formatDayLabel(day)} at ${clockFromHHMM(time)}` : "Pick a day and time"}
+      </button>
+    </div>
   );
 }
 
@@ -686,7 +840,21 @@ function SlotRow({
       )}
     >
       <div className="flex-1 min-w-0">
-        <div className="font-semibold">{label}</div>
+        <div className="font-semibold flex items-center gap-1.5">
+          {label}
+          {slot.quality && slot.quality !== "good" && (
+            <span
+              className={cn(
+                "text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5",
+                slot.quality === "fair"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-rose-100 text-rose-700"
+              )}
+            >
+              {slot.quality}
+            </span>
+          )}
+        </div>
         <div className="text-xs text-[var(--muted)] mt-0.5 leading-relaxed">
           {lines.join(" · ")}
         </div>

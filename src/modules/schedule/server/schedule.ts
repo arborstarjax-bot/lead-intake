@@ -18,6 +18,8 @@ export type SlotReasoning = {
   nextLabel: string | null;
 };
 
+export type SlotQuality = "good" | "fair" | "poor";
+
 export type SlotSuggestion = {
   /** "HH:MM" 24-hour. */
   startTime: string;
@@ -29,6 +31,12 @@ export type SlotSuggestion = {
   driveMinutesAfter: number;
   /** Sum of before+after — what we rank on. */
   totalDriveMinutes: number;
+  /**
+   * Route-fit tier: slots wedged between two stops get "poor" when the
+   * drives can't fit the gap's slack, "fair" when they eat most of it.
+   * Informational — the slot stays bookable at any tier.
+   */
+  quality: SlotQuality;
   reasoning: SlotReasoning;
 };
 
@@ -94,6 +102,12 @@ export type SuggestInputs = {
    * Each page returns the next 3 best-ranked slots skipping earlier pages.
    */
   offset?: number;
+  /**
+   * Emergency override (admin only, enforced at the API layer): widens the
+   * bookable window to 6:00–21:00 and lets the caller ignore work_days —
+   * same semantics as ArborCore's emergency booking.
+   */
+  emergency?: boolean;
 };
 
 export type SuggestResult = {
@@ -142,8 +156,8 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
     };
   }
 
-  const workStart = parseHHMM(settings.work_start_time);
-  const workEnd = parseHHMM(settings.work_end_time);
+  const workStart = inp.emergency ? 6 * 60 : parseHHMM(settings.work_start_time);
+  const workEnd = inp.emergency ? 21 * 60 : parseHHMM(settings.work_end_time);
   const duration = settings.min_time_between_appointments;
 
   const existing: ExistingStop[] = [];
@@ -223,12 +237,28 @@ export async function suggestSlots(inp: SuggestInputs): Promise<SuggestResult> {
 
     const before = Math.round(driveBeforeSec / 60);
     const after = Math.round(driveAfterSec / 60);
+    // Quality tier (ArborCore parity): a slot between two existing stops is
+    // "poor" when the legs can't fit the gap's slack, "fair" when they eat
+    // most of it. Edge slots are always "good".
+    const betweenStops = priorIdx !== -1 && nextIdx !== -1;
+    const gapSlack = betweenStops
+      ? existing[nextIdx].startMin - existing[priorIdx].endMin - duration
+      : Number.POSITIVE_INFINITY;
+    const legs = before + after;
+    const quality: SlotQuality = !betweenStops
+      ? "good"
+      : legs > gapSlack
+        ? "poor"
+        : legs > gapSlack * 0.5
+          ? "fair"
+          : "good";
     candidates.push({
       startTime: formatHHMM(start),
       endTime: formatHHMM(start + duration),
       driveMinutesBefore: before,
       driveMinutesAfter: after,
       totalDriveMinutes: before + after,
+      quality,
       reasoning: {
         priorLabel:
           priorIdx === -1
