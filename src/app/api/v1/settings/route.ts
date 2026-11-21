@@ -59,7 +59,34 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** PATCH /api/v1/settings — update workspace settings (same fields as the app). */
+/** camelCase public field → snake_case column name. */
+const CAMEL_TO_SNAKE: Record<string, string> = {
+  setupCompleted: "setup_completed",
+  homeAddress: "home_address", homeCity: "home_city", homeState: "home_state", homeZip: "home_zip",
+  workStartTime: "work_start_time", workEndTime: "work_end_time", workDays: "work_days",
+  defaultJobMinutes: "default_job_minutes", travelBufferMinutes: "travel_buffer_minutes",
+  minTimeBetweenAppointments: "min_time_between_appointments",
+  daysUntilLost: "days_until_lost", daysUntilNotSold: "days_until_not_sold",
+  companyName: "company_name", companyPhone: "company_phone", companyEmail: "company_email",
+  businessType: "business_type", salespersonTitles: "salesperson_titles",
+  defaultSalesperson: "default_salesperson", leadSources: "lead_sources",
+  smsIntroTemplate: "sms_intro_template", smsConfirmTemplate: "sms_confirm_template",
+  smsEnrouteTemplate: "sms_enroute_template",
+  emailSubjectTemplate: "email_subject_template", emailBodyTemplate: "email_body_template",
+};
+
+function camelBodyToSnake(json: unknown): unknown {
+  if (!json || typeof json !== "object") return json;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(json as Record<string, unknown>)) {
+    out[CAMEL_TO_SNAKE[k] ?? k] = v;
+  }
+  return out;
+}
+
+/** PATCH /api/v1/settings — update workspace settings (same fields as the app).
+ *  Accepts the camelCase contract names (workStartTime, leadSources, …);
+ *  snake_case keys are passed through unchanged. */
 export async function PATCH(req: NextRequest) {
   const auth = await resolveApiAuth(req);
   if (auth instanceof NextResponse) return auth;
@@ -68,7 +95,7 @@ export async function PATCH(req: NextRequest) {
 
   let parsed;
   try {
-    parsed = settingsPatchSchema.parse(await req.json());
+    parsed = settingsPatchSchema.parse(camelBodyToSnake(await req.json()));
   } catch (e) {
     const msg =
       e instanceof z.ZodError ? e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") : "invalid body";
