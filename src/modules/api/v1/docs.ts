@@ -108,6 +108,59 @@ export const API_DOCS: ApiDocGroup[] = [
         summary: "Members with emails and roles",
         responseExample: `{ "data": [ { "userId": "…", "email": "…", "role": "admin", "joinedAt": "…" } ] }`,
       },
+      {
+        method: "PATCH", path: "/api/v1/members/{userId}", scope: "members:write",
+        summary: "Promote/demote a member (admin only; can't self-edit or orphan the workspace)",
+        requestExample: `{ "role": "admin" }`,
+        responseExample: `{ "data": { "ok": true } }`,
+      },
+      {
+        method: "DELETE", path: "/api/v1/members/{userId}", scope: "members:write",
+        summary: "Remove a member from the workspace (admin only)",
+        responseExample: `{ "data": { "ok": true } }`,
+      },
+    ],
+  },
+  {
+    name: "Schedule",
+    description: "Day routing and AI scheduling — the same engine the Route page uses. Maps-dependent endpoints need GOOGLE_MAPS_API_KEY; calendar sync needs a signed-in user (API keys have no Google token).",
+    endpoints: [
+      {
+        method: "GET", path: "/api/v1/schedule/day", scope: "schedule:read",
+        summary: "Ordered stops + drive legs for one day",
+        params: [{ name: "date", in: "query", type: "string", description: "YYYY-MM-DD; defaults to today (workspace timezone)" }],
+        responseExample: `{ "data": { "date": "2026-11-23", "hasHome": true, "stops": [ { "id": "…", "label": "Jane Doe", "address": "…", "startTime": "08:00", "endTime": "09:00", "driveMinutesFromPrev": 14 } ], "totalDriveMinutes": 68, "returnDriveMinutes": 22 } }`,
+      },
+      {
+        method: "POST", path: "/api/v1/schedule/preview", scope: "schedule:read",
+        summary: "Rank upcoming work days by drive time for a lead",
+        requestExample: `{ "leadId": "…", "horizonDays": 14 }`,
+        responseExample: `{ "data": { "days": [ { "date": "…", "isWorkDay": true, "bestTotalDriveMinutes": 31, "slotCount": 6, "routeScore": 78 } ] } }`,
+      },
+      {
+        method: "POST", path: "/api/v1/schedule/suggest", scope: "schedule:read",
+        summary: "Ranked time slots for a lead on a day",
+        requestExample: `{ "leadId": "…", "half": "morning", "day": "2026-11-24", "offset": 0 }`,
+        responseExample: `{ "data": { "slots": [ { "startTime": "08:30", "totalDriveMinutes": 27 } ], "hasMore": true } }`,
+      },
+      {
+        method: "POST", path: "/api/v1/schedule/book", scope: "schedule:read",
+        summary: "Smart Booking — morning/afternoon top-3 recommendations",
+        requestExample: `{ "leadId": "…", "mode": "balanced", "day": "2026-11-24" }`,
+        responseExample: `{ "data": { "bestOverall": {…}, "morningTop3": […], "afternoonTop3": […] } }`,
+      },
+      {
+        method: "POST", path: "/api/v1/schedule/reorder", scope: "schedule:write",
+        summary: "Re-time a day's stops in a new order (compact from work start, real drive legs)",
+        requestExample: `{ "date": "2026-11-23", "orderedLeadIds": ["…","…"], "sync": true }`,
+        responseExample: `{ "data": { "shifted": 3, "overflowMinutes": 0, "calendarConnected": true, "results": […] } }`,
+      },
+      {
+        method: "POST", path: "/api/v1/schedule/sync", scope: "schedule:write",
+        summary: "Batch-sync a day's stops to Google Calendar (session auth only)",
+        requestExample: `{ "date": "2026-11-23" }`,
+        responseExample: `{ "data": { "summary": { "total": 4, "created": 1, "updated": 2, "already": 1, "errors": 0 }, "results": […] } }`,
+      },
     ],
   },
   {
@@ -118,6 +171,12 @@ export const API_DOCS: ApiDocGroup[] = [
         method: "GET", path: "/api/v1/settings", scope: "settings:read",
         summary: "Work hours, scheduling defaults, company info, salespeople, lead sources, message templates",
         responseExample: `{ "data": { "timezone": "America/New_York", "workDays": [1,2,3,4,5], "company": {…}, "salespeople": ["David"], "leadSources": […] } }`,
+      },
+      {
+        method: "PATCH", path: "/api/v1/settings", scope: "settings:write",
+        summary: "Update settings (admin fields; any member may edit leadSources)",
+        requestExample: `{ "workStartTime": "8:00 AM", "workDays": [1,2,3,4,5], "leadSources": ["Website", "Referral"] }`,
+        responseExample: `{ "data": { "timezone": "America/New_York", … } }`,
       },
       {
         method: "GET", path: "/api/v1/reports/summary", scope: "reports:read",

@@ -22,8 +22,9 @@ Two ways — both resolve to a workspace:
 |-------|-----------|
 | Leads | `GET/POST /leads`, `GET/PATCH/DELETE /leads/{id}`, `GET /leads/{id}/activities` |
 | Tasks | `GET/POST /tasks`, `GET/PATCH/DELETE /tasks/{id}` |
-| Workspace | `GET /workspace`, `GET /members` |
-| Config | `GET /settings`, `GET /reports/summary?days=30` |
+| Schedule | `GET /schedule/day?date=`, `POST /schedule/preview`, `POST /schedule/suggest`, `POST /schedule/book`, `POST /schedule/reorder`, `POST /schedule/sync` |
+| Workspace | `GET /workspace`, `GET /members`, `PATCH/DELETE /members/{userId}` |
+| Config | `GET/PATCH /settings`, `GET /reports/summary?days=30` |
 | Webhooks | `GET/POST /webhooks`, `PATCH/DELETE /webhooks/{id}` |
 | Key management | `GET/POST /keys`, `DELETE /keys/{id}` (admin session only) |
 
