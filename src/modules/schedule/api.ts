@@ -64,7 +64,7 @@ export async function dayRoute(workspaceId: string, iso: string): Promise<Handle
   if (rowsResp.error) return R(500, { error: rowsResp.error.message });
   const leads = (rowsResp.data ?? []) as unknown as Lead[];
 
-  const blockSize = settings.min_time_between_appointments || 60;
+  const duration = settings.default_job_minutes;
   const stopsInput = leads
     .map((l) => {
       const addr = leadAddressString(l);
@@ -79,7 +79,7 @@ export async function dayRoute(workspaceId: string, iso: string): Promise<Handle
           "Scheduled job",
         address: addr,
         startMin,
-        endMin: startMin + blockSize,
+        endMin: startMin + duration,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
