@@ -235,7 +235,9 @@ export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
   lead_completed: "Lead completed",
   customer_called: "Customer called",
   customer_texted: "Customer texted",
-  ai_called: "AI called",
+  // Legacy rows from the removed AI-calling feature still exist in
+  // lead_activities; keep the type so they render as generic log entries.
+  ai_called: "Call logged",
   status_changed: "Status changed",
   follow_up_set: "Follow-up updated",
   proposal_sent: "Estimate sent",
