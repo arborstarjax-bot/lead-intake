@@ -46,6 +46,17 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!user) {
+    // API callers need JSON 401, not an HTML redirect to /login. When an
+    // Authorization header is present (e.g. Bearer lf_live_…), let the
+    // request through — resolveApiAuth in the route does the actual
+    // token verification. Without any header, 401 right here.
+    if (pathname.startsWith("/api")) {
+      if (request.headers.get("authorization")) return response;
+      return NextResponse.json(
+        { error: { code: "unauthorized", message: "Authentication required" } },
+        { status: 401 }
+      );
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     // Preserve where they were headed so we can redirect back after login.
