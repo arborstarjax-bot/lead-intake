@@ -26,24 +26,9 @@ export type ApiAuth = {
 };
 
 /** Scopes understood by requireScope(). Admin sessions get everything. */
-export type ApiScope =
-  | "leads:read" | "leads:write"
-  | "tasks:read" | "tasks:write"
-  | "schedule:read" | "schedule:write"
-  | "workspace:read"
-  | "settings:read" | "settings:write"
-  | "members:write"
-  | "reports:read"
-  | "webhooks:manage";
-
-export const ALL_SCOPES: ApiScope[] = [
-  "leads:read", "leads:write",
-  "tasks:read", "tasks:write",
-  "schedule:read", "schedule:write",
-  "workspace:read", "settings:read", "settings:write",
-  "members:write", "reports:read",
-  "webhooks:manage",
-];
+export type { ApiScope } from "./scopes";
+import { ALL_SCOPES, type ApiScope } from "./scopes";
+export { ALL_SCOPES };
 
 const KEY_PLAINTEXT_PREFIX = "lf_live_";
 

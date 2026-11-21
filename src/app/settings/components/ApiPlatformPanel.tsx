@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BookOpen, Copy, Trash2, Webhook } from "lucide-react";
 import { Panel } from "./Panel";
 import { useToast } from "@/components/Toast";
+import { ALL_SCOPES } from "@/modules/api/v1/scopes";
 
 type ApiKeyRow = {
   id: string; name: string; prefix: string; scopes: string[];
@@ -11,12 +12,6 @@ type ApiKeyRow = {
 };
 type WebhookRow = { id: string; url: string; events: string[]; isActive: boolean };
 
-const ALL_SCOPES = [
-  "leads:read", "leads:write",
-  "tasks:read", "tasks:write",
-  "workspace:read", "settings:read", "reports:read",
-  "webhooks:manage",
-];
 const ALL_EVENTS = [
   "lead.created", "lead.updated", "lead.sold", "lead.lost",
   "task.created", "task.completed",
