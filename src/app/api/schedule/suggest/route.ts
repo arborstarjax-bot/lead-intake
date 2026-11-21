@@ -19,6 +19,6 @@ export async function POST(req: Request) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
 
-  const { status, body } = await suggest(auth.workspaceId, parsed);
+  const { status, body } = await suggest(auth.workspaceId, parsed, { emergencyAllowed: auth.role === "admin" });
   return NextResponse.json(body, { status });
 }

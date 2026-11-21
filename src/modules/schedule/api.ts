@@ -194,6 +194,8 @@ export const weekPreviewSchema = z
   .object({
     leadId: z.string().uuid(),
     horizonDays: z.number().int().min(1).max(30).default(14),
+    /** Admin-only emergency mode: compute slots on non-work days too. */
+    emergency: z.boolean().default(false),
   })
   .strict();
 export type WeekPreviewInput = z.infer<typeof weekPreviewSchema>;
@@ -222,8 +224,10 @@ const URGENCY_PENALTY_CAP = 20;
 
 export async function weekPreview(
   workspaceId: string,
-  input: WeekPreviewInput
+  input: WeekPreviewInput,
+  opts?: { emergencyAllowed?: boolean }
 ): Promise<HandlerResult> {
+  const emergency = input.emergency && opts?.emergencyAllowed === true;
   if (!process.env.GOOGLE_MAPS_API_KEY) {
     return R(503, {
       error: "AI scheduling needs a Google Maps API key. Add GOOGLE_MAPS_API_KEY on Vercel and redeploy.",
@@ -269,7 +273,7 @@ export async function weekPreview(
   const newLeadZip = normalizeZip(lead.zip);
 
   type DayPreview =
-    | { date: string; isWorkDay: false }
+    | { date: string; isWorkDay: false; reason: "closed" }
     | {
         date: string;
         isWorkDay: true;
@@ -278,6 +282,10 @@ export async function weekPreview(
         effectiveBestMinutes: number | null;
         slotCount: number;
         routeScore: number;
+        /** Tier of the best-drive slot; "poor" when nothing is feasible. */
+        quality: "good" | "fair" | "poor";
+        /** Set when this day was only computed because emergency mode is on. */
+        override?: "closed";
       };
 
   try {
@@ -285,9 +293,10 @@ export async function weekPreview(
       days.map(async (d): Promise<DayPreview> => {
         const iso = isoInBusinessTz(d, tz);
         const dow = dayOfWeekInBusinessTz(d, tz);
-        if (!workDays.has(dow)) return { date: iso, isWorkDay: false };
+        const closed = !workDays.has(dow);
+        if (closed && !emergency) return { date: iso, isWorkDay: false, reason: "closed" as const };
         const others = byDay.get(iso) ?? [];
-        const { slots } = await suggestSlots({ lead, settings, others, half: "all", drive });
+        const { slots } = await suggestSlots({ lead, settings, others, half: "all", drive, emergency });
 
         const todayIso = todayIsoInBusinessTz(tz);
         let feasible = slots;
@@ -326,6 +335,9 @@ export async function weekPreview(
           routeScore = await calculateRouteScore(drive, homeAddr, existingStops);
         }
 
+        const bestSlot = feasible.length
+          ? feasible.reduce((a, b) => (b.totalDriveMinutes < a.totalDriveMinutes ? b : a))
+          : null;
         return {
           date: iso,
           isWorkDay: true,
@@ -334,6 +346,8 @@ export async function weekPreview(
           effectiveBestMinutes,
           slotCount: feasible.length,
           routeScore,
+          quality: bestSlot?.quality ?? ("poor" as const),
+          ...(closed ? { override: "closed" as const } : {}),
         };
       })
     );
@@ -354,11 +368,17 @@ export const suggestSchema = z
     half: z.enum(["morning", "afternoon", "all"]).default("all"),
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "day must be YYYY-MM-DD").optional(),
     offset: z.number().int().min(0).max(20).default(0),
+    /** Admin-only emergency mode: bookable window widens to 6:00–21:00. */
+    emergency: z.boolean().default(false),
   })
   .strict();
 export type SuggestInput = z.infer<typeof suggestSchema>;
 
-export async function suggest(workspaceId: string, input: SuggestInput): Promise<HandlerResult> {
+export async function suggest(
+  workspaceId: string,
+  input: SuggestInput,
+  opts?: { emergencyAllowed?: boolean }
+): Promise<HandlerResult> {
   if (!process.env.GOOGLE_MAPS_API_KEY) {
     return R(503, {
       error: "AI scheduling needs a Google Maps API key. Add GOOGLE_MAPS_API_KEY on Vercel and redeploy.",
@@ -387,6 +407,7 @@ export async function suggest(workspaceId: string, input: SuggestInput): Promise
       others: same.leads!,
       half: input.half,
       offset: input.offset,
+      emergency: input.emergency && opts?.emergencyAllowed === true,
     });
     return R(200, { slots, warnings, hasMore, totalCount });
   } catch (e) {

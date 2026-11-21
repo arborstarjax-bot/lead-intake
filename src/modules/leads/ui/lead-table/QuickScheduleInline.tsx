@@ -20,6 +20,7 @@ type SlotPick = {
   driveMinutesBefore: number;
   driveMinutesAfter: number;
   totalDriveMinutes: number;
+  quality?: "good" | "fair" | "poor";
   reasoning: { priorLabel: string | null; nextLabel: string | null };
   insight?: SlotInsight;
 };
@@ -161,6 +162,7 @@ export function QuickScheduleInline({
             driveMinutesBefore: s.driveMinutesBefore,
             driveMinutesAfter: s.driveMinutesAfter,
             totalDriveMinutes: s.totalDriveMinutes,
+            quality: s.quality,
             reasoning: s.reasoning,
           });
         }
@@ -287,11 +289,15 @@ export function QuickScheduleInline({
       pick.date === globalBest.date &&
       pick.startTime === globalBest.startTime;
     const driveColor =
-      pick.totalDriveMinutes <= 10
-        ? "bg-emerald-100 text-emerald-700"
-        : pick.totalDriveMinutes <= 20
+      pick.quality === "poor"
+        ? "bg-rose-100 text-rose-700"
+        : pick.quality === "fair"
           ? "bg-amber-100 text-amber-700"
-          : "bg-slate-100 text-slate-600";
+          : pick.totalDriveMinutes <= 10
+            ? "bg-emerald-100 text-emerald-700"
+            : pick.totalDriveMinutes <= 20
+              ? "bg-amber-100 text-amber-700"
+              : "bg-slate-100 text-slate-600";
     const cardStyle = isGlobalBest
       ? "border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200"
       : "border-[var(--border)] bg-white hover:bg-slate-50";

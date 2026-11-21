@@ -16,5 +16,5 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return badRequest(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   }
-  return handlerResult(await suggest(auth.workspaceId, parsed.data));
+  return handlerResult(await suggest(auth.workspaceId, parsed.data, { emergencyAllowed: auth.role === "admin" }));
 }
