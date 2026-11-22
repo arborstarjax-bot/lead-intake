@@ -28,12 +28,17 @@ create index if not exists drive_time_cache_updated_at_idx
   on public.drive_time_cache (updated_at desc);
 
 alter table public.drive_time_cache enable row level security;
--- service-role only; like geocode_cache it holds no tenant data.
-drop policy if exists drive_time_cache_read_all on public.drive_time_cache;
-create policy drive_time_cache_read_all on public.drive_time_cache
-  for select using (true);
+-- Service-role only: RLS with no policies denies anon/authenticated reads.
+-- The keys and rows hold paired customer addresses; nothing client-side
+-- reads this table.
 
 alter table public.geocode_cache
   add column if not exists failed_at timestamptz;
 alter table public.geocode_cache alter column lat drop not null;
 alter table public.geocode_cache alter column lng drop not null;
+
+-- geocode_cache is likewise service-role only (all access goes through
+-- createAdminClient, which bypasses RLS). The legacy read-all policy let
+-- anonymous callers read customer addresses — including the new
+-- failed_at miss rows — so it goes away here.
+drop policy if exists geocode_cache_read_all on public.geocode_cache;

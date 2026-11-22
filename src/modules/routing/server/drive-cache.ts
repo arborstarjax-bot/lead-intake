@@ -73,10 +73,14 @@ export async function writeDriveCache(
 ): Promise<void> {
   if (entries.length === 0) return;
   try {
+    // Two stops can share an address, so a batch can carry the same key
+    // twice — Postgres rejects the whole upsert then; keep the last copy.
+    const dedup = new Map<string, { driveSeconds: number; distanceMeters: number }>();
+    for (const { key, leg } of entries) dedup.set(key, leg);
     const supabase = createAdminClient();
     const now = new Date().toISOString();
     await supabase.from("drive_time_cache").upsert(
-      entries.map(({ key, leg }) => ({
+      Array.from(dedup, ([key, leg]) => ({
         cache_key: key,
         drive_seconds: Math.round(leg.driveSeconds),
         distance_meters: Math.round(leg.distanceMeters),
