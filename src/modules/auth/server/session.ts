@@ -1,4 +1,5 @@
 import "server-only";
+import { randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createSSRClient, createAdminClient } from "@/modules/shared/supabase/server";
 
@@ -85,7 +86,7 @@ export async function generateJoinCode(): Promise<string> {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     let code = "";
     for (let i = 0; i < 8; i += 1) {
-      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+      code += alphabet[randomInt(alphabet.length)];
     }
     const { data } = await admin
       .from("workspaces")
@@ -95,4 +96,41 @@ export async function generateJoinCode(): Promise<string> {
     if (!data) return code;
   }
   throw new Error("could not generate a unique join code; try again");
+}
+
+/**
+ * Join-code attempt limiting. Joining a workspace needs only the code,
+ * so guesses are rate-limited per subject (user id, signup email, or
+ * caller IP). Failed lookups are recorded in the join_code_attempts
+ * table so the limit holds across server instances and restarts.
+ */
+const JOIN_CODE_MAX_ATTEMPTS = 5;
+const JOIN_CODE_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Returns an error message when the subject has burned through its
+ * recent attempt budget, or null when the lookup may proceed.
+ */
+export async function joinCodeAttemptBlocked(
+  subject: string
+): Promise<string | null> {
+  const admin = createAdminClient();
+  const windowStart = new Date(Date.now() - JOIN_CODE_WINDOW_MS).toISOString();
+  const { count } = await admin
+    .from("join_code_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("subject", subject)
+    .gte("attempted_at", windowStart);
+  if ((count ?? 0) >= JOIN_CODE_MAX_ATTEMPTS) {
+    return "Too many join code attempts — try again later.";
+  }
+  return null;
+}
+
+/** Records a failed join-code lookup so it counts against the limit. */
+export async function recordFailedJoinCodeAttempt(
+  subject: string
+): Promise<void> {
+  const admin = createAdminClient();
+  await admin.from("join_code_attempts").insert({ subject });
 }

@@ -12,5 +12,7 @@ export {
   requireMembership,
   requireAdmin,
   generateJoinCode,
+  joinCodeAttemptBlocked,
+  recordFailedJoinCodeAttempt,
   type WorkspaceMembership,
 } from "./session";

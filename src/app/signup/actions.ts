@@ -1,7 +1,24 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createSSRClient, createAdminClient } from "@/modules/shared/supabase/server";
-import { generateJoinCode } from "@/modules/auth/server";
+import {
+  generateJoinCode,
+  joinCodeAttemptBlocked,
+  recordFailedJoinCodeAttempt,
+} from "@/modules/auth/server";
+
+/** Best-effort caller IP for attempt limiting on unauthenticated joins. */
+async function callerIp(): Promise<string | null> {
+  try {
+    const h = await headers();
+    const fwd = h.get("x-forwarded-for");
+    if (fwd) return fwd.split(",")[0].trim();
+    return h.get("x-real-ip");
+  } catch {
+    return null;
+  }
+}
 
 type SignupResult = { error?: string; notice?: string };
 
@@ -33,12 +50,25 @@ export async function signup(form: FormData): Promise<SignupResult> {
     if (joinCode.length !== 8) {
       return { error: "Join code must be 8 characters" };
     }
+    // No auth user exists yet, so rate-limit on email and caller IP.
+    const subjects = [`signup-email:${email}`];
+    const ip = await callerIp();
+    if (ip) subjects.push(`signup-ip:${ip}`);
+    for (const subject of subjects) {
+      const blocked = await joinCodeAttemptBlocked(subject);
+      if (blocked) return { error: blocked };
+    }
     const { data: ws } = await admin
       .from("workspaces")
       .select("id")
       .eq("join_code", joinCode)
       .maybeSingle();
-    if (!ws) return { error: "No workspace found for that join code" };
+    if (!ws) {
+      for (const subject of subjects) {
+        await recordFailedJoinCodeAttempt(subject);
+      }
+      return { error: "No workspace found for that join code" };
+    }
     targetWorkspaceId = ws.id;
   } else {
     const wsName = String(form.get("workspace_name") ?? "").trim();
