@@ -5,6 +5,7 @@ import {
   resolveApiAuth, requireScope, ok, badRequest, serverError,
   webhookSubSchema,
 } from "@/modules/api/v1";
+import { assertSafeOutboundUrl } from "@/lib/outbound-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,14 @@ export async function POST(req: NextRequest) {
   const parsed = webhookSubSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return badRequest(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+  }
+
+  // SSRF guard: only public https targets may be stored. DNS is
+  // re-checked on every delivery (see webhooks.ts) to stop rebinding.
+  try {
+    await assertSafeOutboundUrl(parsed.data.url);
+  } catch {
+    return badRequest("url: must be a public https URL");
   }
 
   const secret = `whsec_${crypto.randomBytes(24).toString("base64url")}`;

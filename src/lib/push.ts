@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { isApnsConfigured, sendApnsPush } from "@/lib/apns";
+import { isAllowedPushHost, isSafePushEndpoint } from "@/lib/outbound-url";
 
 type WebPushRow = {
   id: string;
@@ -9,6 +10,31 @@ type WebPushRow = {
   auth: string;
   last_acknowledged_at: string;
 };
+
+/**
+ * Re-validate a stored web-push endpoint before every send: the
+ * allowlist + DNS re-check here stops both rows written before the
+ * subscribe-time guard existed and post-save DNS rebinding. Rows that
+ * can never be a real push endpoint are deleted; transient failures
+ * just skip this send.
+ */
+async function pruneIfUnsafeEndpoint(admin: ReturnType<typeof createAdminClient>, s: Pick<WebPushRow, "id" | "endpoint">): Promise<boolean> {
+  let host = "";
+  try {
+    const u = new URL(s.endpoint);
+    if (u.protocol === "https:") host = u.hostname;
+  } catch {
+    // fall through — host stays empty, row is pruned below
+  }
+  if (!host || !isAllowedPushHost(host)) {
+    // Deterministic failure — never a real push endpoint. Drop the row.
+    await admin.from("push_subscriptions").delete().eq("id", s.id);
+    return true;
+  }
+  // DNS re-check (rebinding guard). A lookup failure here is transient:
+  // skip this send but keep the row for the next event.
+  return !(await isSafePushEndpoint(s.endpoint));
+}
 
 type NativePushRow = {
   id: string;
@@ -90,6 +116,7 @@ export async function sendWorkspacePush(input: WorkspacePushInput): Promise<void
     if (subs && subs.length > 0) {
       await Promise.all(
         (subs as WebPushRow[]).map(async (s) => {
+          if (await pruneIfUnsafeEndpoint(admin, s)) return;
           const payload = JSON.stringify({
             title: input.title,
             body: input.body,
@@ -151,6 +178,7 @@ async function sendWeb(input: NewLeadPushInput): Promise<void> {
 
   await Promise.all(
     (subs as WebPushRow[]).map(async (s) => {
+      if (await pruneIfUnsafeEndpoint(admin, s)) return;
       const unseen = await countUnseen(
         input.workspaceId,
         s.last_acknowledged_at

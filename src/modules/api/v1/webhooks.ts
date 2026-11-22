@@ -1,6 +1,7 @@
 import "server-only";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/modules/shared/supabase/server";
+import { assertSafeOutboundUrl } from "@/lib/outbound-url";
 import type { WebhookEvent } from "./contracts";
 
 /**
@@ -82,25 +83,43 @@ async function deliver(
 
   let statusCode: number | null = null;
   let error: string | null = null;
+  // Re-validate the target on every attempt: a subscription URL that
+  // passed at create time can be re-pointed at a private address via
+  // DNS rebinding. Blocked deliveries fail permanently (no retry).
+  let blocked = false;
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-leadflow-signature": sign(secret, body),
-        "user-agent": "LeadFlow-Webhooks/1.0",
-      },
-      body,
-      signal: AbortSignal.timeout(10_000),
-    });
-    statusCode = res.status;
-    if (!res.ok) error = `HTTP ${res.status}`;
-  } catch (e) {
-    error = (e as Error).message;
+    await assertSafeOutboundUrl(url);
+  } catch {
+    blocked = true;
+    error = "Blocked: target URL failed safety checks";
+  }
+  if (!blocked) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-leadflow-signature": sign(secret, body),
+          "user-agent": "LeadFlow-Webhooks/1.0",
+        },
+        body,
+        redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
+      });
+      statusCode = res.status;
+      if (!res.ok) error = `HTTP ${res.status}`;
+    } catch (e) {
+      // Store generic text — a raw error message leaks the target's
+      // address/errno and turns deliveries into a probing oracle.
+      const name = (e as Error).name;
+      error = name === "TimeoutError" || name === "AbortError"
+        ? "Request timed out"
+        : "Request failed";
+    }
   }
 
   const nextAttempt = attempt + 1;
-  const failedPermanently = (statusCode === null || statusCode >= 400) && nextAttempt >= MAX_ATTEMPTS;
+  const failedPermanently = (blocked || statusCode === null || statusCode >= 400) && (blocked || nextAttempt >= MAX_ATTEMPTS);
   const succeeded = statusCode !== null && statusCode >= 200 && statusCode < 300;
 
   await admin

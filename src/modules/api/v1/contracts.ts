@@ -188,6 +188,10 @@ export const WEBHOOK_EVENTS = [
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
 export const webhookSubSchema = z.object({
-  url: z.string().url().max(500),
+  url: z
+    .string()
+    .url()
+    .max(500)
+    .refine((u) => u.startsWith("https://"), "must be an https URL"),
   events: z.array(z.enum(WEBHOOK_EVENTS)).min(1),
 }).strict();

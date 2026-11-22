@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
+import { assertPushEndpoint } from "@/lib/outbound-url";
 
 export const runtime = "nodejs";
 
@@ -38,6 +39,15 @@ export async function POST(req: NextRequest) {
   const userAgent = req.headers.get("user-agent") ?? null;
 
   if (parsed.platform === "web") {
+    // SSRF guard: the endpoint must be https, on a known push-service
+    // host, and resolve to public IPs. Re-checked again before each
+    // send (see src/lib/push.ts) to stop DNS rebinding.
+    try {
+      await assertPushEndpoint(parsed.endpoint);
+    } catch {
+      return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
+    }
+
     // Delete any existing row for this endpoint first — the previous
     // row may belong to a deleted user or a different account on the
     // same device, which would cause an upsert conflict or FK error.
