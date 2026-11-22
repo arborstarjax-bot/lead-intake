@@ -107,13 +107,17 @@ export async function dayRoute(workspaceId: string, iso: string): Promise<Handle
 
   const drive = createDriveMemo();
   try {
-    const legs: number[] = [];
-    for (let i = 0; i < stopsInput.length; i++) {
-      const from = i === 0 ? home : stopsInput[i - 1].address;
-      const res = await drive(from, stopsInput[i].address);
-      legs.push(Math.round(res.drive_seconds / 60));
-    }
-    const returnLeg = await drive(stopsInput[stopsInput.length - 1].address, home);
+    // All legs are known up front — resolve them in parallel so a cold
+    // drive cache costs one round-trip instead of N sequential ones.
+    const legPairs: Array<[string, string]> = stopsInput.map((s, i) => [
+      i === 0 ? home : stopsInput[i - 1].address,
+      s.address,
+    ]);
+    const [legResults, returnLeg] = await Promise.all([
+      Promise.all(legPairs.map(([from, to]) => drive(from, to))),
+      drive(stopsInput[stopsInput.length - 1].address, home),
+    ]);
+    const legs = legResults.map((res) => Math.round(res.drive_seconds / 60));
     const returnMinutes = Math.round(returnLeg.drive_seconds / 60);
     const stops: RouteStop[] = stopsInput.map((s, i) => ({
       id: s.id,
@@ -577,18 +581,22 @@ export async function reorderDay(
   const snapUp = (min: number) => Math.ceil(min / SLOT_STEP) * SLOT_STEP;
 
   const newTimes: { id: string; newMin: number }[] = [];
-  let prevEnd = workStart;
-  let prevAddr = home;
   try {
-    for (const lead of orderedLeads) {
-      const addr = leadAddressString(lead)!;
-      const leg = await drive(prevAddr, addr);
-      const driveMin = Math.ceil(leg.drive_seconds / 60);
+    // Every leg pair is known up front; resolve them all in parallel so a
+    // cold drive cache costs one round-trip instead of N sequential ones.
+    const legPairs: Array<[string, string]> = orderedLeads.map((lead, i) => [
+      i === 0 ? home : leadAddressString(orderedLeads[i - 1])!,
+      leadAddressString(lead)!,
+    ]);
+    const legResults = await Promise.all(legPairs.map(([from, to]) => drive(from, to)));
+
+    let prevEnd = workStart;
+    for (let i = 0; i < orderedLeads.length; i++) {
+      const driveMin = Math.ceil(legResults[i].drive_seconds / 60);
       const earliest = Math.max(workStart, prevEnd + buffer + driveMin);
       const startMin = snapUp(earliest);
-      newTimes.push({ id: lead.id, newMin: startMin });
+      newTimes.push({ id: orderedLeads[i].id, newMin: startMin });
       prevEnd = startMin + duration;
-      prevAddr = addr;
     }
   } catch (e) {
     if (e instanceof MapsUnavailableError) {

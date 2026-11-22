@@ -139,18 +139,19 @@ export async function calculateRouteDriveTime(
 ): Promise<number> {
   if (stops.length === 0) return 0;
   const sorted = [...stops].sort((a, b) => a.startMin - b.startMin);
-  let total = 0;
 
-  // Home → first stop
-  total += await calculateDriveTime(drive, home, sorted[0].address);
-  // Between stops
+  // Every leg is known up front — fire them together so a cold cache
+  // costs one Google round-trip instead of N sequential ones.
+  const legs: Array<[string, string]> = [[home, sorted[0].address]];
   for (let i = 0; i < sorted.length - 1; i++) {
-    total += await calculateDriveTime(drive, sorted[i].address, sorted[i + 1].address);
+    legs.push([sorted[i].address, sorted[i + 1].address]);
   }
-  // Last stop → home
-  total += await calculateDriveTime(drive, sorted[sorted.length - 1].address, home);
+  legs.push([sorted[sorted.length - 1].address, home]);
 
-  return total;
+  const minutes = await Promise.all(
+    legs.map(([from, to]) => calculateDriveTime(drive, from, to))
+  );
+  return minutes.reduce((a, b) => a + b, 0);
 }
 
 /**
