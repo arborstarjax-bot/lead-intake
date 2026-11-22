@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const p = parsed.data;
   if (p.url !== undefined) {
     try {
-      await assertSafeOutboundUrl(p.url);
+      await assertSafeOutboundUrl(p.url, { tolerateDnsFailure: true });
     } catch {
       return badRequest("url: must be a public https URL");
     }

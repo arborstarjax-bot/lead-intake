@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   // SSRF guard: only public https targets may be stored. DNS is
   // re-checked on every delivery (see webhooks.ts) to stop rebinding.
   try {
-    await assertSafeOutboundUrl(parsed.data.url);
+    await assertSafeOutboundUrl(parsed.data.url, { tolerateDnsFailure: true });
   } catch {
     return badRequest("url: must be a public https URL");
   }

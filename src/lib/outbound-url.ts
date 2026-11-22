@@ -17,10 +17,20 @@ import { isIP } from "node:net";
  * rebinding).
  */
 
+export type OutboundCheckErrorCode =
+  | "invalid"
+  | "scheme"
+  | "credentials"
+  | "host"
+  | "private"
+  | "dns";
+
 export class UnsafeOutboundUrlError extends Error {
-  constructor(reason: string) {
+  readonly code: OutboundCheckErrorCode;
+  constructor(code: OutboundCheckErrorCode, reason: string) {
     super(reason);
     this.name = "UnsafeOutboundUrlError";
+    this.code = code;
   }
 }
 
@@ -114,46 +124,82 @@ export function isDisallowedIp(ip: string): boolean {
   return true;
 }
 
+export type SafeOutboundTarget = {
+  url: URL;
+  /** Addresses the hostname resolved to and was approved against. Empty
+   * when DNS failed and `tolerateDnsFailure` was set. Callers should pin
+   * the connection to these addresses so a second, attacker-controlled
+   * DNS answer can't swap in a private IP (TOCTOU / rebinding). */
+  addresses: { address: string; family: 4 | 6 }[];
+};
+
 /**
- * Validate an outbound URL and return it parsed. Throws
- * UnsafeOutboundUrlError on any failure. Resolves DNS — async.
+ * Validate an outbound URL and return it parsed with its approved
+ * addresses. Throws UnsafeOutboundUrlError on any failure. Resolves
+ * DNS — async.
+ *
+ * `tolerateDnsFailure`: a lookup error is tolerated and returns empty
+ * `addresses` (private/scheme/host failures are still thrown). Use at
+ * save time so a transient DNS outage can't lock users out — the
+ * send-time check re-validates anyway.
  */
-export async function assertSafeOutboundUrl(rawUrl: string): Promise<URL> {
+export async function resolveSafeOutboundUrl(
+  rawUrl: string,
+  opts?: { tolerateDnsFailure?: boolean }
+): Promise<SafeOutboundTarget> {
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new UnsafeOutboundUrlError("invalid URL");
+    throw new UnsafeOutboundUrlError("invalid", "invalid URL");
   }
   if (url.protocol !== "https:") {
-    throw new UnsafeOutboundUrlError("only https: URLs are allowed");
+    throw new UnsafeOutboundUrlError("scheme", "only https: URLs are allowed");
   }
   if (url.username || url.password) {
-    throw new UnsafeOutboundUrlError("credentials in URLs are not allowed");
+    throw new UnsafeOutboundUrlError("credentials", "credentials in URLs are not allowed");
   }
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
-  if (!hostname) throw new UnsafeOutboundUrlError("missing hostname");
+  if (!hostname) throw new UnsafeOutboundUrlError("host", "missing hostname");
 
   if (isIP(hostname)) {
     if (isDisallowedIp(hostname)) {
-      throw new UnsafeOutboundUrlError("hostname is not a public address");
+      throw new UnsafeOutboundUrlError("private", "hostname is not a public address");
     }
-    return url;
+    return { url, addresses: [] };
   }
 
-  let addrs: { address: string }[];
+  let addrs: { address: string; family: number }[];
   try {
     addrs = await lookup(hostname, { all: true, verbatim: true });
   } catch {
-    throw new UnsafeOutboundUrlError("hostname does not resolve");
+    if (opts?.tolerateDnsFailure) return { url, addresses: [] };
+    throw new UnsafeOutboundUrlError("dns", "hostname does not resolve");
   }
-  if (!addrs.length) throw new UnsafeOutboundUrlError("hostname does not resolve");
+  if (!addrs.length) {
+    if (opts?.tolerateDnsFailure) return { url, addresses: [] };
+    throw new UnsafeOutboundUrlError("dns", "hostname does not resolve");
+  }
   for (const { address } of addrs) {
     if (isDisallowedIp(address)) {
-      throw new UnsafeOutboundUrlError("hostname resolves to a non-public address");
+      throw new UnsafeOutboundUrlError("private", "hostname resolves to a non-public address");
     }
   }
-  return url;
+  return {
+    url,
+    addresses: addrs.map((a) => ({ address: a.address, family: a.family === 6 ? 6 : 4 })),
+  };
+}
+
+/**
+ * Validate an outbound URL and return it parsed. Throws
+ * UnsafeOutboundUrlError on any failure. Resolves DNS — async.
+ */
+export async function assertSafeOutboundUrl(
+  rawUrl: string,
+  opts?: { tolerateDnsFailure?: boolean }
+): Promise<URL> {
+  return (await resolveSafeOutboundUrl(rawUrl, opts)).url;
 }
 
 export async function isSafeOutboundUrl(rawUrl: string): Promise<boolean> {
@@ -192,8 +238,11 @@ export function isAllowedPushHost(hostname: string): boolean {
  * known push-service allowlist, and resolving to public IPs. Async —
  * re-run before every send to defeat DNS rebinding.
  */
-export async function assertPushEndpoint(rawUrl: string): Promise<URL> {
-  const url = await assertSafeOutboundUrl(rawUrl);
+export async function assertPushEndpoint(
+  rawUrl: string,
+  opts?: { tolerateDnsFailure?: boolean }
+): Promise<URL> {
+  const url = await assertSafeOutboundUrl(rawUrl, opts);
   if (!isAllowedPushHost(url.hostname)) {
     throw new UnsafeOutboundUrlError("endpoint is not a known push service");
   }

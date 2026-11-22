@@ -1,7 +1,11 @@
 import "server-only";
 import crypto from "node:crypto";
+import { Agent } from "undici";
 import { createAdminClient } from "@/modules/shared/supabase/server";
-import { assertSafeOutboundUrl } from "@/lib/outbound-url";
+import {
+  resolveSafeOutboundUrl,
+  UnsafeOutboundUrlError,
+} from "@/lib/outbound-url";
 import type { WebhookEvent } from "./contracts";
 
 /**
@@ -85,15 +89,31 @@ async function deliver(
   let error: string | null = null;
   // Re-validate the target on every attempt: a subscription URL that
   // passed at create time can be re-pointed at a private address via
-  // DNS rebinding. Blocked deliveries fail permanently (no retry).
+  // DNS rebinding. Deterministically-unsafe targets fail permanently;
+  // a DNS lookup failure is transient and stays retryable.
   let blocked = false;
+  let addresses: { address: string; family: 4 | 6 }[] | null = null;
   try {
-    await assertSafeOutboundUrl(url);
-  } catch {
-    blocked = true;
-    error = "Blocked: target URL failed safety checks";
+    ({ addresses } = await resolveSafeOutboundUrl(url));
+  } catch (e) {
+    if (e instanceof UnsafeOutboundUrlError && e.code === "dns") {
+      error = "DNS lookup failed";
+    } else {
+      blocked = true;
+      error = "Blocked: target URL failed safety checks";
+    }
   }
-  if (!blocked) {
+  if (!blocked && error === null) {
+    // Pin the connection to the addresses the guard just approved — a
+    // second DNS answer can't swap in a private IP (TOCTOU/rebinding).
+    const dispatcher = addresses?.length
+      ? new Agent({
+          connect: {
+            lookup: (_hostname, _opts, cb) =>
+              cb(null, addresses.map((a) => ({ address: a.address, family: a.family }))),
+          },
+        })
+      : undefined;
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -105,7 +125,8 @@ async function deliver(
         body,
         redirect: "manual",
         signal: AbortSignal.timeout(10_000),
-      });
+        ...(dispatcher ? { dispatcher } : {}),
+      } as RequestInit);
       statusCode = res.status;
       if (!res.ok) error = `HTTP ${res.status}`;
     } catch (e) {
@@ -115,12 +136,16 @@ async function deliver(
       error = name === "TimeoutError" || name === "AbortError"
         ? "Request timed out"
         : "Request failed";
+    } finally {
+      await dispatcher?.close();
     }
   }
 
   const nextAttempt = attempt + 1;
-  const failedPermanently = (blocked || statusCode === null || statusCode >= 400) && (blocked || nextAttempt >= MAX_ATTEMPTS);
   const succeeded = statusCode !== null && statusCode >= 200 && statusCode < 300;
+  // Anything that isn't 2xx — including 3xx redirects we refuse to
+  // follow — is a failure, permanent once attempts are exhausted.
+  const failedPermanently = blocked || (!succeeded && nextAttempt >= MAX_ATTEMPTS);
 
   await admin
     .from("webhook_deliveries")

@@ -40,10 +40,11 @@ export async function POST(req: NextRequest) {
 
   if (parsed.platform === "web") {
     // SSRF guard: the endpoint must be https, on a known push-service
-    // host, and resolve to public IPs. Re-checked again before each
-    // send (see src/lib/push.ts) to stop DNS rebinding.
+    // host, and resolve to public IPs. A transient DNS failure doesn't
+    // reject the subscription (the send-time check re-validates anyway)
+    // — otherwise a hiccup would make clients unsubscribe.
     try {
-      await assertPushEndpoint(parsed.endpoint);
+      await assertPushEndpoint(parsed.endpoint, { tolerateDnsFailure: true });
     } catch {
       return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
     }
