@@ -5,6 +5,7 @@ import {
   resolveApiAuth, requireScope, requireAdminRole, ok, badRequest, notFound, serverError,
   WEBHOOK_EVENTS,
 } from "@/modules/api/v1";
+import { assertSafeOutboundUrl } from "@/lib/outbound-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +13,12 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 const patchSchema = z.object({
-  url: z.string().url().max(500).optional(),
+  url: z
+    .string()
+    .url()
+    .max(500)
+    .refine((u) => u.startsWith("https://"), "must be an https URL")
+    .optional(),
   events: z.array(z.enum(WEBHOOK_EVENTS)).min(1).optional(),
   isActive: z.boolean().optional(),
 }).strict();
@@ -31,6 +37,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return badRequest(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   }
   const p = parsed.data;
+  if (p.url !== undefined) {
+    try {
+      await assertSafeOutboundUrl(p.url);
+    } catch {
+      return badRequest("url: must be a public https URL");
+    }
+  }
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (p.url !== undefined) row.url = p.url;
   if (p.events !== undefined) row.events = p.events;
