@@ -1,7 +1,11 @@
 "use server";
 
 import { createAdminClient, createSSRClient } from "@/modules/shared/supabase/server";
-import { generateJoinCode } from "@/modules/auth/server";
+import {
+  generateJoinCode,
+  joinCodeAttemptBlocked,
+  recordFailedJoinCodeAttempt,
+} from "@/modules/auth/server";
 
 /**
  * Lets a signed-in user with no workspace membership join an existing
@@ -34,12 +38,19 @@ export async function joinExistingWorkspace(
     .maybeSingle();
   if (existing) return {};
 
+  const subject = `user:${user.id}`;
+  const blocked = await joinCodeAttemptBlocked(subject);
+  if (blocked) return { error: blocked };
+
   const { data: ws } = await admin
     .from("workspaces")
     .select("id")
     .eq("join_code", code)
     .maybeSingle();
-  if (!ws) return { error: "No workspace found for that join code" };
+  if (!ws) {
+    await recordFailedJoinCodeAttempt(subject);
+    return { error: "No workspace found for that join code" };
+  }
 
   const { error: memErr } = await admin
     .from("workspace_members")
