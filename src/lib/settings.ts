@@ -156,27 +156,28 @@ export async function getSettings(workspaceId: string): Promise<AppSettings> {
     ...(data as Partial<AppSettings>),
   } as AppSettings;
 
-  // Ensure new default values appear in existing workspaces that were
-  // created before these lists were added.
   const defaults = defaultSettings(workspaceId);
-  const mergeDefaults = (stored: string[], fallback: string[]) => {
-    const storedLower = new Set(stored.map((s) => s.toLowerCase()));
-    const missing = fallback.filter((s) => !storedLower.has(s.toLowerCase()));
-    if (missing.length === 0) return stored;
-    const otherIdx = stored.findIndex((s) => s.toLowerCase() === "other");
-    if (otherIdx >= 0) {
-      return [
-        ...stored.slice(0, otherIdx),
-        ...missing,
-        ...stored.slice(otherIdx),
-      ];
-    }
-    return [...stored, ...missing];
-  };
   merged.lead_sources = mergeDefaults(merged.lead_sources ?? [], defaults.lead_sources);
   merged.job_types = mergeDefaults(merged.job_types ?? [], defaults.job_types);
 
   return merged;
+}
+
+// Ensure new default values appear in existing workspaces that were
+// created before these lists were added.
+function mergeDefaults(stored: string[], fallback: string[]) {
+  const storedLower = new Set(stored.map((s) => s.toLowerCase()));
+  const missing = fallback.filter((s) => !storedLower.has(s.toLowerCase()));
+  if (missing.length === 0) return stored;
+  const otherIdx = stored.findIndex((s) => s.toLowerCase() === "other");
+  if (otherIdx >= 0) {
+    return [
+      ...stored.slice(0, otherIdx),
+      ...missing,
+      ...stored.slice(otherIdx),
+    ];
+  }
+  return [...stored, ...missing];
 }
 
 export async function updateSettings(
@@ -191,10 +192,14 @@ export async function updateSettings(
     .select("*")
     .single();
   if (error) throw new Error(`Update settings failed: ${error.message}`);
-  return {
-    ...defaultSettings(workspaceId),
+  const defaults = defaultSettings(workspaceId);
+  const merged = {
+    ...defaults,
     ...(data as Partial<AppSettings>),
   } as AppSettings;
+  merged.lead_sources = mergeDefaults(merged.lead_sources ?? [], defaults.lead_sources);
+  merged.job_types = mergeDefaults(merged.job_types ?? [], defaults.job_types);
+  return merged;
 }
 
 /**

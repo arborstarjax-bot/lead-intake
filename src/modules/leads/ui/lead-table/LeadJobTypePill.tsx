@@ -115,7 +115,8 @@ function JobTypeDropdown({
   }
   return (
     <div className="absolute left-0 top-full mt-1 z-40 w-44 rounded-xl border border-[var(--border)] bg-white shadow-lg overflow-hidden">
-      {list.map((t) => {
+      <div className="max-h-56 overflow-y-auto">
+        {list.map((t) => {
         const s = styleFor(t);
         return (
           <button
@@ -136,7 +137,8 @@ function JobTypeDropdown({
             {t}
           </button>
         );
-      })}
+        })}
+      </div>
     </div>
   );
 }
