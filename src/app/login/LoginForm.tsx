@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { login } from "./actions";
 import { AppleSignInButton } from "@/app/auth/AppleSignInButton";
+import { GoogleSignInButton } from "@/app/auth/GoogleSignInButton";
 import { safeNext } from "@/lib/safeRedirect";
 
 export function LoginForm({
@@ -94,8 +95,9 @@ export function LoginForm({
         <span className="h-px flex-1 bg-[var(--border)]" />
       </div>
       {/* Apple Sign-In satisfies App Review Guideline 4.8 when any
-          other third-party auth (email/password here) is offered. */}
+          other third-party auth (Google here) is offered. */}
       <AppleSignInButton next={next} label="Sign in with Apple" />
+      <GoogleSignInButton next={next} label="Sign in with Google" />
     </div>
   );
 }

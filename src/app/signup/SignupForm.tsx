@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { signup } from "./actions";
 import { AppleSignInButton } from "@/app/auth/AppleSignInButton";
+import { GoogleSignInButton } from "@/app/auth/GoogleSignInButton";
 
 type Mode = "create" | "join";
 
@@ -48,6 +49,10 @@ export function SignupForm({
       <AppleSignInButton
         next={inviteCode ? `/workspace?join=${inviteCode}` : "/workspace"}
         label="Sign up with Apple"
+      />
+      <GoogleSignInButton
+        next={inviteCode ? `/workspace?join=${inviteCode}` : "/workspace"}
+        label="Sign up with Google"
       />
       <div
         className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]"
