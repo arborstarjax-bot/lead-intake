@@ -15,6 +15,9 @@ export function safeNext(next: string | undefined | null, fallback = "/"): strin
   try {
     const url = new URL(next, "https://placeholder.invalid");
     if (url.origin !== "https://placeholder.invalid") return fallback;
+    // The parser collapses dot segments, so e.g. `/./..//evil.com` survives
+    // the origin check but still produces a protocol-relative path.
+    if (url.pathname.startsWith("//")) return fallback;
     return url.pathname + url.search + url.hash;
   } catch {
     return fallback;

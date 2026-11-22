@@ -34,6 +34,8 @@ test("rejects control characters that browsers strip before parsing", () => {
 
 test("rejects scheme-relative tricks after parsing", () => {
   assert.equal(safeNext("///evil.com"), "/");
+  // Dot segments normalize to a protocol-relative path after parsing.
+  assert.equal(safeNext("/./..//evil.com"), "/");
   // A literal space is safe: it parses as a same-origin path, not //host.
   assert.equal(safeNext("/ /evil.com"), "/%20/evil.com");
 });
