@@ -329,9 +329,23 @@ async function backfillMissingAddressParts(lead: ExtractedLead): Promise<void> {
  * this function short-circuits for them.
  */
 const LEGACY_SCREENSHOT_BUCKET = "lead-screenshots";
-export async function signScreenshotUrl(path: string | null): Promise<string | null> {
+export async function signScreenshotUrl(
+  path: string | null,
+  workspaceId: string,
+): Promise<string | null> {
   if (!path) return null;
   const admin = createAdminClient();
+  // Refuse to sign a path no lead in the caller's workspace actually owns —
+  // storage paths carry no workspace prefix, so the owning-lead lookup is
+  // the tenancy check.
+  const { data: owner } = await admin
+    .from("leads")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("screenshot_path", path)
+    .limit(1)
+    .maybeSingle();
+  if (!owner) return null;
   const { data } = await admin.storage
     .from(LEGACY_SCREENSHOT_BUCKET)
     .createSignedUrl(path, 60 * 60);
