@@ -5,8 +5,9 @@
 # xcodebuild starts.
 set -e
 
-# Repo root is two levels up from ios/App.
-REPO_ROOT="$CI_WORKSPACE"
+# CI_WORKSPACE is Xcode Cloud's build working dir; the repo checkout is
+# CI_PRIMARY_REPOSITORY_PATH. Fall back to CI_WORKSPACE for local runs.
+REPO_ROOT="${CI_PRIMARY_REPOSITORY_PATH:-$CI_WORKSPACE}"
 cd "$REPO_ROOT"
 
 # Xcode Cloud images ship Node via the default Xcode tools; if it's not
