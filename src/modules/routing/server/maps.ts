@@ -1,5 +1,6 @@
 import "server-only";
 import { requireEnv } from "@/lib/utils";
+import { driveCacheKey, readDriveCache, writeDriveCache } from "./drive-cache";
 
 /**
  * Thin wrapper around the Google Maps Distance Matrix API. We use it to
@@ -59,9 +60,14 @@ export async function getDriveTime(
 }
 
 /**
- * Batched variant. One API call, origins.length * destinations.length
- * results returned in row-major order (origin 0 vs each destination,
- * origin 1 vs each destination, …).
+ * Batched variant. Results are returned in row-major order (origin 0 vs
+ * each destination, origin 1 vs each destination, …).
+ *
+ * Every element first goes through the persistent `drive_time_cache`:
+ * fresh cached legs are served without billing Google, and only the
+ * missing elements of each origin row are requested and then written
+ * back. Cache trouble degrades to paying Google for that row, never to
+ * a failure.
  */
 export async function getDriveMatrix(
   origins: string[],
@@ -70,6 +76,57 @@ export async function getDriveMatrix(
 ): Promise<DriveResult[]> {
   if (origins.length === 0 || destinations.length === 0) return [];
 
+  const out: DriveResult[] = new Array(origins.length * destinations.length);
+  const cached = await readDriveCache(
+    origins.flatMap((o) => destinations.map((d) => driveCacheKey(o, d, departureEpochSeconds)))
+  );
+  const writes: Array<{ key: string; leg: { driveSeconds: number; distanceMeters: number } }> = [];
+
+  for (let i = 0; i < origins.length; i++) {
+    const misses: number[] = [];
+    for (let j = 0; j < destinations.length; j++) {
+      const key = driveCacheKey(origins[i], destinations[j], departureEpochSeconds);
+      const hit = cached.get(key);
+      if (hit) {
+        out[i * destinations.length + j] = {
+          drive_seconds: hit.driveSeconds,
+          distance_meters: hit.distanceMeters,
+        };
+      } else {
+        misses.push(j);
+      }
+    }
+    if (misses.length === 0) continue;
+
+    const rows = await fetchDriveMatrix(
+      [origins[i]],
+      misses.map((j) => destinations[j]),
+      departureEpochSeconds
+    );
+    for (let m = 0; m < misses.length; m++) {
+      const j = misses[m];
+      const r = rows[m];
+      out[i * destinations.length + j] = r;
+      writes.push({
+        key: driveCacheKey(origins[i], destinations[j], departureEpochSeconds),
+        leg: { driveSeconds: r.drive_seconds, distanceMeters: r.distance_meters },
+      });
+    }
+  }
+
+  await writeDriveCache(writes);
+  return out;
+}
+
+/**
+ * One billed Google Distance Matrix call; results in row-major order.
+ * Callers should go through `getDriveMatrix` for caching.
+ */
+async function fetchDriveMatrix(
+  origins: string[],
+  destinations: string[],
+  departureEpochSeconds?: number
+): Promise<DriveResult[]> {
   const apiKey = requireEnv("GOOGLE_MAPS_API_KEY");
   const params = new URLSearchParams({
     origins: origins.join("|"),
