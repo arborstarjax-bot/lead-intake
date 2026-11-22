@@ -20,7 +20,10 @@ export async function GET(
     .eq("id", id)
     .eq("workspace_id", auth.workspaceId)
     .single();
-  const url = await signScreenshotUrl(data?.screenshot_path ?? null);
+  const url = await signScreenshotUrl(
+    data?.screenshot_path ?? null,
+    auth.workspaceId,
+  );
   if (!url) return NextResponse.json({ error: "No screenshot" }, { status: 404 });
   return NextResponse.redirect(url, { status: 302 });
 }

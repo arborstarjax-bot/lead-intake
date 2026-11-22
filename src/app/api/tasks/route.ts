@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import { requireMembership } from "@/modules/auth/server";
 import { getSettings } from "@/lib/settings";
-import { nextOccurrenceDate } from "@/modules/tasks/model";
+import { nextOccurrenceDate, TASK_EDITABLE_COLUMNS } from "@/modules/tasks/model";
 import { emitWebhookEvent, taskToContract } from "@/modules/api/v1";
 
 export const runtime = "nodejs";
@@ -29,20 +30,53 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ tasks: data });
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+// Reject non-finite (Postgres accepts 'infinity'/'-infinity' as timestamps)
+// and wildly out-of-range dates — they make the recurrence loop below
+// either never terminate or generate unbounded rows.
+const saneTimestamp = z
+  .string()
+  .refine((v) => {
+    const t = Date.parse(v);
+    if (!Number.isFinite(t)) return false;
+    const now = Date.now();
+    return t > now - 366 * DAY_MS && t < now + 5 * 366 * DAY_MS;
+  }, "must be a real timestamp within a sane range");
+
+const createTaskSchema = z
+  .object({
+    name: z.string().min(1),
+    start_at: saneTimestamp,
+    end_at: saneTimestamp,
+    recurrence_end_date: saneTimestamp.nullish(),
+    recurrence_end_count: z.number().int().positive().max(500).nullish(),
+  })
+  .passthrough()
+  .refine((v) => Date.parse(v.end_at) >= Date.parse(v.start_at), {
+    message: "end_at must be at or after start_at",
+  });
+
 export async function POST(req: NextRequest) {
   const auth = await requireMembership();
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createAdminClient();
   const payload = await req.json().catch(() => ({}));
-  const { workspace_id: _drop, ...safe } = payload ?? {};
-  void _drop;
-
-  if (!safe.name || !safe.start_at || !safe.end_at) {
+  const parsed = createTaskSchema.safeParse(payload);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "name, start_at, and end_at are required" },
+      { error: parsed.error.issues[0]?.message ?? "invalid task payload" },
       { status: 400 },
     );
+  }
+
+  // Explicit allowlist — never spread the raw body into the insert.
+  const safe: Record<string, unknown> = {};
+  for (const key of TASK_EDITABLE_COLUMNS) {
+    if (key in parsed.data) safe[key] = parsed.data[key];
+  }
+  if (typeof parsed.data.extraction_source === "string") {
+    safe.extraction_source = parsed.data.extraction_source;
   }
 
   // Default assignee to workspace default salesperson if not set
@@ -58,7 +92,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Auto-generate task name: "Assignee - Task" if not provided with that pattern
-  if (safe.assignee && !safe.name.includes(" - ")) {
+  if (safe.assignee && !(safe.name as string).includes(" - ")) {
     safe.name = `${safe.assignee} - ${safe.name}`;
   }
 
@@ -82,7 +116,7 @@ export async function POST(req: NextRequest) {
     void generateRecurringOccurrences(
       supabase,
       data,
-      safe.recurrence_rule,
+      safe.recurrence_rule as string,
       auth.workspaceId,
       auth.userId,
     ).catch(() => {});
@@ -112,6 +146,8 @@ async function generateRecurringOccurrences(
   const endAt = new Date(parent.end_at as string);
   const durationMs = endAt.getTime() - startAt.getTime();
 
+  const MAX_OCCURRENCES = 60; // hard cap regardless of rule/end bounds
+
   const rows: Record<string, unknown>[] = [];
   let cursor = startAt;
   let idx = 1;
@@ -125,6 +161,7 @@ async function generateRecurringOccurrences(
     if (!next || next > cutoff) break;
     if (endDate && next > endDate) break;
     if (endCount && idx >= endCount) break;
+    if (rows.length >= MAX_OCCURRENCES) break;
     idx++;
 
     rows.push({

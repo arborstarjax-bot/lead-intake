@@ -10,6 +10,7 @@ import {
 import { getSettings } from "@/lib/settings";
 import { requireMembership } from "@/modules/auth/server";
 import { emitWebhookEvent, leadToContract } from "@/modules/api/v1";
+import { EDITABLE_COLUMNS } from "@/modules/leads/model";
 
 export const runtime = "nodejs";
 
@@ -96,19 +97,30 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createAdminClient();
-  const payload = await req.json().catch(() => ({}));
-  // Never trust workspace_id from the client — always stamp it from session.
-  const { workspace_id: _drop, ...safe } = payload ?? {};
-  void _drop;
-  const base = {
-    status: "New" as const,
-    intake_source: "manual" as const,
-    intake_status: "ready" as const,
+  const raw = await req.json().catch(() => ({}));
+  const payload: Record<string, unknown> =
+    raw && typeof raw === "object" ? raw : {};
+  // Explicit allowlist — never spread the raw body into the insert. In
+  // particular, server-controlled columns (screenshot_path, intake_*,
+  // calendar_event_id, …) are never client-writable. workspace_id is
+  // always stamped from the session.
+  const safe: Record<string, unknown> = {};
+  for (const k of EDITABLE_COLUMNS) {
+    if (k in (payload ?? {})) safe[k] = payload[k];
+  }
+  const base: Record<string, unknown> = {
+    status: "New",
+    intake_source: "manual",
+    intake_status: "ready",
     ...safe,
     workspace_id: auth.workspaceId,
   };
   if (!base.client) {
-    base.client = displayName(base.first_name, base.last_name) || null;
+    base.client =
+      displayName(
+        base.first_name as string | null,
+        base.last_name as string | null,
+      ) || null;
   }
   // Normalize contact fields on the way in so storage is consistent with
   // PATCH. Mirrors the logic in /api/leads/[id]. Falls back to the raw
