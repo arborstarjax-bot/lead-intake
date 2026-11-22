@@ -13,7 +13,8 @@
     "db:status": "supabase migration list",
     "cap:sync": "cap sync",
     "cap:ios": "cap open ios",
-    "cap:android": "cap open android"
+    "cap:android": "cap open android",
+    "test": "node --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "@capacitor/app": "^7.1.2",
