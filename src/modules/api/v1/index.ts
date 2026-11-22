@@ -1,4 +1,4 @@
-export { resolveApiAuth, requireScope, generateApiKey, ALL_SCOPES, type ApiAuth, type ApiScope } from "./auth";
+export { resolveApiAuth, requireScope, requireAdminRole, generateApiKey, ALL_SCOPES, type ApiAuth, type ApiScope } from "./auth";
 export { ok, apiError, badRequest, notFound, serverError, handlerResult, listParams, pageMeta, toCamel } from "./http";
 export {
   leadCreateSchema, leadUpdateSchema, leadToContract, leadFromContract, LEAD_CONTRACT_SELECT,

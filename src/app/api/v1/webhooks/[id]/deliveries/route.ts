@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import {
-  resolveApiAuth, requireScope, ok, notFound, serverError, toCamel,
+  resolveApiAuth, requireScope, requireAdminRole, ok, notFound, serverError, toCamel,
 } from "@/modules/api/v1";
 
 export const runtime = "nodejs";
@@ -13,6 +13,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (auth instanceof NextResponse) return auth;
   const scopeErr = requireScope(auth, "webhooks:manage");
   if (scopeErr) return scopeErr;
+  const roleErr = requireAdminRole(auth);
+  if (roleErr) return roleErr;
 
   const { id } = await ctx.params;
   const supabase = createAdminClient();
