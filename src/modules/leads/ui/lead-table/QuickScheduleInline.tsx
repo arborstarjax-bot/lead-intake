@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppSettings } from "@/components/SettingsProvider";
 
 type SlotInsight = { pro: string; con: string };
 
@@ -49,14 +50,14 @@ function formatDayShort(iso: string): string {
   return `${weekday} ${month} ${d}`;
 }
 
-function todayIsoLocal(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+function todayIsoLocal(tz: string): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: tz });
 }
 
-function currentHHMM(): string {
+function currentHHMM(tz: string): string {
   const now = new Date();
   const parts = now.toLocaleTimeString("en-US", {
-    timeZone: "America/New_York",
+    timeZone: tz,
     hour12: false,
     hour: "2-digit",
     minute: "2-digit",
@@ -64,11 +65,11 @@ function currentHHMM(): string {
   return parts;
 }
 
-function isSlotPast(slot: SlotPick): boolean {
-  const today = todayIsoLocal();
+function isSlotPast(slot: SlotPick, tz: string): boolean {
+  const today = todayIsoLocal(tz);
   if (slot.date > today) return false;
   if (slot.date < today) return true;
-  return slot.startTime <= currentHHMM();
+  return slot.startTime <= currentHHMM(tz);
 }
 
 function parseHHMM(t: string): number {
@@ -92,6 +93,8 @@ export function QuickScheduleInline({
   onOpenFull: () => void;
   onClose: () => void;
 }) {
+  const { settings } = useAppSettings();
+  const tz = settings.timezone || "America/New_York";
   const [loading, setLoading] = useState(true);
   const [amPicks, setAmPicks] = useState<SlotPick[]>([]);
   const [pmPicks, setPmPicks] = useState<SlotPick[]>([]);
@@ -171,7 +174,7 @@ export function QuickScheduleInline({
       if (cancelledRef.current) return;
 
       // Filter out past slots
-      const future = allSlots.filter((s) => !isSlotPast(s));
+      const future = allSlots.filter((s) => !isSlotPast(s, tz));
 
       // Split AM/PM, take top 3 each (sorted by drive time)
       const am = future
@@ -231,7 +234,7 @@ export function QuickScheduleInline({
     } finally {
       if (!cancelledRef.current) setLoading(false);
     }
-  }, [leadId]);
+  }, [leadId, tz]);
 
   useEffect(() => {
     cancelledRef.current = false;
