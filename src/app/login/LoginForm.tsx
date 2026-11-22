@@ -20,18 +20,6 @@ export function LoginForm({
 
   return (
     <div className="space-y-4">
-      {/* Apple Sign-In satisfies App Review Guideline 4.8 when any
-          other third-party auth (email/password here) is offered. Kept
-          above the email form per Apple's HIG preference. */}
-      <AppleSignInButton next={next} label="Sign in with Apple" />
-      <div
-        className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]"
-        aria-hidden
-      >
-        <span className="h-px flex-1 bg-[var(--border)]" />
-        or continue with email
-        <span className="h-px flex-1 bg-[var(--border)]" />
-      </div>
       <form
         className="space-y-3"
         onSubmit={(e) => {
@@ -97,6 +85,17 @@ export function LoginForm({
           {pending ? "Signing in…" : "Sign in"}
         </button>
       </form>
+      <div
+        className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]"
+        aria-hidden
+      >
+        <span className="h-px flex-1 bg-[var(--border)]" />
+        or
+        <span className="h-px flex-1 bg-[var(--border)]" />
+      </div>
+      {/* Apple Sign-In satisfies App Review Guideline 4.8 when any
+          other third-party auth (email/password here) is offered. */}
+      <AppleSignInButton next={next} label="Sign in with Apple" />
     </div>
   );
 }
