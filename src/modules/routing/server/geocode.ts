@@ -15,6 +15,28 @@ import { MapsUnavailableError } from "./maps";
 
 export type LatLng = { lat: number; lng: number };
 
+// A failed lookup is retried after this window — addresses do get added
+// to Google's index over time, but we don't want an unresolvable address
+// billed on every repeat call. Ported from ArborCore's geocode.service.
+const NEGATIVE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function negativeCacheFresh(failedAt: string | null | undefined): boolean {
+  if (!failedAt) return false;
+  const t = Date.parse(failedAt);
+  return Number.isFinite(t) && Date.now() - t < NEGATIVE_CACHE_TTL_MS;
+}
+
+type CachedRow = { lat: number | null; lng: number | null; failed_at: string | null };
+
+// Returns a hit (LatLng or negative-cached null), or undefined on a miss.
+function cachedPoint(row: CachedRow): LatLng | null | undefined {
+  if (row.failed_at != null) return negativeCacheFresh(row.failed_at) ? null : undefined;
+  if (typeof row.lat === "number" && typeof row.lng === "number") {
+    return { lat: row.lat, lng: row.lng };
+  }
+  return undefined;
+}
+
 type GeocodeResponse = {
   status: string;
   error_message?: string;
@@ -31,10 +53,13 @@ export async function geocode(address: string): Promise<LatLng | null> {
   const supabase = createAdminClient();
   const { data: cached } = await supabase
     .from("geocode_cache")
-    .select("lat, lng")
+    .select("lat, lng, failed_at")
     .eq("address", trimmed)
     .maybeSingle();
-  if (cached) return { lat: cached.lat, lng: cached.lng };
+  if (cached) {
+    const hit = cachedPoint(cached as CachedRow);
+    if (hit !== undefined) return hit;
+  }
 
   const apiKey = requireEnv("GOOGLE_MAPS_API_KEY");
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
@@ -45,20 +70,31 @@ export async function geocode(address: string): Promise<LatLng | null> {
     throw new MapsUnavailableError(`Geocoding HTTP ${res.status}`, `HTTP_${res.status}`);
   }
   const body = (await res.json()) as GeocodeResponse;
-  if (body.status === "ZERO_RESULTS") return null;
+  const loc = body.status === "OK" ? body.results[0]?.geometry?.location : null;
+  if (body.status === "ZERO_RESULTS" || (body.status === "OK" && !loc)) {
+    // Negative cache: remember the miss so repeat lookups of an
+    // unresolvable address aren't billed to Google again.
+    await supabase.from("geocode_cache").upsert(
+      { address: trimmed, lat: null, lng: null, failed_at: new Date().toISOString() },
+      { onConflict: "address" }
+    );
+    return null;
+  }
   if (body.status !== "OK") {
     throw new MapsUnavailableError(
       body.error_message ?? `Geocoding status ${body.status}`,
       body.status
     );
   }
-  const loc = body.results[0]?.geometry?.location;
   if (!loc) return null;
 
   // Upsert so two concurrent requests on a cold address don't conflict.
   await supabase
     .from("geocode_cache")
-    .upsert({ address: trimmed, lat: loc.lat, lng: loc.lng }, { onConflict: "address" });
+    .upsert(
+      { address: trimmed, lat: loc.lat, lng: loc.lng, failed_at: null },
+      { onConflict: "address" }
+    );
   return { lat: loc.lat, lng: loc.lng };
 }
 
