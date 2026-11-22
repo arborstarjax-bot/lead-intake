@@ -129,6 +129,11 @@ async function deliver(
       } as RequestInit);
       statusCode = res.status;
       if (!res.ok) error = `HTTP ${res.status}`;
+      // Discard the body so dispatcher.close() below returns promptly —
+      // an unread streaming response would hold it open until the
+      // 10s abort, leaving the delivery pending long enough for
+      // processRetries to resend it.
+      await res.body?.cancel().catch(() => {});
     } catch (e) {
       // Store generic text — a raw error message leaks the target's
       // address/errno and turns deliveries into a probing oracle.
