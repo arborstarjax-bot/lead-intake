@@ -244,7 +244,7 @@ export async function assertPushEndpoint(
 ): Promise<URL> {
   const url = await assertSafeOutboundUrl(rawUrl, opts);
   if (!isAllowedPushHost(url.hostname)) {
-    throw new UnsafeOutboundUrlError("endpoint is not a known push service");
+    throw new UnsafeOutboundUrlError("host", "endpoint is not a known push service");
   }
   return url;
 }
