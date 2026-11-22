@@ -36,6 +36,7 @@ function settingsContract(s: AppSettings) {
       salespersonTitles: s.salesperson_titles,
       defaultSalesperson: s.default_salesperson,
       leadSources: s.lead_sources,
+      jobTypes: s.job_types,
       templates: toCamel({
         sms_intro: s.sms_intro_template,
         sms_confirm: s.sms_confirm_template,
@@ -70,6 +71,7 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   companyName: "company_name", companyPhone: "company_phone", companyEmail: "company_email",
   businessType: "business_type", salespersonTitles: "salesperson_titles",
   defaultSalesperson: "default_salesperson", leadSources: "lead_sources",
+  jobTypes: "job_types",
   smsIntroTemplate: "sms_intro_template", smsConfirmTemplate: "sms_confirm_template",
   smsEnrouteTemplate: "sms_enroute_template",
   emailSubjectTemplate: "email_subject_template", emailBodyTemplate: "email_body_template",

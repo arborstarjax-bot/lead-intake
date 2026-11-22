@@ -33,6 +33,7 @@ import { FollowUpModal } from "./FollowUpModal";
 import { OutcomeReasonModal } from "./OutcomeReasonModal";
 import { LeadSourceBadge } from "./LeadSourceBadge";
 import { LeadTypePill } from "./LeadTypePill";
+import { LeadJobTypePill } from "./LeadJobTypePill";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { formatDateHuman, formatScheduleDisplay, buildNavigationHref, templateVars } from "./lead-table-helpers";
 import { logContactActivity } from "./LifecycleTimeline";
@@ -143,6 +144,7 @@ export function LeadCard({
           />
           <LeadSourceBadge lead={lead} onPatch={onPatch} />
           <LeadTypePill lead={lead} onPatch={onPatch} />
+          <LeadJobTypePill lead={lead} onPatch={onPatch} />
         </div>
         <div className="relative" ref={menuRef}>
           <button

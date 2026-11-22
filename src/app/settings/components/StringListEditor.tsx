@@ -4,15 +4,17 @@ import { useMemo, useState } from "react";
 import { Plus, X, GripVertical } from "lucide-react";
 import { inputCls } from "../settings-helpers";
 
-export function LeadSourcesEditor({
-  sources,
+export function StringListEditor({
+  items,
+  addPlaceholder,
   onChange,
 }: {
-  sources: string[];
+  items: string[];
+  addPlaceholder: string;
   onChange: (next: string[]) => void;
 }) {
   const [draft, setDraft] = useState("");
-  const list = useMemo(() => sources.filter((s) => s.trim().length > 0), [sources]);
+  const list = useMemo(() => items.filter((s) => s.trim().length > 0), [items]);
 
   function add() {
     const name = draft.trim();
@@ -56,7 +58,7 @@ export function LeadSourcesEditor({
         <input
           className={inputCls}
           value={draft}
-          placeholder="Add a lead source"
+          placeholder={addPlaceholder}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

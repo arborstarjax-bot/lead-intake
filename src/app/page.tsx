@@ -54,6 +54,7 @@ function buildPendingLead(): Lead {
     intake_status: "ready",
     lead_source: null,
     lead_type: null,
+    job_type: null,
     estimate_outcome: null,
     no_proposal_reason: null,
     no_proposal_notes: null,

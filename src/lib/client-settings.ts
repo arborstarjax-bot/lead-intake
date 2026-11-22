@@ -37,6 +37,7 @@ export type ClientAppSettings = {
   email_subject_template: string | null;
   email_body_template: string | null;
   lead_sources: string[];
+  job_types: string[];
 
   created_at: string;
   updated_at: string;
@@ -85,6 +86,15 @@ export const DEFAULT_CLIENT_SETTINGS: ClientAppSettings = {
     "Referral",
     "Direct Mail",
     "Text Message",
+    "Other",
+  ],
+  job_types: [
+    "Estimate",
+    "Inspection",
+    "Repair",
+    "Install",
+    "Maintenance",
+    "Removal",
     "Other",
   ],
   created_at: "",

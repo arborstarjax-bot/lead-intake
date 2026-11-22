@@ -187,6 +187,7 @@ export type Lead = {
   intake_status: LeadIntakeStatus;
   lead_source: string | null;
   lead_type: LeadType | null;
+  job_type: string | null;
   estimate_outcome: EstimateOutcome | null;
   no_proposal_reason: NoProposalReason | null;
   no_proposal_notes: string | null;
@@ -295,6 +296,7 @@ export const EDITABLE_COLUMNS: (keyof Lead)[] = [
   "notes",
   "lead_source",
   "lead_type",
+  "job_type",
   "estimate_outcome",
   "no_proposal_reason",
   "no_proposal_notes",

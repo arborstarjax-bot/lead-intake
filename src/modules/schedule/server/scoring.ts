@@ -389,7 +389,7 @@ function buildExplanation(
 
   // Capitalize first word and join
   const sentence = parts.join(", ");
-  return "Recommended because this lead is " + sentence + ".";
+  return "Recommended because this lead " + sentence + ".";
 }
 
 // ── Main Smart Booking Engine ──────────────────────────────────────

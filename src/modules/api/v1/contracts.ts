@@ -19,7 +19,7 @@ export const LEAD_CONTRACT_SELECT = [
   "first_name", "last_name", "client",
   "phone_number", "email",
   "address", "city", "state", "zip",
-  "status", "lead_source", "lead_type", "sales_person",
+  "status", "lead_source", "lead_type", "job_type", "sales_person",
   "scheduled_day", "scheduled_time", "flex_window",
   "estimate_outcome", "outcome_badge", "follow_up_result",
   "no_proposal_reason", "notes",
@@ -37,6 +37,7 @@ export const leadCreateSchema = z.object({
   zip: z.string().trim().max(20).nullish(),
   source: z.string().trim().max(80).nullish(),
   type: z.enum(["Residential", "Commercial", "Government"]).nullish(),
+  jobType: z.string().trim().max(80).nullish(),
   status: z.string().trim().max(40).nullish(),
   assignee: z.string().trim().max(80).nullish(),
   scheduledAt: z.string().datetime().nullish(),
@@ -71,6 +72,7 @@ export function leadToContract(row: Record<string, unknown>) {
     },
     source: r.leadSource,
     type: r.leadType,
+    jobType: r.jobType,
     status: r.status,
     assignee: r.salesPerson,
     estimate: {
@@ -101,6 +103,7 @@ export function leadFromContract(p: LeadCreate | z.infer<typeof leadUpdateSchema
   set("zip", p.zip);
   set("lead_source", p.source);
   set("lead_type", p.type);
+  set("job_type", p.jobType);
   set("status", p.status);
   set("sales_person", p.assignee);
   set("notes", p.notes);
