@@ -56,7 +56,7 @@ export function PlanCompareCard({ billing }: { billing: BillingState }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <PlanTile
           name="Starter"
-          price="$29.99/mo"
+          price="$19.99/mo"
           tagline="Flat — all users included"
           features={[
             "50 uploads / day (shared across workspace)",
@@ -71,7 +71,7 @@ export function PlanCompareCard({ billing }: { billing: BillingState }) {
         />
         <PlanTile
           name="Pro"
-          price="$59.99/mo"
+          price="$39.99/mo"
           tagline="Flat — all users included"
           features={[
             "Unlimited uploads",

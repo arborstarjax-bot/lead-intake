@@ -163,11 +163,11 @@ export function planLabel(plan: WorkspacePlan): string {
  */
 export const PRICING = {
   starter: {
-    base: 29.99,
+    base: 19.99,
     uploadsPerDay: 50,
   },
   pro: {
-    base: 59.99,
+    base: 39.99,
     uploadsPerDay: null, // unlimited
   },
 } as const;
