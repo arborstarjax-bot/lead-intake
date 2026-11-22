@@ -34,7 +34,7 @@ export const API_DOCS: ApiDocGroup[] = [
       {
         method: "POST", path: "/api/v1/leads", scope: "leads:write",
         summary: "Create a lead",
-        requestExample: `{ "firstName": "Jane", "lastName": "Doe", "phone": "(555) 123-4567", "email": "jane@x.com", "address": "123 Main St", "city": "Springfield", "state": "FL", "zip": "32003", "source": "Website", "type": "Residential", "notes": "…" }`,
+        requestExample: `{ "firstName": "Jane", "lastName": "Doe", "phone": "(555) 123-4567", "email": "jane@x.com", "address": "123 Main St", "city": "Springfield", "state": "FL", "zip": "32003", "source": "Website", "type": "Residential", "jobType": "Repair", "notes": "…" }`,
         responseExample: `{ "data": { "id": "…", "contact": {…}, "status": "New", … } }`,
       },
       {
@@ -194,12 +194,12 @@ export const API_DOCS: ApiDocGroup[] = [
       {
         method: "GET", path: "/api/v1/settings", scope: "settings:read",
         summary: "Work hours, scheduling defaults, company info, salespeople, lead sources, message templates",
-        responseExample: `{ "data": { "timezone": "America/New_York", "workDays": [1,2,3,4,5], "company": {…}, "salespeople": ["David"], "leadSources": […] } }`,
+        responseExample: `{ "data": { "timezone": "America/New_York", "workDays": [1,2,3,4,5], "company": {…}, "salespeople": ["David"], "leadSources": […], "jobTypes": […] } }`,
       },
       {
         method: "PATCH", path: "/api/v1/settings", scope: "settings:write",
-        summary: "Update settings (admin fields; any member may edit leadSources)",
-        requestExample: `{ "workStartTime": "8:00 AM", "workDays": [1,2,3,4,5], "leadSources": ["Website", "Referral"] }`,
+        summary: "Update settings (admin fields; any member may edit leadSources / jobTypes)",
+        requestExample: `{ "workStartTime": "8:00 AM", "workDays": [1,2,3,4,5], "leadSources": ["Website", "Referral"], "jobTypes": ["Repair", "Install"] }`,
         responseExample: `{ "data": { "timezone": "America/New_York", … } }`,
       },
       {

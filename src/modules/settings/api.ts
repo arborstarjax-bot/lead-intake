@@ -58,6 +58,7 @@ export const settingsPatchSchema = z
     email_subject_template: z.string().nullable().optional(),
     email_body_template: z.string().nullable().optional(),
     lead_sources: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
+    job_types: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
   })
   .strict();
 export type SettingsPatchInput = z.infer<typeof settingsPatchSchema>;
@@ -74,7 +75,7 @@ export async function applySettingsPatch(
   parsed: SettingsPatchInput
 ): Promise<{ status: number; body: Record<string, unknown>; settings?: AppSettings }> {
   if (role !== "admin") {
-    const nonAdminAllowed: (keyof SettingsPatchInput)[] = ["lead_sources"];
+    const nonAdminAllowed: (keyof SettingsPatchInput)[] = ["lead_sources", "job_types"];
     for (const key of Object.keys(parsed) as (keyof SettingsPatchInput)[]) {
       if (!nonAdminAllowed.includes(key)) {
         return { status: 403, body: { error: "Only admins can change this setting" } };

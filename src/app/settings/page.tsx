@@ -48,7 +48,7 @@ import { TemplateField } from "./components/TemplateField";
 import { NumberField } from "./components/NumberField";
 import { IntegrationsPanel } from "./components/IntegrationsPanel";
 import { ApiPlatformPanel } from "./components/ApiPlatformPanel";
-import { LeadSourcesEditor } from "./components/LeadSourcesEditor";
+import { StringListEditor } from "./components/StringListEditor";
 import { AddressInput } from "@/components/AddressInput";
 
 export default function SettingsPage() {
@@ -294,9 +294,22 @@ export default function SettingsPage() {
         title="Lead sources"
         description="The list of sources shown when tagging where a lead came from. Add or remove sources to match your business."
       >
-        <LeadSourcesEditor
-          sources={s.lead_sources}
+        <StringListEditor
+          items={s.lead_sources}
+          addPlaceholder="Add a lead source"
           onChange={(next) => update("lead_sources", next)}
+        />
+      </Panel>
+
+      {/* Job types */}
+      <Panel
+        title="Job types"
+        description="The list of job types shown when tagging what kind of work a lead is for — pruning, removal, stump grinding, or whatever your services are. Add or remove types to match your business."
+      >
+        <StringListEditor
+          items={s.job_types}
+          addPlaceholder="Add a job type"
+          onChange={(next) => update("job_types", next)}
         />
       </Panel>
 

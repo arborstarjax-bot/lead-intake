@@ -37,7 +37,7 @@ Lead shape:
   "id": "uuid",
   "contact": { "firstName": "…", "lastName": "…", "name": "…", "phone": "…", "email": "…",
                "address": { "line1": "…", "city": "…", "state": "…", "zip": "…" } },
-  "source": "Thumbtack", "type": "Residential",
+  "source": "Thumbtack", "type": "Residential", "jobType": "Repair",
   "status": "New|Scheduled|Pending|Completed|Lost|Called / No Response",
   "assignee": "David",
   "estimate": { "scheduledDay": "2026-11-23", "scheduledTime": "08:00",

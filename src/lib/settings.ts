@@ -37,6 +37,7 @@ export type AppSettings = {
   email_subject_template: string | null;
   email_body_template: string | null;
   lead_sources: string[];
+  job_types: string[];
 
   created_at: string;
   updated_at: string;
@@ -72,6 +73,7 @@ export type AppSettingsPatch = Partial<
     | "email_subject_template"
     | "email_body_template"
     | "lead_sources"
+    | "job_types"
   >
 >;
 
@@ -122,6 +124,15 @@ export function defaultSettings(workspaceId: string): AppSettings {
       "Text Message",
       "Other",
     ],
+    job_types: [
+      "Estimate",
+      "Inspection",
+      "Repair",
+      "Install",
+      "Maintenance",
+      "Removal",
+      "Other",
+    ],
     created_at: now,
     updated_at: now,
   };
@@ -145,27 +156,25 @@ export async function getSettings(workspaceId: string): Promise<AppSettings> {
     ...(data as Partial<AppSettings>),
   } as AppSettings;
 
-  // Ensure new default lead sources appear in existing workspaces that
-  // were created before these sources were added.
+  // Ensure new default values appear in existing workspaces that were
+  // created before these lists were added.
   const defaults = defaultSettings(workspaceId);
-  const storedLower = new Set(merged.lead_sources.map((s) => s.toLowerCase()));
-  const missing = defaults.lead_sources.filter(
-    (s) => !storedLower.has(s.toLowerCase())
-  );
-  if (missing.length > 0) {
-    const otherIdx = merged.lead_sources.findIndex(
-      (s) => s.toLowerCase() === "other"
-    );
+  const mergeDefaults = (stored: string[], fallback: string[]) => {
+    const storedLower = new Set(stored.map((s) => s.toLowerCase()));
+    const missing = fallback.filter((s) => !storedLower.has(s.toLowerCase()));
+    if (missing.length === 0) return stored;
+    const otherIdx = stored.findIndex((s) => s.toLowerCase() === "other");
     if (otherIdx >= 0) {
-      merged.lead_sources = [
-        ...merged.lead_sources.slice(0, otherIdx),
+      return [
+        ...stored.slice(0, otherIdx),
         ...missing,
-        ...merged.lead_sources.slice(otherIdx),
+        ...stored.slice(otherIdx),
       ];
-    } else {
-      merged.lead_sources = [...merged.lead_sources, ...missing];
     }
-  }
+    return [...stored, ...missing];
+  };
+  merged.lead_sources = mergeDefaults(merged.lead_sources ?? [], defaults.lead_sources);
+  merged.job_types = mergeDefaults(merged.job_types ?? [], defaults.job_types);
 
   return merged;
 }

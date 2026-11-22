@@ -45,7 +45,7 @@ export function LeadTypePill({
           onClick={() => setOpen((v) => !v)}
           className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--border)] px-2.5 h-7 text-[11px] font-medium text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
         >
-          + Type
+          + Client Type
         </button>
         {open && (
           <DropdownMenu
