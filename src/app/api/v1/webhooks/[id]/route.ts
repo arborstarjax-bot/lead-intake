@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import {
-  resolveApiAuth, requireScope, ok, badRequest, notFound, serverError,
+  resolveApiAuth, requireScope, requireAdminRole, ok, badRequest, notFound, serverError,
   WEBHOOK_EVENTS,
 } from "@/modules/api/v1";
 
@@ -22,6 +22,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (auth instanceof NextResponse) return auth;
   const scopeErr = requireScope(auth, "webhooks:manage");
   if (scopeErr) return scopeErr;
+  const roleErr = requireAdminRole(auth);
+  if (roleErr) return roleErr;
 
   const { id } = await ctx.params;
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
@@ -50,6 +52,8 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   if (auth instanceof NextResponse) return auth;
   const scopeErr = requireScope(auth, "webhooks:manage");
   if (scopeErr) return scopeErr;
+  const roleErr = requireAdminRole(auth);
+  if (roleErr) return roleErr;
 
   const { id } = await ctx.params;
   const { error, count } = await createAdminClient()

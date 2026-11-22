@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/modules/shared/supabase/server";
 import {
-  resolveApiAuth, requireScope, ok, badRequest, serverError,
+  resolveApiAuth, requireScope, requireAdminRole, ok, badRequest, serverError,
   webhookSubSchema,
 } from "@/modules/api/v1";
 
@@ -14,6 +14,8 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const scopeErr = requireScope(auth, "webhooks:manage");
   if (scopeErr) return scopeErr;
+  const roleErr = requireAdminRole(auth);
+  if (roleErr) return roleErr;
 
   const { data, error } = await createAdminClient()
     .from("webhook_subscriptions")
@@ -32,6 +34,8 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const scopeErr = requireScope(auth, "webhooks:manage");
   if (scopeErr) return scopeErr;
+  const roleErr = requireAdminRole(auth);
+  if (roleErr) return roleErr;
 
   const parsed = webhookSubSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

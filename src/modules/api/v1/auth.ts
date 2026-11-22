@@ -112,6 +112,15 @@ export async function resolveApiAuth(req: NextRequest): Promise<ApiAuth | NextRe
   };
 }
 
+/** 403 unless the caller resolves to an admin (admin session, or any API key). */
+export function requireAdminRole(auth: ApiAuth): NextResponse | null {
+  if (auth.role === "admin") return null;
+  return NextResponse.json(
+    { error: { code: "forbidden", message: "Admin role required" } },
+    { status: 403 }
+  );
+}
+
 /** 403 when a key caller lacks `scope`. Session callers always pass. */
 export function requireScope(auth: ApiAuth, scope: ApiScope): NextResponse | null {
   if (auth.via === "session") return null;
