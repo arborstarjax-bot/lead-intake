@@ -422,7 +422,7 @@ export default function UploadBox({
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">Pro</span>
-                  <span className="font-semibold">$59.99/mo</span>
+                  <span className="font-semibold">$39.99/mo</span>
                 </div>
                 <div className="text-xs text-[var(--muted)]">
                   Unlimited uploads · Unlimited team members
